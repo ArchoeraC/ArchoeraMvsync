@@ -4,7 +4,7 @@
 
 # ArchoeraMvsync
 
-> 开源、多端、面向本地与在线音乐的混合架构播放器
+> 开源、多端、本地优先的混合架构播放器
 
 <p align="center">
   <img src="screenshot.png" width="720" alt="ArchoeraMvsync 主界面">
@@ -16,7 +16,6 @@
 
 ArchoeraMvsync 是一个开源的**多平台音乐播放器**
 
-- 连接**NT / KG / QM / BL**等在线服务（另含实验性第三方音源）
 - 本地音乐库扫描与元数据刮削
 - 内置统一 C 音频引擎
 - 可选 Subsonic 兼容服务端，并支持 Subsonic / Jellyfin 流媒体服务器聚合

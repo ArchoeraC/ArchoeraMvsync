@@ -11,7 +11,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ArchoeraMvsync — 开源桌面音乐播放器</title>
-<meta name="description" content="ArchoeraMvsync 是一款开源桌面音乐播放器：本地曲库、在线音源与自建流媒体收在同一个界面里。Linux / Windows / macOS，AGPL-3.0-or-later，无广告、无遥测。">
+<meta name="description" content="ArchoeraMvsync 是一款开源桌面音乐播放器：本地曲库与自建流媒体收在同一个界面里。Linux / Windows / macOS，AGPL-3.0-or-later，无广告、无遥测。">
 <meta name="theme-color" content="#000000">
 <meta name="color-scheme" content="dark">
 <link rel="icon" type="image/png" href="assets/img/logo.png">
@@ -19,7 +19,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ArchoeraMvsync">
 <meta property="og:title" content="ArchoeraMvsync — 开源桌面音乐播放器">
-<meta property="og:description" content="本地曲库、在线音源与自建流媒体，收在同一个界面里。Linux / Windows / macOS，AGPL-3.0-or-later。">
+<meta property="og:description" content="本地曲库与自建流媒体，收在同一个界面里。Linux / Windows / macOS，AGPL-3.0-or-later。">
 <meta property="og:url" content="https://betastudio2.github.io/ArchoeraMvsync/">
 <meta property="og:image" content="https://betastudio2.github.io/ArchoeraMvsync/assets/img/home-og.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -126,13 +126,13 @@
     </div>
 
     <div class="wrap hero-inner">
-      <p class="hero-kicker">ARCHOERAMUSIC <span class="dot-sep"></span> 开源桌面音乐播放器</p>
+      <p class="hero-kicker">ARCHOERAMVSYNC <span class="dot-sep"></span> 开源桌面音乐播放器</p>
       <h1 class="hero-title">
         <span class="line"><span>把音乐，</span></span>
         <span class="line"><span>放回自己的播放器里。</span></span>
       </h1>
       <p class="hero-sub">
-        本地曲库、在线音源与自建流媒体，收在同一个界面里。<br>
+        本地曲库与自建流媒体，收在同一个界面里。<br>
         UI 用 Flutter，解码与 DSP 在原生层完成。
       </p>
       <div class="hero-cta">
@@ -165,7 +165,7 @@
           <span class="icon eta-mark">&#xE102;</span> EraAudio · 自研内核
         </span>
         <span class="float-chip chip-c" aria-hidden="true">
-          本地曲库 + 在线音源
+          本地曲库 + 自建流媒体
         </span>
         <span class="float-chip chip-b" aria-hidden="true">
           <i class="chip-pulse"></i> 封面取色 · 频谱
@@ -187,11 +187,11 @@
       </div>
     </div>
     <div class="ticker ticker-reverse">
-      <span class="ticker-label">SOURCES</span>
+      <span class="ticker-label">LIBRARY</span>
       <div class="ticker-viewport">
         <div class="ticker-track" data-ticker>
-          <span>网易云音乐</span><i>·</i><span>酷狗音乐</span><i>·</i><span>QQ 音乐</span><i>·</i>
-          <span>哔哩哔哩</span><i>·</i><span>本地曲库</span><i>·</i><span>Subsonic</span><i>·</i><span>Jellyfin</span><i>·</i>
+          <span>本地曲库</span><i>·</i><span>Subsonic</span><i>·</i><span>Jellyfin</span><i>·</i>
+          <span>Emby</span><i>·</i><span>自建服务端</span><i>·</i><span>离线播放</span><i>·</i>
         </div>
       </div>
     </div>
@@ -208,7 +208,7 @@
       </div>
       <p class="manifesto-copy" data-reveal>
         只做播放器该做的事：整理音源、解出声音、把界面交给你。
-        登录凭据放在本地保险库，运行时不请求管理员或 root。
+        凭据放在本地保险库，运行时不请求管理员或 root。
       </p>
 
       <dl class="stats">
@@ -226,7 +226,7 @@
         </div>
         <div data-reveal>
           <dt>本机</dt>
-          <dd><strong>凭据存储</strong><span>登录信息不出本机</span></dd>
+          <dd><strong>凭据存储</strong><span>凭据不出本机</span></dd>
         </div>
       </dl>
       <p class="stats-note" data-reveal>以上数字来自当前实现，规格以仓库源码为准。</p>
@@ -267,13 +267,13 @@
         <div class="showcase-copy">
           <article class="showcase-step is-active" data-step="0" data-reveal>
             <p class="step-index">01</p>
-            <h3>所有音源，住进同一扇窗</h3>
+            <h3>本地曲库，住进同一扇窗</h3>
             <p>
-              网易云、酷狗、QQ 音乐与哔哩哔哩，加上本地曲库和自建流媒体。
-              搜索、收藏、播放都在一个界面里；登录凭据只存本机。
+              本地曲库与自建流媒体，搜索、收藏、播放都在一个界面里。
+              元数据、封面与播放历史留在本机。
             </p>
             <ul class="step-tags">
-              <li>在线音源</li><li>本地扫描</li><li>流媒体聚合</li>
+              <li>本地扫描</li><li>离线播放</li><li>流媒体聚合</li>
             </ul>
           </article>
 
@@ -316,11 +316,11 @@
                 </div>
                 <div class="mini-caption">
                   <span>发现 · 推荐歌单</span>
-                  <span>在线 / 本地 / 流媒体</span>
+                  <span>本地 / 流媒体</span>
                 </div>
               </div>
-              <span class="stage-tag tag-left">在线音源</span>
-              <span class="stage-tag tag-right">本地曲库</span>
+              <span class="stage-tag tag-left">本地曲库</span>
+              <span class="stage-tag tag-right">离线播放</span>
               <span class="stage-tag tag-bottom">流媒体聚合</span>
             </div>
 
@@ -388,8 +388,8 @@
         <article class="capability" data-reveal>
           <span class="cap-index">02</span>
           <span class="cap-icon"><span class="icon" aria-hidden="true">&#xE180;</span></span>
-          <h3>在线音源</h3>
-          <p>网易云、酷狗、QQ 音乐与哔哩哔哩；接口非官方，可能随平台调整失效。</p>
+          <h3>媒体服务器</h3>
+          <p>支持 Subsonic / Jellyfin / Emby，也能自建服务端；统一走本地播放链路。</p>
         </article>
         <article class="capability" data-reveal>
           <span class="cap-index">03</span>
@@ -413,7 +413,7 @@
           <span class="cap-index">06</span>
           <span class="cap-icon"><span class="icon" aria-hidden="true">&#xE1A4;</span></span>
           <h3>流媒体</h3>
-          <p>可接 Subsonic / Jellyfin / Emby，也能自建服务端；与在线音源共用同一套播放链路。</p>
+          <p>可接 Subsonic / Jellyfin / Emby，也能自建服务端；统一走本地播放链路。</p>
         </article>
       </div>
     </div>
@@ -796,8 +796,8 @@
       </p>
 
       <p class="disclaimer" data-reveal>
-        ArchoeraMvsync 不是网易云音乐、QQ 音乐、酷狗音乐或哔哩哔哩的官方客户端。
-        在线音源接入用于个人学习与自有账号播放，请遵守各平台用户协议与版权规则；本项目不提供绕过付费、会员或版权限制的能力。
+        ArchoeraMvsync 是独立开源项目，与任何第三方服务提供方无关联、合作或授权关系。
+        请遵守所在地法律法规、版权规则与相关服务条款。
       </p>
     </div>
   </section>
@@ -811,7 +811,7 @@
           <h2>先把疑问<br>说清楚。</h2>
         </div>
         <p class="section-lede">
-          关于平台、音源、隐私与许可。没有写到的，可以到
+          关于功能、隐私与许可。没有写到的，可以到
           <a href="https://github.com/ArchoeraC/ArchoeraMvsync/issues" target="_blank" rel="noopener">Issues</a>
           里问。
         </p>
@@ -819,16 +819,12 @@
 
       <div class="faq-list" data-reveal>
         <details>
-          <summary><span class="faq-q">支持哪些平台？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
+          <summary><span class="faq-q">支持哪些操作系统？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
           <p class="faq-a">Linux、Windows 与 macOS，桌面三端。macOS 提供 Intel 与 Apple Silicon 两种构建；目前没有移动端客户端。</p>
         </details>
         <details>
-          <summary><span class="faq-q">在线音源是官方的吗？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
-          <p class="faq-a">不是。网易云、酷狗、QQ 音乐与哔哩哔哩的接入均为非官方接口，可能随平台策略调整而失效。需要登录时使用你自己的账号，不提供绕过付费、会员或版权限制的能力。</p>
-        </details>
-        <details>
-          <summary><span class="faq-q">登录信息会被上传吗？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
-          <p class="faq-a">不会。登录凭据保存在本机保险库，保险库是独立小进程，只处理加密容器；页面与项目本身不收集账号信息。</p>
+          <summary><span class="faq-q">数据会被上传吗？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
+          <p class="faq-a">不会。曲库元数据、播放历史、偏好与凭据都保存在本机；凭据由独立保险库进程加密保管，页面与项目本身不收集账号信息。</p>
         </details>
         <details>
           <summary><span class="faq-q">有广告或遥测吗？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
@@ -844,7 +840,7 @@
         </details>
         <details>
           <summary><span class="faq-q">和 LX Music、MusicFree、Folia 有什么不同？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
-          <p class="faq-a">ArchoeraMvsync 桌面优先，把本地曲库、在线音源、流媒体聚合与可换外观放在同一个播放器里。它们各有侧重，按自己的使用习惯选择即可，不必互相替代。</p>
+          <p class="faq-a">ArchoeraMvsync 桌面优先，把本地曲库、流媒体聚合与可换外观放在同一个播放器里。它们各有侧重，按自己的使用习惯选择即可，不必互相替代。</p>
         </details>
         <details>
           <summary><span class="faq-q">可以商用或闭源吗？</span><span class="faq-plus" aria-hidden="true">+</span></summary>
@@ -867,7 +863,7 @@
           <h2>想改哪儿，<br>都有据可查。</h2>
         </div>
         <p class="section-lede">
-          架构、构建、样式契约、MCP 接入与隐私边界都写在仓库里。
+          架构、构建、样式契约、MCP 接口与隐私边界都写在仓库里。
           这个页面本身也是纯静态文件，源码就在 <code>site/</code>。
         </p>
       </header>
@@ -899,7 +895,7 @@
         </a>
         <a class="doc-item" href="https://github.com/ArchoeraC/ArchoeraMvsync/blob/main/docs/mcp.md" target="_blank" rel="noopener" data-reveal>
           <span class="doc-index">05</span>
-          <span class="doc-title">MCP 接入</span>
+          <span class="doc-title">MCP 接口</span>
           <span class="doc-desc">让本地 Agent 控制播放器</span>
           <span class="doc-arrow">↗</span>
         </a>
