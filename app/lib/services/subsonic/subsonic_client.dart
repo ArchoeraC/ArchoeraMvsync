@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -26,7 +26,7 @@ import 'subsonic_local.dart';
 import 'subsonic_models.dart';
 
 const String subsonicApiVersion = '1.16.1';
-const String subsonicClientName = 'ArchoeraMusic';
+const String subsonicClientName = 'ArchoeraMvsync';
 
 /* ------------------------------------------------------------------ */
 /* 客户端                                                              */
@@ -86,7 +86,7 @@ class SubsonicClient {
       'v': subsonicApiVersion,
       'c': subsonicClientName,
       'f': 'json',
-      // ArchoeraMusic 客户端扩展：服务端据此在「无内嵌歌词」时附带
+      // ArchoeraMvsync 客户端扩展：服务端据此在「无内嵌歌词」时附带
       // archoeraFetchOnline 标记（标准客户端不带，行为不变）。
       'archoeraExt': '1',
     };
@@ -306,7 +306,7 @@ class SubsonicClient {
 
   /// 取歌词；优先 getLyricsBySongId 转 LRC，失败回退旧 getLyrics。
   ///
-  /// 若服务端为 ArchoeraMusic 且曲库无内嵌歌词，返回 [StreamingLyrics.fetchOnline]
+  /// 若服务端为 ArchoeraMvsync 且曲库无内嵌歌词，返回 [StreamingLyrics.fetchOnline]
   /// （扩展标记），由客户端自行在线补全。
   Future<StreamingLyrics> getLyrics(
     String originalId, {

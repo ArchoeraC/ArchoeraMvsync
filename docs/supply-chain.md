@@ -68,7 +68,7 @@
 - 新增任何 `uses:` 一律 pin SHA；`run:` 内**禁止**内插 `${{ github.* }}`（用环境变量）。
 - **SBOM（SEC-25）**：`bash app/tool/gen_sbom.sh <artifacts_dir> <repo_root> <version> <out>`
   用 pin 版本的 syft（CI 内下载后按官方 `*_checksums.txt` 校验 sha256）扫「产物 + 锁文件」，
-  再由 `app/tool/sbom_normalize.py` 归一化（主体标为 `ArchoeraMusic <版本>`、去掉
+  再由 `app/tool/sbom_normalize.py` 归一化（主体标为 `ArchoeraMvsync <版本>`、去掉
   `type: file` 条目与绝对路径、按 purl 去重、根节点展开全部组件）。
   **新增依赖生态时必须同步往脚本里加锁文件**，否则该生态会从 SBOM 里消失
   （脚本会打印「缺少依赖清单」提示）。已知边界：`licenses` 目前只有产物侧二进制

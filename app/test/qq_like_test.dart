@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -22,11 +22,11 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/qqmusic/qq_liked_store.dart';
-import 'package:archoera_music/services/qqmusic/qqmusic_api.dart';
-import 'package:archoera_music/stores/providers.dart';
-import 'package:archoera_music/widgets/list/song_row.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/qqmusic/qq_liked_store.dart';
+import 'package:archoera_mvsync/services/qqmusic/qqmusic_api.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
+import 'package:archoera_mvsync/widgets/list/song_row.dart';
 
 Track _qqTrack(String id, String mid, {String title = '测试曲'}) => Track(
   id: id,

@@ -1,14 +1,14 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /// KG 风控回归：设备身份必须跨实例稳定，注册/登录协议使用新版 lite 参数。
 library;
 
-import 'package:archoera_music/apis/runtime.dart';
-import 'package:archoera_music/services/kugou/kugou_api.dart';
-import 'package:archoera_music/services/kugou/kugou_crypto.dart';
-import 'package:archoera_music/services/kugou/kugou_request.dart';
+import 'package:archoera_mvsync/apis/runtime.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_api.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_crypto.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

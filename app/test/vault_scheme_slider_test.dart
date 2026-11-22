@@ -1,10 +1,10 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/settings/security/vault_scheme_slider.dart';
+import 'package:archoera_mvsync/settings/security/vault_scheme_slider.dart';
 
 /// Vault（M 系）合并卡 + 变体滑条的映射纯单测。
 ///

@@ -1,4 +1,4 @@
-# ArchoeraMusic 宣传页（GitHub Pages）
+# ArchoeraMvsync 宣传页（GitHub Pages）
 
 纯静态产品页：开屏动效按应用源码复刻，随后是电影感首屏、滚动叙事、能力清单、
 引擎管线、样式注册表、开屏演示、下载与文档。
@@ -36,7 +36,7 @@ site/
 | --- | --- |
 | `#splash` | 整屏开屏，1.9s + 550ms 淡出；点击/按键可跳过 |
 | Hero | 大字号主张、下载/开屏/源码入口、产品窗口与浮动标签 |
-| Ticker | 解码格式与音源服务的无缝跑马灯 |
+| Ticker | 解码格式与本地/流媒体的无缝跑马灯 |
 | 立场 | 「不塞广告 / 不做遥测 / 不要提权」+ 4 项可核对的产品数字 |
 | Cinema | 全幅沉浸式播放页：图片随滚动轻微缩放，文案覆盖在封面与歌词上 |
 | `#product` | 滚动叙事：左侧文案滚动、右侧视觉固定并切换三种视图（真实截图 + 布局切换） |
@@ -46,7 +46,7 @@ site/
 | `#gallery` | 横向界面画廊：原生滚动 + 卡片吸附 + 箭头翻页，计数/进度来自真实滚动位置，可点开大图 |
 | `#splash-demo` | 可重播的开屏舞台、Stable/EraAudio、0.5× 慢放、参数时间线 |
 | `#download` | 三端包格式、按当前系统置顶并高亮推荐版本、安装放行说明、Releases 入口、签名校验 |
-| `#faq` | 平台、音源、隐私、许可与安装拦截等常见问题 |
+| `#faq` | 功能、隐私、许可与安装拦截等常见问题 |
 | `#docs` | 文档索引 |
 | Finale / Footer | 结尾 CTA、项目链接、许可 |
 
@@ -107,7 +107,7 @@ Flutter 曲线到 CSS 的映射：`easeOutExpo → cubic-bezier(.16,1,.3,1)`、
 `.github/workflows/pages.yml` 在 `main` 上 `site/**` 变更时构建并发布。
 
 首次启用需要在仓库 **Settings → Pages → Build and deployment → Source** 选择
-**GitHub Actions**；之后推送即自动发布到 `https://betastudio2.github.io/ArchoeraMusic/`。
+**GitHub Actions**；之后推送即自动发布到 `https://betastudio2.github.io/ArchoeraMvsync/`。
 
 ## 许可与素材
 

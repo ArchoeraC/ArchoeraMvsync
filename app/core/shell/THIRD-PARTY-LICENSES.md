@@ -1,6 +1,6 @@
 # Shell 第三方许可证声明（archoera-shell）
 
-本目录 `app/core/shell` 为 ArchoeraMusic 的**内嵌原生命令行客户端**（`archoerashell`）：
+本目录 `app/core/shell` 为 ArchoeraMvsync 的**内嵌原生命令行客户端**（`archoerashell`）：
 以 Rust `staticlib` **静态链入**各平台 runner 主可执行文件（Linux
 `app/linux/CMakeLists.txt` → `libarchoera_shell.a`、Windows runner CMake →
 `archoera_shell.lib`、macOS `Runner.xcodeproj` → `libarchoera_shell.a`）。其自研代码随

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/stores/player_route_animation.dart';
+import 'package:archoera_mvsync/stores/player_route_animation.dart';
 
 void main() {
   test('旧实例清理不会抹掉新实例写入的路由动画', () {

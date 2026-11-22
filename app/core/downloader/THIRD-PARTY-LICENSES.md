@@ -1,6 +1,6 @@
 # Downloader 第三方许可证声明（archoera-downloader）
 
-本目录 `app/core/downloader` 为 ArchoeraMusic 的 Rust 下载引擎（cdylib），
+本目录 `app/core/downloader` 为 ArchoeraMvsync 的 Rust 下载引擎（cdylib），
 其自研代码随本软件以 AGPL-3.0 授权，第三方组件按各自许可使用（逐项登记见下）。
 
 ## 直接 Rust 依赖（默认 feature：全自研签名）

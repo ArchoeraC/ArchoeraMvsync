@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:archoera_music/widgets/common/offstage_when_complete.dart';
-import 'package:archoera_music/stores/shell_page_state.dart';
+import 'package:archoera_mvsync/widgets/common/offstage_when_complete.dart';
+import 'package:archoera_mvsync/stores/shell_page_state.dart';
 
 /// 模拟「页面」：把平台与 Tab 选择存在 provider，`State` 重建时从中恢复。
 class _PlatformPicker extends ConsumerStatefulWidget {

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,11 +14,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:archoera_music/app/shell_expand_transition.dart';
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/stores/player_route_animation.dart';
-import 'package:archoera_music/widgets/layout/nav_header.dart';
+import 'package:archoera_mvsync/app/shell_expand_transition.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/player_route_animation.dart';
+import 'package:archoera_mvsync/widgets/layout/nav_header.dart';
 
 /// 回归（2026-10）：搜索栏**展开后不能保持**——旧实现用 `Positioned.fill` 不透明拦截层收起下拉，
 /// 该层盖在搜索框之上，于是「展开后再次点击搜索框 / 点清除按钮 / 重新定位光标」都被判成

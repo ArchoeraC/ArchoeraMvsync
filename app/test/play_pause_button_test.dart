@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,8 +11,8 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/widgets/player/play_pause_button.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/widgets/player/play_pause_button.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 Future<void> _pump(
   WidgetTester tester, {

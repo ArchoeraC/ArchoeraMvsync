@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/widgets/player/lyrics_view.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_view.dart';
 
 List<LyricGroup> buildGroups(int count, {String? longTextAt5}) => [
   for (var i = 0; i < count; i++)

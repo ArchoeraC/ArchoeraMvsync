@@ -1,5 +1,5 @@
 /*
- * ArchoeraMusic 统一日志 —— C ABI 契约
+ * ArchoeraMvsync 统一日志 —— C ABI 契约
  * Copyright (C) 2026 Archoera && BetaStudio2
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *

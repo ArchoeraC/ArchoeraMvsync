@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -23,13 +23,13 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/apis/qqmusic/api.dart';
-import 'package:archoera_music/apis/qqmusic/core/config.dart';
-import 'package:archoera_music/apis/qqmusic/core/device.dart';
-import 'package:archoera_music/apis/qqmusic/core/pacing.dart';
-import 'package:archoera_music/apis/qqmusic/core/qimei.dart';
-import 'package:archoera_music/apis/qqmusic/core/request.dart';
-import 'package:archoera_music/apis/runtime.dart';
+import 'package:archoera_mvsync/apis/qqmusic/api.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/config.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/device.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/pacing.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/qimei.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/request.dart';
+import 'package:archoera_mvsync/apis/runtime.dart';
 
 class _FakeSessionStore implements SessionStore {
   final Map<String, Map<String, String>> data = {};

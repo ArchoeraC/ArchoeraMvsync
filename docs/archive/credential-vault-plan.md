@@ -237,7 +237,7 @@ vault：  校验父进程身份（OS 提供 pid + 可执行文件路径）→ �
 - 双因子：**进程身份**（父进程校验 + PDEATHSIG）与**主密钥持有**（伪造主进程无法解锁主密钥）；
 - **父进程身份校验（F3，无环境变量信任）**：`ARCHOERA_VAULT_PARENT_OK` **已完全移除**——父进程 pid 与可执行文件路径由 **OS** 提供
   （Linux `/proc/<ppid>/exe`、macOS `proc_pidpath`、Windows `QueryFullProcessImageNameW`），与「由 vault 自身位置推导的预期主程序路径」
-  （打包布局 `<dir>/native/<vault>` → `<dir>/archoera_music[.exe]`）比对；dev/测试布局放行。**残余（如实）**：同用户攻击者可在预期路径放置自造二进制再 spawn，**无法与「主程序被替换」区分**（L4 硬上限）。
+  （打包布局 `<dir>/native/<vault>` → `<dir>/archoera_mvsync[.exe]`）比对；dev/测试布局放行。**残余（如实）**：同用户攻击者可在预期路径放置自造二进制再 spawn，**无法与「主程序被替换」区分**（L4 硬上限）。
 - **进程自我保护（F4，best-effort）**：Linux `PR_SET_PDEATHSIG` + `RLIMIT_CORE=0` + `PR_SET_DUMPABLE=0` + **seccomp-BPF denylist**
   （拒 `ptrace`/`process_vm_readv|writev`/`execve`/`bpf`/内核模块/命名空间/`io_uring` 及 `AF_INET`/`AF_INET6` `socket` → `SECCOMP_RET_KILL_PROCESS`；
   `AF_UNIX` 放行以兼容 libsecret/D-Bus）；Windows `SetProcessMitigationPolicy`（ACG/CIG/ExtensionPointDisable/StrictHandle/CFG/ImageLoad）；

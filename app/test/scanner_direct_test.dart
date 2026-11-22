@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,10 +9,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/scanner/library_scanner.dart';
-import 'package:archoera_music/services/scanner/scanner_ffi.dart';
-import 'package:archoera_music/services/scanner/sqlite_preload.dart';
-import 'package:archoera_music/services/scanner/tracks_db.dart';
+import 'package:archoera_mvsync/services/scanner/library_scanner.dart';
+import 'package:archoera_mvsync/services/scanner/scanner_ffi.dart';
+import 'package:archoera_mvsync/services/scanner/sqlite_preload.dart';
+import 'package:archoera_mvsync/services/scanner/tracks_db.dart';
 
 /// 生成最小合法 WAV（44 字节 RIFF header + PCM 静音），TagLib 可解析。
 Uint8List makeWav({int sampleRate = 44100, double seconds = 0.2}) {

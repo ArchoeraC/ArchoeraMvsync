@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ArchoeraMusic 项目架构与通讯图</title>
+  <title>ArchoeraMvsync 项目架构与通讯图</title>
   <style>
     :root {
       --bg: #071018;
@@ -473,7 +473,7 @@
   <div class="shell">
     <header class="panel topbar">
       <div class="brand">
-        <h1>ArchoeraMusic 半自动架构与通讯图</h1>
+        <h1>ArchoeraMvsync 半自动架构与通讯图</h1>
         <p class="subtitle">
           这张图只按当前源码快照绘制，不依赖仓库里的架构文档。现在改成了“模块注册表 + 视图配方 + 自动布局”的半自动版本，后续主要维护模块定义和关系，不再手摆节点坐标。
         </p>
@@ -594,7 +594,7 @@
         meta: "main.dart 初始化窗口、日志、单实例、vault、SQLite 预加载",
         description: "应用总入口。这里把窗口管理、平台能力、vault 会话、日志和 StreamingStore 初始化串起来，然后把 ProviderScope 和 AppShell 跑起来。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/main.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/main.dart"
         ]
       },
       app_shell: {
@@ -604,10 +604,10 @@
         meta: "MaterialApp.router + GoRouter + AppShell + PlayerPage",
         description: "应用壳负责 MaterialApp、主题、路由、侧边栏、底部播放条和全屏播放器入口，是真正承接页面的 UI 外框。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/app/app.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/app/router.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/app/shell.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/app/bootstrap.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/app/app.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/app/router.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/app/shell.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/app/bootstrap.dart"
         ]
       },
       pages: {
@@ -617,11 +617,11 @@
         meta: "home / library / liked / history / search / streaming / player",
         description: "页面目录按业务拆分，搜索、流媒体详情、曲库和全屏播放页各自有独立视图文件。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/home_page.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/library_page.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/search_page.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/player_page.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/streaming/streaming_page.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/home_page.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/library_page.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/search_page.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/player_page.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/streaming/streaming_page.dart"
         ]
       },
       playback: {
@@ -631,10 +631,10 @@
         meta: "PlaybackNotifier / AudioEngineProcess / source resolver / FFT",
         description: "播放层由 PlaybackNotifier 驱动，负责队列、切歌、状态持久化、音效命令、FFT 和引擎事件消费，是整个项目最核心的业务服务之一。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/playback_notifier.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/audio_engine_process.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/engine_bindings.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/play_source_resolver.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/playback_notifier.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/audio_engine_process.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/engine_bindings.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/play_source_resolver.dart"
         ]
       },
       source_registry: {
@@ -644,11 +644,11 @@
         meta: "SourcePlatform 把 netease / kugou / qqmusic / streaming / local 统一起来",
         description: "SourcePlatform 把搜索、播放解析、歌词、收藏和详情能力统一成一套接口，播放和搜索页面不直接写平台分支。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/source/source_platform.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/netease/netease_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/kugou/kugou_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/qqmusic/qqmusic_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/streaming/streaming_client.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/source/source_platform.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/netease/netease_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/kugou/kugou_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/qqmusic/qqmusic_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/streaming/streaming_client.dart"
         ]
       },
       platform_facade: {
@@ -658,11 +658,11 @@
         meta: "PlatformCapabilities / SystemMedia / SystemPower / SystemWindow / DeepLink",
         description: "Dart 侧统一门面，负责决定是否启用 FFI 实现或者静默降级为 Noop。主程序依赖的是接口，不直接依赖 OS 细节。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/platform_capabilities.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/platform_bindings.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/ffi_system_media.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/ffi_system_power.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/ffi_system_window.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/platform_capabilities.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/platform_bindings.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/ffi_system_media.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/ffi_system_power.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/ffi_system_window.dart"
         ]
       },
       state_storage: {
@@ -672,11 +672,11 @@
         meta: "Riverpod providers / AppPrefs / history / cache / TracksDb / library.db",
         description: "应用状态由 Riverpod 驱动，本地持久化分散在 AppPrefs、历史、歌曲缓存和 SQLite 曲库中。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/stores/app_prefs.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/stores/providers.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/history/history_store.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/cache/song_cache.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/tracks_db.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/stores/app_prefs.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/stores/providers.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/history/history_store.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/cache/song_cache.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/tracks_db.dart"
         ]
       },
       scanner_service: {
@@ -686,9 +686,9 @@
         meta: "LibraryScanner -> ScannerLibrary -> 子 isolate 阻塞 FFI",
         description: "扫描服务在 Dart 里主要做两件事：把阻塞 FFI 放到 isolate 里，以及把 C# 进度回调转成广播流。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/library_scanner.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/scanner_ffi.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/library_store.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/library_scanner.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/scanner_ffi.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/library_store.dart"
         ]
       },
       scraper_service: {
@@ -698,9 +698,9 @@
         meta: "ScraperController / scraper_bindings / 队列式曲目注入",
         description: "刮削器是另一条独立 FFI 链路，Dart 负责组装配置、入队曲目、拉取进度事件和生命周期管理。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scraper/scraper_client.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scraper/scraper_bindings.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scraper/scrape_controller.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scraper/scraper_client.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scraper/scraper_bindings.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scraper/scrape_controller.dart"
         ]
       },
       audio_native: {
@@ -710,10 +710,10 @@
         meta: "C 壳 + Zig kernel + miniaudio + FFT 共享库",
         description: "播放引擎是 `libarchoera_mediaengine`，由 C 壳承接 FFI ABI，底下再接内核、PCM/FFT 与实际输出。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/include",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/src",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/kernel",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/CMakeLists.txt"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/include",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/src",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/kernel",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/CMakeLists.txt"
         ]
       },
       native_suite: {
@@ -723,10 +723,10 @@
         meta: "scanner(C#) / scraper(C++) / subsonic(Go) / log(C)",
         description: "除了音频引擎外，仓库里还存在多个语言各异但边界清晰的原生模块，它们分别做扫描、刮削、Subsonic 服务和统一日志。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/scanner/ScannerEngine.cs",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/scraper/src/scraper_lib.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/subsonic/main_ffi.go",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/log/src"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/scanner/ScannerEngine.cs",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/scraper/src/scraper_lib.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/subsonic/main_ffi.go",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/log/src"
         ]
       },
       platform_native: {
@@ -736,10 +736,10 @@
         meta: "backend_windows / backend_linux / backend_macos + apl.cpp",
         description: "平台能力桥接的真正实现都在 `app/native/platform`。Dart 看到的是统一 ABI，具体 OS 适配在这里分平台完成。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/apl.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_windows.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_linux.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_macos.mm"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/apl.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_windows.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_linux.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_macos.mm"
         ]
       },
       vault: {
@@ -749,8 +749,8 @@
         meta: "唯一显式子进程：archoera-vault",
         description: "和大多数模块不同，vault 不是 FFI 动态库，而是被 Dart 通过 Process 启动和握手的独立可执行程序。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/security/vault_process.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/vault-rs/src"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/security/vault_process.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/vault-rs/src"
         ]
       },
       ui: {
@@ -760,9 +760,9 @@
         meta: "PlayerPage / LibraryPage / SearchPage",
         description: "用户操作基本都从页面层发起：点播放、进曲库扫描、切设置、打开全屏播放器。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/player/player_page_view.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/library/library_page_view.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/pages/search/search_page_view.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/player/player_page_view.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/library/library_page_view.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/pages/search/search_page_view.dart"
         ]
       },
       playback_core: {
@@ -772,7 +772,7 @@
         meta: "队列 / 切歌 / seek / 音效 / 频谱 / 会话恢复",
         description: "播放主控制器，接住页面动作后决定选曲、切源、会话恢复、FFT 采样和引擎命令。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/playback_notifier.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/playback_notifier.dart"
         ]
       },
       source_core: {
@@ -782,7 +782,7 @@
         meta: "统一搜索、播放 URL 解析、歌词与收藏能力",
         description: "播放控制器不会直接碰 `netease` 或 `kugou` 这些具体服务，而是先通过统一注册表分派。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/source/source_platform.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/source/source_platform.dart"
         ]
       },
       remote_apis: {
@@ -792,10 +792,10 @@
         meta: "netease / kugou / qqmusic / streaming",
         description: "这里是远端平台适配层，负责请求在线平台、拿搜索结果、解析歌曲地址和登录态相关能力。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/netease/netease_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/kugou/kugou_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/qqmusic/qqmusic_api.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/streaming/streaming_client.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/netease/netease_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/kugou/kugou_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/qqmusic/qqmusic_api.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/streaming/streaming_client.dart"
         ]
       },
       audio_process: {
@@ -805,7 +805,7 @@
         meta: "start / stop / sendCommand / 事件泵 isolate",
         description: "播放控制器不直接写 FFI 细节，而是通过 AudioEngineProcess 管理引擎句柄、等待事件和生命周期。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/audio_engine_process.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/audio_engine_process.dart"
         ]
       },
       engine_bindings: {
@@ -815,7 +815,7 @@
         meta: "archoera_mediaengine_* / segstore / 事件轮询",
         description: "真正的 C ABI 定义在这里：创建引擎、命令发送、事件等待；频谱改由引擎线程推送，v1 拉窗/FFT 绑定已删除。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/playback/engine_bindings.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/playback/engine_bindings.dart"
         ]
       },
       audio_engine_native: {
@@ -825,8 +825,8 @@
         meta: "C 壳 / 内核 / miniaudio / 事件 FIFO",
         description: "原生音频引擎负责解码、播放、PCM 输出和事件回传，是播放通信链的最终执行者。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/src",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/audio-engine/kernel"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/src",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/audio-engine/kernel"
         ]
       },
       scanner_ui: {
@@ -836,8 +836,8 @@
         meta: "扫描编排 / 进度流 / 曲库刷新",
         description: "曲库扫描入口在 Dart 侧会协调参数、进度流和结果刷新，避免 UI 卡死。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/library_scanner.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/library_store.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/library_scanner.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/library_store.dart"
         ]
       },
       scanner_ffi: {
@@ -847,7 +847,7 @@
         meta: "scanner_scan / cancel / free / set_options",
         description: "扫描 FFI 层本身很薄，主要负责加载动态库、配置扫描参数、调用阻塞扫描接口和释放内存。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/scanner_ffi.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/scanner_ffi.dart"
         ]
       },
       scanner_native: {
@@ -857,9 +857,9 @@
         meta: "NativeAOT / 回调进度 / 直写 SQLite",
         description: "真正的扫描执行器。它在后台并行扫描媒体文件，回调进度，并把结果直接写进 SQLite。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/scanner/ScannerEngine.cs",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/scanner/scanner-ffi/Ffi.cs",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/scanner/SqliteDirectWriter.cs"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/scanner/ScannerEngine.cs",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/scanner/scanner-ffi/Ffi.cs",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/scanner/SqliteDirectWriter.cs"
         ]
       },
       library_db: {
@@ -869,7 +869,7 @@
         meta: "TracksDb 读取，scanner 直写",
         description: "本地曲库数据库和几个附属目录构成扫描链最终落点：tracks 表、封面缓存以及隔离区。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/scanner/tracks_db.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/scanner/tracks_db.dart"
         ]
       },
       platform_dart: {
@@ -879,7 +879,7 @@
         meta: "media / power / window / deep link 门面",
         description: "主程序通过这里拿平台能力实例；它会决定启用 FFI 还是 Noop 降级。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/platform_capabilities.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/platform_capabilities.dart"
         ]
       },
       platform_bind: {
@@ -889,7 +889,7 @@
         meta: "apl_* C ABI / NativeCallable.listener",
         description: "平台桥 FFI 层镜像了头文件结构体、错误码和事件枚举，负责把任意原生线程事件送回 Dart。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/platform/platform_bindings.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/platform/platform_bindings.dart"
         ]
       },
       platform_native_impl: {
@@ -899,7 +899,7 @@
         meta: "Windows / Linux / macOS 后端",
         description: "平台桥真正的实现落在 C++ / ObjC++ 后端里，负责媒体键、电源抑制、窗口状态、Deep Link 等能力。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src"
         ]
       },
       os: {
@@ -909,9 +909,9 @@
         meta: "SMTC / D-Bus / AppKit / 单实例 / 文件定位",
         description: "平台桥最终对接的是操作系统原生能力，而不是 Flutter plugin 或 Dart 直接调系统命令。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_windows.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_linux.cpp",
-          "/home/betastudio2/文档/ArchoeraMusic/app/native/platform/src/backend_macos.mm"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_windows.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_linux.cpp",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/native/platform/src/backend_macos.mm"
         ]
       },
       vault_proc: {
@@ -921,8 +921,8 @@
         meta: "独立进程握手 / 命令 / crash 标记",
         description: "凭据保险库不是动态库，而是一条单独的进程通信链路；它负责密文存取、崩溃联动和版本校验。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/security/vault_process.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/vault-rs/src"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/security/vault_process.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/vault-rs/src"
         ]
       },
       subsonic_dart: {
@@ -932,8 +932,8 @@
         meta: "create / pollEvent / encrypt / decrypt / shred",
         description: "Subsonic 在 Dart 侧是一条独立控制链，事件通过轮询拿，能力包括启动服务、加解密和文件 shred。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/subsonic/subsonic_controller.dart",
-          "/home/betastudio2/文档/ArchoeraMusic/app/lib/services/subsonic/subsonic_bindings.dart"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/subsonic/subsonic_controller.dart",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/lib/services/subsonic/subsonic_bindings.dart"
         ]
       },
       subsonic_go: {
@@ -943,8 +943,8 @@
         meta: "c-shared / HTTP server / goroutine / transcoder",
         description: "Go 侧以 c-shared 形式嵌入主进程，内部起 HTTP server 和 goroutine 处理外部请求。",
         files: [
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/subsonic/main_ffi.go",
-          "/home/betastudio2/文档/ArchoeraMusic/app/core/subsonic/endpoints"
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/subsonic/main_ffi.go",
+          "/home/betastudio2/文档/ArchoeraMvsync/app/core/subsonic/endpoints"
         ]
       }
     };

@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsync 自研音频内核
 
 //! 频谱分析器 v3 —— VQT（可变 Q 变换）+ AGC / γ / 高频倾斜 / 峰值保持
 //! （docs/spectrum-analyzer.md §4 / §9.1）

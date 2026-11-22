@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,12 +9,12 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/netease/apis_netease_caller.dart';
-import 'package:archoera_music/services/netease/netease_api.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/stores/favorites_revision.dart';
-import 'package:archoera_music/stores/providers.dart';
-import 'package:archoera_music/stores/user_playlists.dart';
+import 'package:archoera_mvsync/services/netease/apis_netease_caller.dart';
+import 'package:archoera_mvsync/services/netease/netease_api.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/stores/favorites_revision.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
+import 'package:archoera_mvsync/stores/user_playlists.dart';
 
 class _FakeNeteaseApi extends NeteaseApi {
   _FakeNeteaseApi() : super(ApisNeteaseCaller());

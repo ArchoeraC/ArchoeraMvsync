@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -601,10 +601,13 @@ class VaultProcess {
   }
 
   /// fail-closed：非预期退出 → 连带终止主进程（物理内存随系统回收）。
-  /// `ARCHOERA_VAULT_NO_ABORT=1`（测试/CI）仅写标记不终止。
+  /// `ARCHOERA_VAULT_NO_ABORT=1`（测试/CI）或 `FLUTTER_TEST` 环境仅写标记不终止。
   static void _abort(String dataDir) {
     Log.f('vault', '凭据模块异常退出，fail-closed 终止主进程（$dataDir）');
-    if (Platform.environment[envNoAbort] == '1') return;
+    if (Platform.environment[envNoAbort] == '1' ||
+        Platform.environment.containsKey('FLUTTER_TEST')) {
+      return;
+    }
     exit(86);
   }
 

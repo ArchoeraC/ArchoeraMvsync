@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,10 +9,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/easter_egg/easter_egg_visual_state.dart';
-import 'package:archoera_music/easter_egg/mouse_dodge.dart';
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/widgets/player/s_controls.dart';
+import 'package:archoera_mvsync/easter_egg/easter_egg_visual_state.dart';
+import 'package:archoera_mvsync/easter_egg/mouse_dodge.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/widgets/player/s_controls.dart';
 
 /// 用鼠标手势在 [finder] 上连续悬停，触发躲避。
 Future<void> _hover(WidgetTester tester, Finder finder) async {

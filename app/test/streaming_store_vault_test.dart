@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,9 +6,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/security/vault_process.dart';
-import 'package:archoera_music/services/streaming/streaming_store.dart';
-import 'package:archoera_music/services/streaming/streaming_types.dart';
+import 'package:archoera_mvsync/services/security/vault_process.dart';
+import 'package:archoera_mvsync/services/streaming/streaming_store.dart';
+import 'package:archoera_mvsync/services/streaming/streaming_types.dart';
 
 /// 流媒体服务器凭据 vault 化端到端测试（对真实 `archoera-vault` 二进制）：
 ///   1. save → 配置文件不含凭据，vault 加密存储，重建（清缓存）回读一致

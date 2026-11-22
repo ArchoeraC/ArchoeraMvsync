@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,13 +15,14 @@ const lyricAdaptiveFontSizeKey = 'lyrics.adaptiveFontSize';
 const lyricFontWeightKey = 'lyrics.fontWeight';
 
 // ── AMLL 歌词墙（AMLL 引擎）偏好键 ──────────────────────────────
-const lyricEngineKey = 'lyrics.engine'; // 'simple' | 'amll'
+const lyricEngineKey = 'lyrics.engine'; // 'simple' | 'wall' | 'amll'
 const amllAlignFractionKey = 'amll.alignFraction';
 const amllInactiveAlphaKey = 'amll.inactiveAlpha';
 const amllWordSweepKey = 'amll.wordSweep';
 const amllHidePassedKey = 'amll.hidePassed';
 const amllEnableScaleKey = 'amll.enableScale';
-const amllBlurQualityKey = 'amll.blurQuality'; // auto | fast | quality | off
+const amllBlurQualityKey =
+    'amll.blurQuality'; // auto | fast | lite | quality | off
 const amllEnableBlurKey = 'amll.enableBlur'; // 旧键（仅用于迁移）
 const amllSpringPresetKey = 'amll.springPreset';
 
@@ -168,10 +169,11 @@ extension LyricsPrefs on AppPrefs {
 
 /// AMLL 歌词墙偏好：引擎选择 + 布局/视觉参数。
 extension AmllLyricsPrefs on AppPrefs {
-  /// 歌词引擎：'simple'（旧实现）| 'amll'（Apple Music 风格歌词墙）。
+  /// 歌词引擎：`simple`（默认列表）| `wall`（四层重写歌词墙）| `amll`
+  /// （旧 AMLL 实现）。
   String get lyricEngine {
     final v = data[lyricEngineKey];
-    return v == 'amll' ? 'amll' : 'simple';
+    return (v == 'wall' || v == 'amll') ? v! : 'simple';
   }
 
   /// 激活行锚定位置（0~1，占歌词区高度比例，默认 0.5 = 视口居中）。
@@ -197,7 +199,7 @@ extension AmllLyricsPrefs on AppPrefs {
   /// 非激活行缩放（激活 1.0 / 非激活 0.97，弹簧平滑；默认开）。
   bool get amllEnableScale => data[amllEnableScaleKey] as bool? ?? true;
 
-  /// 非激活行失焦档位（`auto`/`fast`/`quality`/`off`，默认 `auto`）。
+  /// 非激活行失焦档位（`auto`/`fast`/`lite`/`quality`/`off`，默认 `auto`）。
   ///
   /// 兼容旧键：`amll.enableBlur == false` 视为 `off`（新键存在时以新键为准）。
   String get amllBlurQuality {

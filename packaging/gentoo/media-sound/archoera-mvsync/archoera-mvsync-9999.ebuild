@@ -2,16 +2,16 @@
 # Distributed under the terms of the GNU General Public License v2
 
 # Gentoo ebuild（二进制发布包：直接消费 GitHub Release 的纯二进制 tar.gz）。
-# 放置于 overlay：media-sound/archoera-music/archoera-music-9999.ebuild
-# 或按版本号改名（如 archoera-music-0.8.4.ebuild）。
+# 放置于 overlay：media-sound/archoera-mvsync/archoera-mvsync-9999.ebuild
+# 或按版本号改名（如 archoera-mvsync-0.8.4.ebuild）。
 
 EAPI=8
 
 inherit eutils
 
 DESCRIPTION="An open-source music player, connect to alternative music service, support offline playback"
-HOMEPAGE="https://github.com/ArchoeraC/ArchoeraMusic"
-SRC_URI="https://github.com/ArchoeraC/ArchoeraMusic/releases/download/v${PV}/ArchoeraMusic-v${PV}-linux-x86_64.tar.gz"
+HOMEPAGE="https://github.com/ArchoeraC/ArchoeraMvsync"
+SRC_URI="https://github.com/ArchoeraC/ArchoeraMvsync/releases/download/v${PV}/ArchoeraMvsync-v${PV}-linux-x86_64.tar.gz"
 
 LICENSE="AGPL-3"
 SLOT="0"
@@ -36,14 +36,14 @@ RDEPEND="
 # scanner/indexer 的曲目 id 已改为纯托管 MD5（运行期不再 dlopen libssl）；
 # scraper 的加密与 HTTP 均为内嵌 Rust staticlib（AES/RSA + reqwest/rustls），
 # 所以产物不再需要系统 libcurl / OpenSSL。
-S="${WORKDIR}/ArchoeraMusic-linux-x86_64"
+S="${WORKDIR}/ArchoeraMvsync-linux-x86_64"
 
 src_install() {
-	# 整个 bundle 装到 /opt/archoera-music（FFI/引擎子进程相对可执行文件定位）
-	insinto /opt/archoera-music
+	# 整个 bundle 装到 /opt/archoera-mvsync（FFI/引擎子进程相对可执行文件定位）
+	insinto /opt/archoera-mvsync
 	doins -r "${S}"/.
-	fperms 0755 /opt/archoera-music/archoera_music
-	dosym /opt/archoera-music/archoera_music /usr/bin/archoera_music
+	fperms 0755 /opt/archoera-mvsync/archoera_mvsync
+	dosym /opt/archoera-mvsync/archoera_mvsync /usr/bin/archoera_mvsync
 
 	# 图标：bundle 内置 data/app_icon.png
 	doicon -s 512 "${S}/data/app_icon.png"
@@ -51,13 +51,13 @@ src_install() {
 	newmenu - <<-EOF
 		[Desktop Entry]
 		Type=Application
-		Name=ArchoeraMusic
+		Name=ArchoeraMvsync
 		GenericName=Music Player
 		Comment=An open-source music player
-		Exec=/usr/bin/archoera_music %U
-		Icon=awa.archoera.betastudio2.archoera_music
+		Exec=/usr/bin/archoera_mvsync %U
+		Icon=awa.archoera.betastudio2.archoera_mvsync
 		Terminal=false
 		Categories=Audio;Music;AudioVideo;
-		StartupWMClass=archoera_music
+		StartupWMClass=archoera_mvsync
 	EOF
 }

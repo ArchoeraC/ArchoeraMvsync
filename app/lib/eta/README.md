@@ -37,7 +37,7 @@
 ## 2. 怎么引用图标
 
 ```dart
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 Icon(EtaIcons.play, size: 24, color: scheme.primary);
 IconButton(icon: const Icon(EtaIcons.heart), onPressed: ...);
@@ -73,7 +73,7 @@ Icon(liked ? EtaIcons.heart : EtaIcons.heartOutline);
 泛化图标替换影响；现仅 `AppLogo` 使用。
 
 ```dart
-import 'package:archoera_music/eta/mark/eta_mark.dart';
+import 'package:archoera_mvsync/eta/mark/eta_mark.dart';
 
 Icon(EtaMark.brand, size: 18, color: scheme.onPrimaryContainer);
 ```

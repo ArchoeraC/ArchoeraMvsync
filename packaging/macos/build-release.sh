@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic macOS 发布打包（**macOS 专用**，从零到发布资产一条龙）
+#  ArchoeraMvsync macOS 发布打包（**macOS 专用**，从零到发布资产一条龙）
 #
 #  设计原则：macOS 有自己的工具链 / 架构 / 签名语义，不与 Linux 脚本混用，
 #  也不依赖 CI 里的内联 bash 片段。本脚本只允许在 macOS 上运行，只使用
@@ -40,8 +40,8 @@
 # =====================================================================
 set -euo pipefail
 
-APP_NAME="ArchoeraMusic"
-BIN="archoera_music"
+APP_NAME="ArchoeraMvsync"
+BIN="archoera_mvsync"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "错误: 本脚本只能在 macOS 上运行（需要 otool / codesign / hdiutil 等）" >&2
@@ -586,7 +586,7 @@ do_package() {
   # 顺序按用户实际最常遇到的提示排：「已损坏」在前（macOS 14+ 对带隔离属性
   # 的 ad-hoc 签名应用常直接报这个，不是文件损坏）。
   cat > "$stage/首次打开说明.txt" <<'NOTE'
-ArchoeraMusic（macOS）首次打开说明
+ArchoeraMvsync（macOS）首次打开说明
 ==================================
 
 本构建未使用 Apple Developer ID 签名与公证（项目未购买付费证书），
@@ -595,13 +595,13 @@ ArchoeraMusic（macOS）首次打开说明
 一、提示「已损坏，无法打开」/「移到废纸篓」
    这是下载带来的隔离属性（quarantine）导致的，**文件并没有损坏**。
    打开「终端」，把应用拖进「应用程序」后执行：
-     xattr -dr com.apple.quarantine /Applications/ArchoeraMusic.app
+     xattr -dr com.apple.quarantine /Applications/ArchoeraMvsync.app
    还没移动的话，把上面的路径换成实际位置，例如：
-     xattr -dr com.apple.quarantine ~/Downloads/ArchoeraMusic.app
+     xattr -dr com.apple.quarantine ~/Downloads/ArchoeraMvsync.app
    然后重新双击打开。
 
 二、提示「无法验证开发者」/「Apple 无法检查是否包含恶意软件」
-   1. 在访达里右键（或 Control+点击）ArchoeraMusic →「打开」，
+   1. 在访达里右键（或 Control+点击）ArchoeraMvsync →「打开」，
       在弹窗中再点一次「打开」；
    2. 或打开「系统设置 → 隐私与安全性」，在页面底部点「仍要打开」。
 
@@ -610,17 +610,17 @@ ArchoeraMusic（macOS）首次打开说明
 三、如果是从 QQ / 微信 / 网盘接收的压缩包
    这类客户端自带的解压可能丢掉符号链接、或往包里写入 Finder 信息，
    应用会被判定为「已损坏」，此时只去 quarantine 是修不好的。
-   优先用 DMG：双击挂载后，把 ArchoeraMusic 拖进「应用程序」。
+   优先用 DMG：双击挂载后，把 ArchoeraMvsync 拖进「应用程序」。
    只能用 zip 时，请在「终端」里解压（保留符号链接与权限）：
-     ditto -x -k ~/Downloads/ArchoeraMusic-*-macos-arm64.zip /Applications
+     ditto -x -k ~/Downloads/ArchoeraMvsync-*-macos-arm64.zip /Applications
    不要用第三方解压工具。
    如果已经被解压坏了，可再执行一次（清掉全部扩展属性）：
-     xattr -cr /Applications/ArchoeraMusic.app
+     xattr -cr /Applications/ArchoeraMvsync.app
 
 架构：Apple 芯片选 arm64，Intel 选 x64。
 校验：发布资产带 .sig1 分离签名与公钥，校验方法见仓库 app/tool/verify_release.sh。
 
-项目主页：https://github.com/ArchoeraC/ArchoeraMusic
+项目主页：https://github.com/ArchoeraC/ArchoeraMvsync
 NOTE
 
   # zip：.app 与说明平铺在顶层（与 DMG 内同名），不带外层父目录。
@@ -630,7 +630,7 @@ NOTE
   ditto -c -k --sequesterRsrc "$zipstage" "$base.zip"
   log "zip: $base.zip ($(du -h "$base.zip" | cut -f1 | tr -d ' '))"
 
-  printf 'bundle-id=com.archoera.archoeraMusic\nversion=%s\narch=%s\n' \
+  printf 'bundle-id=com.archoera.archoeraMvsync\nversion=%s\narch=%s\n' \
     "$version" "$arch" > "$base.info.txt"
 
   if [ "${SKIP_DMG:-0}" = "1" ]; then

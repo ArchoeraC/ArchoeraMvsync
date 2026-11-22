@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -208,7 +208,7 @@ class McpService extends ChangeNotifier {
       'jsonrpc': '2.0',
       'method': 'server.hello',
       'params': {
-        'server': 'archoera-music',
+        'server': 'archoera-mvsync',
         'protocolVersion': kMcpPreferredVersion,
         'capabilities': [
           for (final c in McpCapability.values)

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,7 +6,7 @@
 //
 // 链接与主程序相同的 Rust staticlib（app/core/shell），但作为控制台子系统可执行
 // 文件：cmd / PowerShell 会**等待其退出**，且它**独占**控制台输入——交互式 REPL
-// 因此可用。主程序（GUI 子系统）的 `archoera_music archoerashell …` 子命令会与
+// 因此可用。主程序（GUI 子系统）的 `archoera_mvsync archoerashell …` 子命令会与
 // 调用方 shell 争抢同一控制台输入，仅适合一次性命令（见 docs/mcp.md）。
 
 #include <windows.h>

@@ -417,7 +417,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Recordar mi elección y no volver a preguntar';
 
   @override
-  String get appName => 'ArchoeraMusic';
+  String get appName => 'ArchoeraMvsync';
 
   @override
   String get brandNetease => 'NT';
@@ -3205,16 +3205,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Contraseña de recuperación incorrecta o error de desbloqueo; credenciales siguen bloqueados';
 
   @override
-  String get settingsSchemeIntroTitle => 'Método de cifrado';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'Sus credenciales de inicio de sesión (cookies) están protegidas por un método de cifrado. El método LEGACY (recomendado) está activado: la clave maestra vive en el almacenamiento seguro del sistema — estable y fiable. Para una mayor protección puede cambiar a Vault (experimental) en Ajustes → Método de cifrado de credenciales — tenga en cuenta que el cambio reconstruye la base de datos y pierde todos los credenciales de inicio de sesión.';
-
-  @override
-  String get settingsSchemeIntroGotIt => 'Entendido';
-
-  @override
   String get settingsSchemeSection => 'Método de cifrado de credenciales';
 
   @override
@@ -3509,7 +3499,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      'Este software（ArchoeraMusic）es un reproductor de música de escritorio gratuito y de código abierto para fines de aprendizaje e investigación personal.\n\n';
+      'Este software（ArchoeraMvsync）es un reproductor de música de escritorio gratuito y de código abierto para fines de aprendizaje e investigación personal.\n\n';
 
   @override
   String get settingsDecline1Title => '1. Naturaleza del software\n';
@@ -3601,7 +3591,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsPrivacyIntro =>
-      'Bienvenido a ArchoeraMusic (en adelante, el «Software» o «nosotros»). Somos conscientes de la importancia de su información personal y siempre nos comprometemos a proteger su privacidad y la seguridad de sus datos. Esta política explica cómo tratamos, almacenamos y protegemos su información durante el uso del Software, así como los derechos que le asisten.\n\nLea y comprenda detenidamente esta política. Al comenzar a usar el Software, usted confirma que ha leído, comprendido y aceptado todo su contenido.\n\n';
+      'Bienvenido a ArchoeraMvsync (en adelante, el «Software» o «nosotros»). Somos conscientes de la importancia de su información personal y siempre nos comprometemos a proteger su privacidad y la seguridad de sus datos. Esta política explica cómo tratamos, almacenamos y protegemos su información durante el uso del Software, así como los derechos que le asisten.\n\nLea y comprenda detenidamente esta política. Al comenzar a usar el Software, usted confirma que ha leído, comprendido y aceptado todo su contenido.\n\n';
 
   @override
   String get settingsPrivacy1Title => '1. Principios básicos\n';
@@ -3637,7 +3627,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsPrivacy5Body =>
-      'La gran mayoría de sus datos se almacena en el directorio de datos local (Linux: ~/.local/share/ArchoeraMusic; macOS: ~/Library/Application Support/ArchoeraMusic; Windows: %LOCALAPPDATA%\\ArchoeraMusic, sustituible mediante la variable de entorno ARCHOERA_DATA_DIR) hasta que usted los borre o elimine. Las credenciales sensibles se cifran preferentemente con el almacenamiento seguro nativo del sistema operativo y se guardan aisladas en la caja fuerte; la transmisión por red utiliza HTTPS / TLS siempre que el destino lo admita.\nAunque adoptamos medidas de seguridad razonables, las limitaciones inherentes a la tecnología informática y de almacenamiento hacen que ningún sistema pueda garantizar una seguridad absoluta del 100%; custodie bien su dispositivo y las credenciales de sus cuentas de terceros.\n\n';
+      'La gran mayoría de sus datos se almacena en el directorio de datos local (Linux: ~/.local/share/ArchoeraMvsync; macOS: ~/Library/Application Support/ArchoeraMvsync; Windows: %LOCALAPPDATA%\\ArchoeraMvsync, sustituible mediante la variable de entorno ARCHOERA_DATA_DIR) hasta que usted los borre o elimine. Las credenciales sensibles se cifran preferentemente con el almacenamiento seguro nativo del sistema operativo y se guardan aisladas en la caja fuerte; la transmisión por red utiliza HTTPS / TLS siempre que el destino lo admita.\nAunque adoptamos medidas de seguridad razonables, las limitaciones inherentes a la tecnología informática y de almacenamiento hacen que ningún sistema pueda garantizar una seguridad absoluta del 100%; custodie bien su dispositivo y las credenciales de sus cuentas de terceros.\n\n';
 
   @override
   String get settingsPrivacy6Title => '6. Sus derechos y la gestión de datos\n';
@@ -3665,7 +3655,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsPrivacy9Body =>
-      'Si tiene alguna pregunta, comentario o reclamación sobre el contenido de esta política, la seguridad de su información o asuntos relacionados, puede ponerse en contacto con el desarrollador a través de:\n· Repositorio y Issues de GitHub: https://github.com/ArchoeraC/ArchoeraMusic\nResponderemos lo antes posible tras recibir su mensaje.\n\n';
+      'Si tiene alguna pregunta, comentario o reclamación sobre el contenido de esta política, la seguridad de su información o asuntos relacionados, puede ponerse en contacto con el desarrollador a través de:\n· Repositorio y Issues de GitHub: https://github.com/ArchoeraC/ArchoeraMvsync\nResponderemos lo antes posible tras recibir su mensaje.\n\n';
 
   @override
   String get settingsPrivacyFooter =>
@@ -4048,7 +4038,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsSearchDownloadDirSubtitle =>
-      'Ubicación de descargas: ~/Music/ArchoeraMusic por defecto';
+      'Ubicación de descargas: ~/Music/ArchoeraMvsync por defecto';
 
   @override
   String get settingsSearchFilenameSubtitle =>
@@ -4839,10 +4829,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsLyricEngine => 'Motor';
 
   @override
-  String get settingsLyricEngineSimple => 'Clásico';
+  String get settingsLyricEngineDefault => 'Predeterminado';
 
   @override
   String get settingsLyricEngineWall => 'Muro';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc =>
@@ -4850,14 +4843,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsLyricEngineNote =>
-      'Solo se aplica al área de letras del reproductor a pantalla completa; AMLL = desplazamiento en muro estilo Apple Music, algo más pesado.';
+      'Solo se aplica al área de letras a pantalla completa; Muro = motor reescrito de cuatro capas, AMLL = muro heredado estilo Apple Music (algo más pesado).';
 
   @override
   String get settingsSectionLyricWall => 'Opciones del muro';
 
   @override
   String get settingsAmllNote =>
-      'Parámetros del muro de letras estilo Apple Music; solo los usa el motor AMLL.';
+      'Parámetros de letras en muro compartidos por los motores Muro y AMLL.';
 
   @override
   String get settingsAmllAlign => 'Posición de la línea activa';
@@ -4913,7 +4906,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get instanceAlreadyRunningTitle =>
-      'ArchoeraMusic ya se está ejecutando';
+      'ArchoeraMvsync ya se está ejecutando';
 
   @override
   String get settingsCatShortcuts => 'Atajos';
@@ -5933,7 +5926,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mcpShellUsage =>
-      'archoerashell — Control por línea de comandos de ArchoeraMusic (estilo Unix)\n\nUso:\n  archoera_music archoerashell [opciones globales] <comando> [argumentos...]\n\nAyuda:\n  <comando> --help o help <comando> para el uso de un comando.\n\nOpciones globales:\n  -h, --help            Mostrar esta ayuda\n  -V, --version         Mostrar versión\n  -j, --json            Salida JSON (para scripts)\n  -q, --quiet           Solo errores\n      --host <host>     Dirección del servidor (por defecto 127.0.0.1)\n  -p, --port <port>     Puerto del servidor (por defecto, de los ajustes)\n  -k, --key  <key>      Clave de acceso (por defecto, de los ajustes)\n\nReproducción:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nCola:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nBúsqueda / biblioteca:\n  search <source> <texto> [-n n] [-p page]\n  search-all <texto> [-n n]\n  library [texto] [-n n] [--offset n] / library-random / library-stats\n\nFavoritos / historial / letras:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDescargas:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nOtros:\n  theme <light|dark|system> / sleep <minutos>|--end / sleep-cancel\n  prefs [claves...] / tools / info / call <herramienta> [--json <json>]\n\nEjemplos:\n  archoera_music archoerashell status\n  archoera_music archoerashell search netease Jay -n 10\n  archoera_music archoerashell play-track netease:186016\n  archoera_music archoerashell --json library Jay';
+      'archoerashell — Control por línea de comandos de ArchoeraMvsync (estilo Unix)\n\nUso:\n  archoera_mvsync archoerashell [opciones globales] <comando> [argumentos...]\n\nAyuda:\n  <comando> --help o help <comando> para el uso de un comando.\n\nOpciones globales:\n  -h, --help            Mostrar esta ayuda\n  -V, --version         Mostrar versión\n  -j, --json            Salida JSON (para scripts)\n  -q, --quiet           Solo errores\n      --host <host>     Dirección del servidor (por defecto 127.0.0.1)\n  -p, --port <port>     Puerto del servidor (por defecto, de los ajustes)\n  -k, --key  <key>      Clave de acceso (por defecto, de los ajustes)\n\nReproducción:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nCola:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nBúsqueda / biblioteca:\n  search <source> <texto> [-n n] [-p page]\n  search-all <texto> [-n n]\n  library [texto] [-n n] [--offset n] / library-random / library-stats\n\nFavoritos / historial / letras:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDescargas:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nOtros:\n  theme <light|dark|system> / sleep <minutos>|--end / sleep-cancel\n  prefs [claves...] / tools / info / call <herramienta> [--json <json>]\n\nEjemplos:\n  archoera_mvsync archoerashell status\n  archoera_mvsync archoerashell search netease Jay -n 10\n  archoera_mvsync archoerashell play-track netease:186016\n  archoera_mvsync archoerashell --json library Jay';
 
   @override
   String get mcpShellHint =>
@@ -6554,7 +6547,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String elevationGateBody({required String kind}) {
-    return 'ArchoeraMusic se está ejecutando como $kind. La reproducción, las descargas y la bóveda de credenciales nunca necesitan privilegios elevados. Si continúas así, cualquier fallo de la aplicación (ejecución remota de código o un problema en la cadena de suministro) puede afectar a todo el equipo, y las preferencias, cachés y registros se escribirán con permisos de $kind, de modo que un usuario normal quizá no pueda leerlos ni eliminarlos.\n\nSal y vuelve a iniciar ArchoeraMusic como tu usuario normal.';
+    return 'ArchoeraMvsync se está ejecutando como $kind. La reproducción, las descargas y la bóveda de credenciales nunca necesitan privilegios elevados. Si continúas así, cualquier fallo de la aplicación (ejecución remota de código o un problema en la cadena de suministro) puede afectar a todo el equipo, y las preferencias, cachés y registros se escribirán con permisos de $kind, de modo que un usuario normal quizá no pueda leerlos ni eliminarlos.\n\nSal y vuelve a iniciar ArchoeraMvsync como tu usuario normal.';
   }
 
   @override

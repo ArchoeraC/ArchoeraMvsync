@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/stores/prefs_player.dart';
-import 'package:archoera_music/widgets/player/cover_transitions/cover_transition_registry.dart';
+import 'package:archoera_mvsync/stores/prefs_player.dart';
+import 'package:archoera_mvsync/widgets/player/cover_transitions/cover_transition_registry.dart';
 
 void main() {
   test('注册表 id 与偏好白名单一致', () {

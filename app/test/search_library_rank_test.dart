@@ -1,11 +1,11 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/scanner/library_search_rank.dart';
-import 'package:archoera_music/services/search/search_models.dart';
+import 'package:archoera_mvsync/services/scanner/library_search_rank.dart';
+import 'package:archoera_mvsync/services/search/search_models.dart';
 
 /// 本地索引排行接入的**纯策略单测**（无 FFI / 无 DB）。
 ///

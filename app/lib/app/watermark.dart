@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -38,7 +38,7 @@ const String archoeraWatermark = 'ARCHOERA DESIGNED';
 
 /// 被签名的规范负载（身份 + 许可证；不含版本，签名跨版本稳定）。
 const String archoeraWatermarkPayload =
-    'ARCHOERA DESIGNED|ArchoeraMusic|BetaStudio2|AGPL-3.0-or-later';
+    'ARCHOERA DESIGNED|ArchoeraMvsync|BetaStudio2|AGPL-3.0-or-later';
 
 /// 签发公钥（ECDSA P-256，SEC1 未压缩点 `04||X||Y`，十六进制）。
 /// 公开信息，可随仓库/README 发布，供第三方独立验证。
@@ -48,8 +48,7 @@ const String archoeraWatermarkPubKeyHex =
 
 /// 负载的 ECDSA(SHA-256) 签名（ASN.1 DER 十六进制）。
 const String archoeraWatermarkSigDerHex =
-    '30440220376a53d6fbcac4530400c6b60574fd777a30a171434032000b2f28cba7065ecd'
-    '02201d2fe98cf786470e719474c991c631a6211af3b2927b1dcfaa36bc0cd0da690d';
+    '3046022100b79dc1a39ddf36db226265cc15bf6bb8bae48678a67d54dfce62f3fce9d426bc022100b76ebde268d2606a4402bd8fdd13bea5db605aab6972672ff1bf6e211af1b0d4';
 
 /// 保留入口：确保独立标语字符串进入快照（AOT 树摇不移除 entry-point）。
 @pragma('vm:entry-point')

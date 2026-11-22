@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,7 +13,7 @@ import '../../services/downloader/download_controller.dart';
 import '../../services/platform/platform_capabilities.dart';
 import '../common/toast.dart';
 import '../common/anim.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'download_task_tile/download_task_tile_view.dart';
 

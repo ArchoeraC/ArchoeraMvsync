@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -840,7 +840,7 @@ pub fn store_secret(
     let session = open_plain_session(bus)?;
     let collection = default_collection(bus)?;
     let attrs = attributes(schema, key, data_dir);
-    let label = format!("ArchoeraMusic {key}");
+    let label = format!("ArchoeraMvsync {key}");
 
     let mut standard = properties(&label, &attrs, Some((&session, value)));
     standard.dict_str_str(&attrs);
@@ -1030,8 +1030,8 @@ mod tests {
     #[test]
     fn scoped_account_matches_legacy_csharp_format() {
         assert_eq!(
-            scoped_account("master-share", "/home/u/.local/share/ArchoeraMusic"),
-            "master-share|/home/u/.local/share/ArchoeraMusic"
+            scoped_account("master-share", "/home/u/.local/share/ArchoeraMvsync"),
+            "master-share|/home/u/.local/share/ArchoeraMvsync"
         );
     }
 

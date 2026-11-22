@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,7 +9,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/background/fluid_mesh.dart';
+import 'package:archoera_mvsync/widgets/player/background/fluid_mesh.dart';
 
 FluidControlPointPreset _default2x2() => FluidControlPointPreset(2, 2, [
   FluidControlPointConf(0, 0, -1, -1),

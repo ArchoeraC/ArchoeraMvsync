@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,10 +12,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/widgets/player/spectrum_view.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/player/spectrum_view.dart';
 
 /// 不读/写磁盘的偏好（测试用）。
 class _NoSideEffectsPrefsNotifier extends AppPrefsNotifier {

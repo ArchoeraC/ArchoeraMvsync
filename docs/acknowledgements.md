@@ -12,7 +12,7 @@
 | 字体 | 文件 | 许可证 | 要点 |
 |---|---|---|---|
 | MiSans | `MiSans-{Regular,Medium,Semibold}.ttf` | 小米《[MiSans 字体知识产权许可协议](https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf)》（**非 OFL**） | 全球免费商用；须在软件中注明使用 MiSans；禁止改编/二次开发字体；禁止单独分发字体文件。**界面唯一正文字体** |
-| Manrope | `Manrope.ttf` | **SIL OFL 1.1**（© The Manrope Project Authors） | 开源字体，可自由使用、修改、分发；可变字重，仅用于启动页「ArchoeraMusic」字标 |
+| Manrope | `Manrope.ttf` | **SIL OFL 1.1**（© The Manrope Project Authors） | 开源字体，可自由使用、修改、分发；可变字重，仅用于启动页「ArchoeraMvsync」字标 |
 | EtaIcons（自建图标字体） | `EtaIcons.ttf` | 字形来源 **MingCute Icons（Apache-2.0）** 为主、**Tabler Icons（MIT）** / **Lucide（ISC）** 补入（`added/`） | 对源图标做**改作**：描边(stroke)SVG 经描边转轮廓后重打包为字体；来源与修改说明见下方「特别鸣谢」及 `app/eta-tools/eta_icons/` |
 | EtaMark（自建品牌标识字体） | `EtaMark.ttf` | 字形源自项目自有品牌标识（logo-trim.png 转黑白矢量） | 自建字形，无第三方字体许可义务；源图与生成见 `app/eta-tools/eta_mark/` |
 

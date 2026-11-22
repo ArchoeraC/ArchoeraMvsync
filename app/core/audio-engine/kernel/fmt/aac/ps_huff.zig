@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// EraSync — ArchoeraMusic 音频内核
+// EraSync — ArchoeraMvsync 音频内核
 //
 // ⚠ 衍生作品：移植 / 转录自 FFmpeg（LGPL-2.1-or-later）对应源文件。
 // 上游版权归 FFmpeg 作者所有；本文件中移植部分及本项目改动均按

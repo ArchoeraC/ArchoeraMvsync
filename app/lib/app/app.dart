@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -29,7 +29,6 @@ import '../theme/cover_color.dart';
 import '../theme/theme_sources/theme_source_registry.dart';
 import '../theme/theme_sources/theme_source_style.dart';
 import '../widgets/common/app_shortcuts.dart';
-import '../widgets/common/scheme_intro_gate.dart';
 import '../widgets/common/toast.dart';
 import '../widgets/common/vault_crash_gate.dart';
 import '../widgets/common/vault_unlock_gate.dart';
@@ -49,12 +48,12 @@ import 'theme_provider.dart';
 final bool _kDesktop =
     Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
-/// ArchoeraMusic 应用根：主题 + 路由 + 启动门。
+/// ArchoeraMvsync 应用根：主题 + 路由 + 启动门。
 ///
 /// 主题逻辑在 theme_provider.dart，路由在 router.dart，启动初始化
 /// （登录态恢复 / Splash 过渡）在 bootstrap.dart——本文件只负责组装。
-class ArchoeraMusicApp extends ConsumerWidget {
-  const ArchoeraMusicApp({super.key});
+class ArchoeraMvsyncApp extends ConsumerWidget {
+  const ArchoeraMvsyncApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -114,7 +113,7 @@ class ArchoeraMusicApp extends ConsumerWidget {
         child: MediaSessionHost(
           child: AuthBootstrap(
             child: MaterialApp.router(
-              title: 'ArchoeraMusic',
+              title: 'ArchoeraMvsync',
               // 国际化：locale 跟随设置/系统；Material 内建文案（菜单/日期等）自动本地化
               locale: locale,
               supportedLocales: AppLocalizations.supportedLocales,
@@ -152,9 +151,7 @@ class ArchoeraMusicApp extends ConsumerWidget {
                 var appChild = child ?? const SizedBox.shrink();
                 Widget gate = SplashGate(
                   engine: prefs.engine,
-                  child: SchemeIntroGate(
-                    child: AppShortcuts(child: ToastOverlay(child: appChild)),
-                  ),
+                  child: AppShortcuts(child: ToastOverlay(child: appChild)),
                 );
                 // v2 口令模式启动解锁门：vault 待口令解锁时全屏拦截，
                 // 解锁成功后放行（登录态恢复见解锁门内部）。无 vault 时直通。

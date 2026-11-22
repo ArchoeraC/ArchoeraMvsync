@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -22,8 +22,8 @@ import 'app_prefs.dart';
 /// 各方案加密结构不兼容：切换需销毁重建（无迁移），旧凭据会被清空并需重新登录。
 const credentialSchemeKey = 'security.scheme';
 
-/// 首次启动「加密方案选择」对话框是否已展示（一次性，避免每次启动打扰）。
-const credentialSchemeDialogShownKey = 'security.schemeDialogShown';
+/// 首次启动「加密方案选择」对话框已撤掉（2026-11）。保留常量仅为兼容旧
+/// prefs.json 中的历史键，读取方已删除。
 
 /// m2a 恢复码是否已由用户确认抄写/保存（一次性提醒；初始化/切换至 m2a 时复位）。
 const m2aRecoveryAckedKey = 'security.m2aRecoveryAcked';
@@ -55,13 +55,8 @@ extension SecurityPrefs on AppPrefs {
     return defaultCredentialScheme;
   }
 
-  /// 首次启动方案对话框是否已展示。
-  bool get schemeDialogShown =>
-      data[credentialSchemeDialogShownKey] as bool? ?? false;
-
   /// m2a 恢复码是否已确认备份（false 时设置页显示持久「尚未备份」提醒）。
-  bool get m2aRecoveryAcked =>
-      data[m2aRecoveryAckedKey] as bool? ?? false;
+  bool get m2aRecoveryAcked => data[m2aRecoveryAckedKey] as bool? ?? false;
 
   /// 当前 Argon2id 强度预设 id（'low'|'medium'|'high'；非法值回退 'medium'）。
   /// 仅 m1/m2a 生效；用于设置页回显与初始化时选取参数。
@@ -73,9 +68,6 @@ extension SecurityPrefs on AppPrefs {
 
   AppPrefs copyWithCredentialScheme(String value) =>
       AppPrefs(initialData: {...data, credentialSchemeKey: value});
-
-  AppPrefs copyWithSchemeDialogShown(bool value) =>
-      AppPrefs(initialData: {...data, credentialSchemeDialogShownKey: value});
 
   AppPrefs copyWithM2aRecoveryAcked(bool value) =>
       AppPrefs(initialData: {...data, m2aRecoveryAckedKey: value});

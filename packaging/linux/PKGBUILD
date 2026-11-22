@@ -1,14 +1,14 @@
 # Arch Linux 打包定义（配合 packaging/linux/package.sh arch 在 CI 中构建）
-# 产物：archoera-music-<pkgver>-1-x86_64.pkg.tar.zst
-# 说明：bundle.tar.zst / archoera-music.desktop / awa.archoera.betastudio2.archoera_music.png
+# 产物：archoera-mvsync-<pkgver>-1-x86_64.pkg.tar.zst
+# 说明：bundle.tar.zst / archoera-mvsync.desktop / awa.archoera.betastudio2.archoera_mvsync.png
 #       由 package.sh arch 预置在同目录（md5sums=SKIP）。
 
-pkgname=archoera-music
+pkgname=archoera-mvsync
 pkgver=0.8.4
 pkgrel=1
 pkgdesc="An open-source music player, connect to alternative music service, support offline playback"
 arch=('x86_64')
-url="https://github.com/ArchoeraC/ArchoeraMusic"
+url="https://github.com/ArchoeraC/ArchoeraMvsync"
 license=('AGPL-3.0-only')
 # bundle 为 Release 预 strip 产物（Rust/Go/NativeAOT/C 均无调试符号），
 # 禁用 makepkg 的 strip/debug 处理：strip 无事可做，而 gdb-add-index 对
@@ -39,18 +39,18 @@ depends=(
   'xz'
   'zlib'
 )
-source=('bundle.tar.zst' 'archoera-music.desktop' 'awa.archoera.betastudio2.archoera_music.png')
+source=('bundle.tar.zst' 'archoera-mvsync.desktop' 'awa.archoera.betastudio2.archoera_mvsync.png')
 md5sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
-  # 整个 bundle 装到 /opt/archoera-music（FFI/引擎子进程均相对可执行文件定位）
-  install -d "$pkgdir/opt/archoera-music"
-  cp -a "$srcdir/bundle/." "$pkgdir/opt/archoera-music/"
+  # 整个 bundle 装到 /opt/archoera-mvsync（FFI/引擎子进程均相对可执行文件定位）
+  install -d "$pkgdir/opt/archoera-mvsync"
+  cp -a "$srcdir/bundle/." "$pkgdir/opt/archoera-mvsync/"
   install -d "$pkgdir/usr/bin"
-  ln -s /opt/archoera-music/archoera_music "$pkgdir/usr/bin/archoera_music"
+  ln -s /opt/archoera-mvsync/archoera_mvsync "$pkgdir/usr/bin/archoera_mvsync"
   # 桌面条目 + 图标（文件名 = 应用 ID，保证 Wayland 任务栏图标映射）
-  install -Dm644 "$srcdir/archoera-music.desktop" \
-    "$pkgdir/usr/share/applications/awa.archoera.betastudio2.archoera_music.desktop"
-  install -Dm644 "$srcdir/awa.archoera.betastudio2.archoera_music.png" \
-    "$pkgdir/usr/share/icons/hicolor/512x512/apps/awa.archoera.betastudio2.archoera_music.png"
+  install -Dm644 "$srcdir/archoera-mvsync.desktop" \
+    "$pkgdir/usr/share/applications/awa.archoera.betastudio2.archoera_mvsync.desktop"
+  install -Dm644 "$srcdir/awa.archoera.betastudio2.archoera_mvsync.png" \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/awa.archoera.betastudio2.archoera_mvsync.png"
 }

@@ -1,10 +1,10 @@
-// ArchoeraMusic
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #pragma once
 
-/// ArchoeraMusic 刮削器加密后端（Rust staticlib，C ABI）。
+/// ArchoeraMvsync 刮削器加密后端（Rust staticlib，C ABI）。
 ///
 /// 历史实现直接链接系统 `OpenSSL::Crypto`；发行版升级 OpenSSL soname
 /// （如 Arch 的 `libcrypto.so.3` → `.so.4`）会让已发布二进制无法加载。这里把

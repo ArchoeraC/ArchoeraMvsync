@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,9 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/settings/settings_dialog.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/settings/settings_dialog.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 /// 测试字体（Ahem）比真实字体宽近一倍，设置行会报 RenderFlex 溢出；
 /// 这些是与本用例无关的布局告警，过滤掉（真实字体下不溢出）。
@@ -181,7 +181,7 @@ void main() {
     expect(find.text(l10n.settingsNeverTap), findsNothing);
 
     // 精确输入暗号（大小写随意）→ 搜索结果出现入口。
-    await tester.enterText(field, 'ArchoeraMusic.PowerFull.Settings');
+    await tester.enterText(field, 'ArchoeraMvsync.PowerFull.Settings');
     await tester.pumpAndSettle();
     expect(find.text(l10n.settingsNeverTap), findsOneWidget);
 

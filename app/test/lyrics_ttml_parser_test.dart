@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,8 +12,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/lyrics/ttml_parser.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/lyrics/ttml_parser.dart';
 
 /// 拼接某组的逐词文本（无片段时返回空串）。
 String joinedFragments(LyricGroup g) =>

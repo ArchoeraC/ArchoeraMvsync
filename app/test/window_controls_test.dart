@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,12 +13,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/widgets/layout/nav_header.dart';
-import 'package:archoera_music/widgets/layout/window_controls.dart';
-import 'package:archoera_music/widgets/player/s_controls.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/layout/nav_header.dart';
+import 'package:archoera_mvsync/widgets/layout/window_controls.dart';
+import 'package:archoera_mvsync/widgets/player/s_controls.dart';
 
 class _PrefsNotifier extends AppPrefsNotifier {
   _PrefsNotifier(this.initialData);

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,7 +15,7 @@ import '../../services/search/search_service.dart';
 import '../../stores/app_prefs.dart';
 import '../widgets/common/toast.dart';
 import 'settings_widgets.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 搜索分类：本地曲库搜索索引（**默认关闭**，设计文档 §2.4 / §9.3）。
 ///

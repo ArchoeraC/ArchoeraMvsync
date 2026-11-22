@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(archoera_music LANGUAGES CXX)
+project(archoera_mvsync LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "archoera_music")
+set(BINARY_NAME "archoera_mvsync")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -105,7 +105,7 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
 
-# === ArchoeraMusic 原生产物打包（与 linux/CMakeLists.txt 对齐）===
+# === ArchoeraMvsync 原生产物打包（与 linux/CMakeLists.txt 对齐）===
 # 引擎模块位于 app/core/{audio-engine,scanner,indexer,scraper,subsonic}，产物由独立
 # 构建链产出（CI workflow 在 flutter build 前显式构建）；install 统一装进 native/ 平铺
 # （对齐 ffi-libs-layout 计划；NativeLibPaths 祖先链优先查 native/）：
@@ -167,7 +167,7 @@ install(PROGRAMS "${VAULT_SRC_DIR}/archoera-vault.exe"
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../core/downloader/target/release/archoera_downloader.dll"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/native" COMPONENT Runtime)
 
-# === ArchoeraMusic platform bridge：内嵌 CMake 构建链（一键构建，MSVC C++）===
+# === ArchoeraMvsync platform bridge：内嵌 CMake 构建链（一键构建，MSVC C++）===
 # 产出 archoera_platform.dll 到 app/native/platform/build/out/；WinRT(SMTC/Toast)
 # 需 cppwinrt 头：CMake 变量 CPPWINRT_INCLUDE 或 vcpkg cppwinrt CONFIG 包；
 # 均缺失时 backend_windows.cpp 自动降级（SMTC 禁用、Toast 走 MessageBox）。
@@ -194,7 +194,7 @@ add_dependencies(${BINARY_NAME} platform_bridge_cmake)
 install(FILES "${PLATFORM_BRIDGE_BUILD_DIR}/out/archoera_platform.dll"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/native" COMPONENT Runtime)
 
-# === ArchoeraMusic 统一日志核心：内嵌 CMake 构建链（一键构建，纯 C）===
+# === ArchoeraMvsync 统一日志核心：内嵌 CMake 构建链（一键构建，纯 C）===
 # 产出 archoera_log.dll 到 app/native/log/build/out/；Dart 载入后注入各原生层。
 set(ARCHOERA_LOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/log")
 set(ARCHOERA_LOG_BUILD_DIR "${ARCHOERA_LOG_DIR}/build")
@@ -211,7 +211,7 @@ install(FILES "${ARCHOERA_LOG_BUILD_DIR}/out/archoera_log.dll"
 
 # === 原生库完整性清单（SEC-08）===
 # 纯 CMake 生成（不依赖 bash/sh）：对 native/ 下全部文件，以及 exe 根
-# archoera_music.exe / archoera_kernel.dll、data/app.so 计算 SHA-256，
+# archoera_mvsync.exe / archoera_kernel.dll、data/app.so 计算 SHA-256，
 # 写入 native/ARCHOERA-NATIVE-MANIFEST.txt，供 Dart 在 DynamicLibrary.open
 # 前按 basename 校验（打包态 fail-closed，见 lib/services/native_integrity.dart）。
 # 该 install(CODE) 声明于全部 native/ install 之后，故执行时文件已就位。
@@ -240,7 +240,7 @@ install(CODE "
     file(SHA256 \"\${_f}\" _hash)
     list(APPEND _lines \"\${_hash}  \${_base}\")
   endforeach()
-  foreach(_f \"${CMAKE_INSTALL_PREFIX}/archoera_music.exe\"
+  foreach(_f \"${CMAKE_INSTALL_PREFIX}/archoera_mvsync.exe\"
             \"${CMAKE_INSTALL_PREFIX}/archoera_kernel.dll\"
             \"${CMAKE_INSTALL_PREFIX}/data/app.so\")
     if(EXISTS \"\${_f}\")

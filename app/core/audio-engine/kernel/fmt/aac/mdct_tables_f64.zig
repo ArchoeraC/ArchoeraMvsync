@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsync 自研音频内核
 
 pub const mdct_exp_1024 = [2048]f64{
     @bitCast(@as(u64, 0x3F26A09E40000000)), @bitCast(@as(u64, 0x3E71C58320000000)), @bitCast(@as(u64, 0x3F1FFCDBA0000000)), @bitCast(@as(u64, 0x3F20019200000000)),

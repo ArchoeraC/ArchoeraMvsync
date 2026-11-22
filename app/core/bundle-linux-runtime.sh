@@ -92,7 +92,7 @@ while [[ ${#queue[@]} -gt 0 ]]; do
 done
 
 # 归一化 RUNPATH：native/ 与 lib/ 下的 ELF 一律 $ORIGIN
-# （主可执行 archoera_music 的 $ORIGIN/lib 是必要的，不在处理范围内）
+# （主可执行 archoera_mvsync 的 $ORIGIN/lib 是必要的，不在处理范围内）
 if command -v patchelf >/dev/null 2>&1; then
   scan_dirs=("$native")
   [[ -d "$bundle/lib" ]] && scan_dirs+=("$bundle/lib")
@@ -119,7 +119,7 @@ find "$native" -maxdepth 1 -type f -name '*.so*' -printf '  %f\n' | sort
 manifest_gen="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tool" 2>/dev/null && pwd)/gen_native_manifest.sh"
 if [[ -f "$manifest_gen" ]]; then
   manifest_extra=()
-  [[ -f "$bundle/archoera_music" ]] && manifest_extra+=("$bundle/archoera_music")
+  [[ -f "$bundle/archoera_mvsync" ]] && manifest_extra+=("$bundle/archoera_mvsync")
   sh "$manifest_gen" "$native" "${manifest_extra[@]}" || echo "[bundle-linux-runtime] 警告: 完整性清单生成失败" >&2
 else
   echo "[bundle-linux-runtime] 警告: 未找到 gen_native_manifest.sh，跳过完整性清单" >&2

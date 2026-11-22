@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 发布产物验签 —— 用公开公钥（app/tool/watermark_pub.pem）
+#  ArchoeraMvsync 发布产物验签 —— 用公开公钥（app/tool/watermark_pub.pem）
 #  验证每个 <asset>.sig1。任何人可据此判断产物是否官方签发。
 #
 #  用法：bash app/tool/verify_release.sh [dist/linux]

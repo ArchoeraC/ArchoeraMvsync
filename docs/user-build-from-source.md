@@ -103,7 +103,7 @@ flutter build linux --release
 ```
 
 **产物位置**：`app/build/linux/x64/release/bundle/`
-- `archoera_music`（可执行文件）
+- `archoera_mvsync`（可执行文件）
 - `data/`（Flutter assets + icudtl）
 - `native/`：上表全部原生产物平铺（CMake 在构建时自动从各模块 `build/` 拷入）。发布构建另用
   `bash app/core/bundle-linux-runtime.sh app/build/linux/x64/release/bundle` 把 FFmpeg/TagLib 的
@@ -112,7 +112,7 @@ flutter build linux --release
 
 直接跑：
 ```bash
-./app/build/linux/x64/release/bundle/archoera_music
+./app/build/linux/x64/release/bundle/archoera_mvsync
 ```
 开发调试（热重载、控制台日志）：
 ```bash
@@ -151,7 +151,7 @@ cd app && FLUTTER_XCODE_ARCHS=x86_64 flutter build macos --release
 > 随 Flutter/Apple 的 Intel 弃用同步收尾。
 Flutter 构建后会把各模块 `*.dylib` 拷入 `.app/Contents/native/`（macOS 无 CMake install 层，见
 `linux/CMakeLists.txt` 对应注释）。macOS 产物未签名，首次运行需右键“打开”或
-`xattr -dr com.apple.quarantine ArchoeraMusic.app`。
+`xattr -dr com.apple.quarantine ArchoeraMvsync.app`。
 
 ## 5. 缓存外置（可选，避免污染仓库 / 提速）
 

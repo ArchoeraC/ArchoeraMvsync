@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMusic scanner FFI 构建脚本（幂等）。
+# ArchoeraMvsync scanner FFI 构建脚本（幂等）。
 #
 # 产物：scanner/build/{scanner-ffi.{so,dll,dylib}, libe_sqlite3.{so,dylib}, e_sqlite3.dll}
 #   - scanner-ffi      ：.NET 10 NativeAOT 共享库（导出 scanner_scan/cancel/free）

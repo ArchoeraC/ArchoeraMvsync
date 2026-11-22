@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,14 +8,14 @@ library;
 
 import 'dart:io';
 
-import 'package:archoera_music/apis/netease/core/config.dart';
-import 'package:archoera_music/apis/netease/core/crypto.dart';
-import 'package:archoera_music/apis/netease/core/device.dart';
-import 'package:archoera_music/apis/netease/core/request.dart';
-import 'package:archoera_music/apis/netease/modules/index.dart';
-import 'package:archoera_music/apis/qqmusic/core/credential.dart';
-import 'package:archoera_music/apis/qqmusic/core/request.dart';
-import 'package:archoera_music/services/kugou/kugou_request.dart';
+import 'package:archoera_mvsync/apis/netease/core/config.dart';
+import 'package:archoera_mvsync/apis/netease/core/crypto.dart';
+import 'package:archoera_mvsync/apis/netease/core/device.dart';
+import 'package:archoera_mvsync/apis/netease/core/request.dart';
+import 'package:archoera_mvsync/apis/netease/modules/index.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/credential.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/request.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

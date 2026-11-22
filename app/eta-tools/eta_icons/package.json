@@ -2,7 +2,7 @@
   "name": "eta_icons",
   "private": true,
   "type": "module",
-  "description": "ArchoeraMusic 自建图标字体生成工具（一次性开发脚本；产物 EtaIcons.ttf 入库，依赖无需随 app 分发）",
+  "description": "ArchoeraMvsync 自建图标字体生成工具（一次性开发脚本；产物 EtaIcons.ttf 入库，依赖无需随 app 分发）",
   "scripts": {
     "step1": "node 1_prepare_svg.mjs",
     "step2": "node 2_build_font.mjs",

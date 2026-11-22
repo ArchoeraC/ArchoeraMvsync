@@ -1,4 +1,4 @@
-# ArchoeraMusic indexer analyzer 测试向量
+# ArchoeraMvsync indexer analyzer 测试向量
 # 格式: input<TAB>expectedTokens<TAB>expectedPinyin<TAB>expectedInitials
 #   - '#' 开头为注释；'*' 表示该列不校验。
 #   - tokens/pinyin/initials 均为 Analyzer.Analyze(input) 的空格分隔输出。

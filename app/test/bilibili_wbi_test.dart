@@ -1,11 +1,11 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/apis/bilibili/core/wbi.dart';
-import 'package:archoera_music/apis/bilibili/core/types.dart';
+import 'package:archoera_mvsync/apis/bilibili/core/wbi.dart';
+import 'package:archoera_mvsync/apis/bilibili/core/types.dart';
 
 void main() {
   group('Bilibili WBI', () {

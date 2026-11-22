@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,10 +15,10 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/apis/qqmusic/api.dart';
-import 'package:archoera_music/apis/qqmusic/core/config.dart';
-import 'package:archoera_music/apis/qqmusic/core/device.dart';
-import 'package:archoera_music/apis/qqmusic/core/request.dart';
+import 'package:archoera_mvsync/apis/qqmusic/api.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/config.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/device.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/request.dart';
 
 /// 已记录的业务请求 body（comm / request.module / request.param）。
 class _Req {

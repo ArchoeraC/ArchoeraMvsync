@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -19,7 +19,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pointycastle/export.dart';
 
-import 'package:archoera_music/services/native_integrity.dart';
+import 'package:archoera_mvsync/services/native_integrity.dart';
 
 /// RFC 6979 P-256 测试标量（固定 d 保证测试确定性；仅测试用自生成密钥，
 /// 与官方 key1 无关）。

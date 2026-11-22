@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,7 +6,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/security/vault_process.dart';
+import 'package:archoera_mvsync/services/security/vault_process.dart';
 
 /// Vector A（加载器注入）Dart 侧单测——不需要 vault 二进制：
 ///   - [VaultProcess.sanitizedEnvironment] 从环境表中剔除加载器注入变量

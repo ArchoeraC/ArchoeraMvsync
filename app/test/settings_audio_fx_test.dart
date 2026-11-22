@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,12 +14,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/settings/settings_widgets.dart';
-import 'package:archoera_music/settings/settings_sections.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/settings/settings_widgets.dart';
+import 'package:archoera_mvsync/settings/settings_sections.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 /// 不落盘、不读真实 prefs.json 的偏好控制器。
 class _FakePrefsNotifier extends AppPrefsNotifier {

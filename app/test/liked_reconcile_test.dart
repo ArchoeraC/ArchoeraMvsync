@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -24,15 +24,15 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/kugou/kugou_api.dart';
-import 'package:archoera_music/services/liked/liked_loader.dart';
-import 'package:archoera_music/services/netease/apis_netease_caller.dart';
-import 'package:archoera_music/services/netease/netease_api.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/qqmusic/qq_liked_store.dart';
-import 'package:archoera_music/services/qqmusic/qqmusic_api.dart';
-import 'package:archoera_music/stores/like_controller.dart';
-import 'package:archoera_music/stores/providers.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_api.dart';
+import 'package:archoera_mvsync/services/liked/liked_loader.dart';
+import 'package:archoera_mvsync/services/netease/apis_netease_caller.dart';
+import 'package:archoera_mvsync/services/netease/netease_api.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/qqmusic/qq_liked_store.dart';
+import 'package:archoera_mvsync/services/qqmusic/qqmusic_api.dart';
+import 'package:archoera_mvsync/stores/like_controller.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
 
 // ── 测试曲目 / 假 API ─────────────────────────────────────────────
 

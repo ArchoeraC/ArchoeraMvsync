@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -26,9 +26,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/search/indexer_ffi.dart';
-import 'package:archoera_music/services/search/search_service.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/services/search/indexer_ffi.dart';
+import 'package:archoera_mvsync/services/search/search_service.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 /// isolate 消息不可发送的报错特征（回归判定）。
 const String _unsendableMarker = 'unsendable';

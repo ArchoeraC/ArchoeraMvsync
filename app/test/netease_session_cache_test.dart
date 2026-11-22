@@ -1,10 +1,10 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/apis/netease/api.dart';
-import 'package:archoera_music/apis/runtime.dart';
+import 'package:archoera_mvsync/apis/netease/api.dart';
+import 'package:archoera_mvsync/apis/runtime.dart';
 
 /// 回归（2026-10-14 实录）：**凭据库锁定期间的空会话被固化进缓存**，导致
 /// m2a 用户用口令/恢复码解锁后 `loginStatus()` 仍读旧空缓存 → 登录态永远

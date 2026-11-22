@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -117,8 +117,9 @@ class _LyricsSectionState extends ConsumerState<LyricsSection> {
               subtitle: l10n.settingsLyricEngineDesc,
               trailing: SSegmented<String>(
                 options: [
-                  SSegmentedOption('simple', l10n.settingsLyricEngineSimple),
-                  SSegmentedOption('amll', l10n.settingsLyricEngineWall),
+                  SSegmentedOption('simple', l10n.settingsLyricEngineDefault),
+                  SSegmentedOption('wall', l10n.settingsLyricEngineWall),
+                  SSegmentedOption('amll', l10n.settingsLyricEngineAmll),
                 ],
                 selected: prefs.lyricEngine,
                 onChanged: (v) =>
@@ -127,7 +128,7 @@ class _LyricsSectionState extends ConsumerState<LyricsSection> {
             ),
           ],
         ),
-        if (prefs.lyricEngine == 'amll') ...[
+        if (prefs.lyricEngine != 'simple') ...[
           const SizedBox(height: 20),
           _buildAmllWallSection(l10n, scheme, prefs),
         ],

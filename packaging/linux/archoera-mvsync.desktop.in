@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=ArchoeraMusic
+Name=ArchoeraMvsync
 GenericName=Music Player
 Comment=An open-source music player
 Exec=@EXEC@
-Icon=awa.archoera.betastudio2.archoera_music
+Icon=awa.archoera.betastudio2.archoera_mvsync
 Terminal=false
 Categories=Audio;Music;AudioVideo;
 MimeType=x-scheme-handler/archoera;
 Keywords=music;player;audio;subsonic;netease;kugou;
-StartupWMClass=awa.archoera.betastudio2.archoera_music
+StartupWMClass=awa.archoera.betastudio2.archoera_mvsync

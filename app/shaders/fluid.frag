@@ -1,7 +1,7 @@
 #version 460 core
 #include <flutter/runtime_effect.glsl>
 
-// ArchoeraMusic 播放页「流体」背景（对齐上游 AMLL MeshGradientRenderer）。
+// ArchoeraMvsync 播放页「流体」背景（对齐上游 AMLL MeshGradientRenderer）。
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //

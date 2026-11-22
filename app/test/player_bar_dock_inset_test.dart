@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,9 +12,9 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/app/player_bar_dock_inset.dart';
-import 'package:archoera_music/app/player_route_curves.dart';
-import 'package:archoera_music/widgets/layout/player_bar.dart';
+import 'package:archoera_mvsync/app/player_bar_dock_inset.dart';
+import 'package:archoera_mvsync/app/player_route_curves.dart';
+import 'package:archoera_mvsync/widgets/layout/player_bar.dart';
 
 Widget _host({
   required bool visible,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMusic — 本地曲库搜索索引器 P5 性能 harness 入口。
+# ArchoeraMvsync — 本地曲库搜索索引器 P5 性能 harness 入口。
 #
 # 用真实产物（app/core/indexer 的 C# FTS5 索引器）量化全量/增量构建耗时、索引体积、
 # 峰值内存与查询 P50/P95（A 含拼音 / B 无拼音，另可 --with-lrc 追加 .lrc 档），

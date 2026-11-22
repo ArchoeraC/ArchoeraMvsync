@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@
 // （拒绝分支在 store 创建前返回，无需原生库）。
 import 'dart:io';
 
-import 'package:archoera_music/services/playback/store_source.dart';
+import 'package:archoera_mvsync/services/playback/store_source.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

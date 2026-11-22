@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -37,7 +37,7 @@ class StreamingStore {
   static String _dir() =>
       dataDirOverride.isNotEmpty ? dataDirOverride : resolveDataDir();
 
-  /// 存储文件路径：数据目录（`~/.local/share/ArchoeraMusic`）。
+  /// 存储文件路径：数据目录（`~/.local/share/ArchoeraMvsync`）。
   static String get filePath => '${_dir()}/streaming_servers.json';
 
   /// vault 条目前缀：`streaming:<serverId>`。

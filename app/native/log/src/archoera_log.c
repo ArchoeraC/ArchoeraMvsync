@@ -1,4 +1,4 @@
-// ArchoeraMusic 统一日志核心实现
+// ArchoeraMvsync 统一日志核心实现
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
@@ -623,7 +623,7 @@ static LONG WINAPI era_crash_filter(EXCEPTION_POINTERS *ep) {
     }
 #define ERA_WIN_W(s) do { const char *era_s = (s); \
     WriteFile(h, era_s, (DWORD)strlen(era_s), &written, NULL); } while (0)
-    ERA_WIN_W("\n=== ArchoeraMusic 崩溃报告 ===\n");
+    ERA_WIN_W("\n=== ArchoeraMvsync 崩溃报告 ===\n");
     snprintf(buf, sizeof(buf), "time=%04u-%02u-%02u %02u:%02u:%02u\n",
              (unsigned)st.wYear, (unsigned)st.wMonth, (unsigned)st.wDay,
              (unsigned)st.wHour, (unsigned)st.wMinute, (unsigned)st.wSecond);
@@ -855,7 +855,7 @@ static void era_crash_handler(int sig, siginfo_t *si, void *uc) {
     if (pthread_getname_np(pthread_self(), tname, sizeof(tname)) != 0) tname[0] = '\0';
 #endif
 
-    era_cw(fd, "\n=== ArchoeraMusic 崩溃报告 ===\n");
+    era_cw(fd, "\n=== ArchoeraMvsync 崩溃报告 ===\n");
     era_cw(fd, "time=");
     era_cw_dec(fd, (unsigned long long)time(NULL));
     era_cw(fd, " pid=");

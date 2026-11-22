@@ -1,4 +1,4 @@
-# ArchoeraMusic indexer 查询侧（AnalyzeQuery）测试向量
+# ArchoeraMvsync indexer 查询侧（AnalyzeQuery）测试向量
 # 格式与 analyzer.tsv 相同：input<TAB>expectedTokens<TAB>expectedPinyin<TAB>expectedInitials
 #   - 运行器按文件名前缀 `query` 分派到 Analyzer.AnalyzeQuery（含 P4 连写全拼切分）。
 #   - '*' 表示该列不校验；纯拉丁查询 initials 为 null（另在 Program.cs 直接断言）。

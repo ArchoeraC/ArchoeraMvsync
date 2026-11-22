@@ -2,7 +2,7 @@
 name = "archoera-vault"
 version = "0.1.0"
 edition = "2021"
-description = "ArchoeraMusic 凭据保险库（Rust 重实现，与 C# 版字节兼容）"
+description = "ArchoeraMvsync 凭据保险库（Rust 重实现，与 C# 版字节兼容）"
 license = "AGPL-3.0-or-later"
 publish = false
 

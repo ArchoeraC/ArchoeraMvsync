@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 防伪签名 —— 生成/使用离线私钥，对规范负载签名，
+#  ArchoeraMvsync 防伪签名 —— 生成/使用离线私钥，对规范负载签名，
 #  输出可粘贴进 app/lib/app/watermark.dart 的常量。
 #
 #  私钥默认位置：$HOME/.config/archoera/watermark_ec_priv.pem（勿入库、离线备份）。
@@ -18,7 +18,7 @@ fi
 
 KEYDIR="${ARCHOERA_WM_KEYDIR:-$HOME/.config/archoera}"
 PRIV="$KEYDIR/watermark_ec_priv.pem"
-PAYLOAD="${ARCHOERA_WM_PAYLOAD:-ARCHOERA DESIGNED|ArchoeraMusic|BetaStudio2|AGPL-3.0-or-later}"
+PAYLOAD="${ARCHOERA_WM_PAYLOAD:-ARCHOERA DESIGNED|ArchoeraMvsync|BetaStudio2|AGPL-3.0-or-later}"
 
 mkdir -p "$KEYDIR"
 if [ ! -f "$PRIV" ]; then

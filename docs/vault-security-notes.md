@@ -153,7 +153,7 @@ KDF 参数有**上限与下限**（[VaultLimits.ValidateKdf]：`m∈[8192 KiB, 2
   - 父进程 pid 由 OS 取得（Linux/macOS `getppid`；Windows `NtQueryInformationProcess`）；
   - 父进程可执行文件路径由 OS 读取（Linux `/proc/<ppid>/exe`、macOS `proc_pidpath`、Windows `QueryFullProcessImageNameW`）；
   - **Rust（`app/core/vault-rs`）实现**：Linux `read_link("/proc/<ppid>/exe")`；macOS `proc_pidpath`（libproc 经 `dlopen`/`dlsym` 解析，优先逻辑名 `libproc.dylib`、回退 `/usr/lib/libproc.dylib`，与 C# 一致）；Windows `NtQueryInformationProcess`（父 pid）+ `OpenProcess`/`QueryFullProcessImageNameW`（父进程映像），路径比较**忽略大小写**。**Windows 运行期路径已在 Wine 上实测**（打包布局放行 / 非预期拒绝 / 大小写不敏感；`test-windows.sh`，唯 Wine 直启不回填父 pid 见同节注意）；**macOS 运行期仍待真机**。
-  - 仅**打包布局**（vault 位于 `<dir>/native/<vault>`，预期主程序为 `<dir>/archoera_music[.exe]`）作路径绑定；dev/测试布局（目录名非 `native`）与预期主程序缺失时**放行**（仅记日志，避免自砖）。
+  - 仅**打包布局**（vault 位于 `<dir>/native/<vault>`，预期主程序为 `<dir>/archoera_mvsync[.exe]`）作路径绑定；dev/测试布局（目录名非 `native`）与预期主程序缺失时**放行**（仅记日志，避免自砖）。
 - **残余（如实）**：同用户攻击者若在**预期主程序路径放一个自造二进制**再 spawn vault，本校验无法与「主程序被替换」区分——这正是威胁模型声明的硬上限（见下节），属 L4 信任根范畴。
 
 ## 进程自我保护（F4 · best-effort）
@@ -210,7 +210,7 @@ vault 进程**入口即硬化**（`main` 调 `guard::harden_process()`，**覆�
   打爆、vault/`device.key`/`secret.key` 被篡改或截断、加载器注入被拒、重复 `init-*` 回滚，**都只 fail-closed 拒绝服务**
   （文件保持原样、复原后即可解锁；崩溃也不产 core）。唯一的数据销毁入口是**显式** `destroy`（或设置面板按钮）；
   应用层非预期退出只写 `crash` 标记并 `exit(86)` 终止主进程，版本异常只删除**二进制副本**，均不触碰凭据。
-- **数据目录**：Linux `~/.local/share/ArchoeraMusic`；macOS/Windows 见应用数据目录（路径解析见 `resolveDataDir()`）。
+- **数据目录**：Linux `~/.local/share/ArchoeraMvsync`；macOS/Windows 见应用数据目录（路径解析见 `resolveDataDir()`）。
 
 ## 环境变量与信任边界（完整清单）
 

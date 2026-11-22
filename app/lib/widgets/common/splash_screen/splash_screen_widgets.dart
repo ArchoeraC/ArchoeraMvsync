@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -88,7 +88,7 @@ extension _SplashScreenBuild on _SplashScreenState {
   }
 
   Widget _buildBrand(TextStyle style) {
-    return _StaggeredText(text: 'ArchoeraMusic', style: style, intro: _intro);
+    return _StaggeredText(text: 'ArchoeraMvsync', style: style, intro: _intro);
   }
 
   /// 引擎品牌行：自研内核（EraAudioSync）时展示「Powered by EraSync」。
@@ -150,7 +150,7 @@ extension _SplashScreenBuild on _SplashScreenState {
                 ),
               ),
           child: Text(
-            'ArchoeraMusic © BetaStudio2 · Powered by Flutter',
+            'ArchoeraMvsync © BetaStudio2 · Powered by Flutter',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,

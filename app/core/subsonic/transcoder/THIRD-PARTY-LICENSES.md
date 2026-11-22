@@ -1,6 +1,6 @@
 # Subsonic 转码器第三方许可证声明（subsonic-transcoder）
 
-本目录 `app/core/subsonic/transcoder` 为 ArchoeraMusic 的 Rust 转码器，
+本目录 `app/core/subsonic/transcoder` 为 ArchoeraMvsync 的 Rust 转码器，
 其自研代码随本软件以 AGPL-3.0 授权，第三方组件按各自许可使用（逐项登记见下）。其将音频解码为 PCM 后以 **LAME** 编码为 MP3。
 
 ## 直接 Rust 依赖

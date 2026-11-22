@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,11 +10,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/streaming/songloft/songloft_bindings.dart';
-import 'package:archoera_music/services/streaming/songloft/songloft_client.dart';
-import 'package:archoera_music/services/streaming/songloft/songloft_session.dart';
-import 'package:archoera_music/services/streaming/streaming_types.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/streaming/songloft/songloft_bindings.dart';
+import 'package:archoera_mvsync/services/streaming/songloft/songloft_client.dart';
+import 'package:archoera_mvsync/services/streaming/songloft/songloft_session.dart';
+import 'package:archoera_mvsync/services/streaming/streaming_types.dart';
 
 bool _songloftFfiReady() {
   try {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMusic vault（Rust）静态链接方式选择（build.sh / build-test.sh 共用，source 使用）。
+# ArchoeraMvsync vault（Rust）静态链接方式选择（build.sh / build-test.sh 共用，source 使用）。
 #
 # 用法：source link-mode.sh; mode="$(vault_link_mode)"
 # 返回（stdout）：

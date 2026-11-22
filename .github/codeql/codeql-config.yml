@@ -1,4 +1,4 @@
-# ArchoeraMusic CodeQL 配置（c-cpp）
+# ArchoeraMvsync CodeQL 配置（c-cpp）
 #
 # 排除随源码引入（vendored）的第三方单文件库：它们由上游维护，安全修复
 # 走「升级到上游新版本」而不是在本仓库逐条改动。
@@ -17,6 +17,6 @@
 #
 # 自研代码（src/*.c、kernel/*.zig、app/native/**）仍全量扫描；不要为了
 # 「清零告警」把 src/ 或 app/native/ 加进 paths-ignore。
-name: ArchoeraMusic CodeQL config
+name: ArchoeraMvsync CodeQL config
 paths-ignore:
   - app/core/audio-engine/kernel/c/stb_vorbis.c

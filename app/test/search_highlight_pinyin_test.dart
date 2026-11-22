@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,9 +11,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/search/search_highlight.dart';
-import 'package:archoera_music/services/search/search_highlight_pinyin.dart';
-import 'package:archoera_music/services/search/search_models.dart';
+import 'package:archoera_mvsync/services/search/search_highlight.dart';
+import 'package:archoera_mvsync/services/search/search_highlight_pinyin.dart';
+import 'package:archoera_mvsync/services/search/search_models.dart';
 
 /// 与真实分析器同构的**桩**：只覆盖测试用文本（1 汉字 ↔ 1 音节）。
 ///

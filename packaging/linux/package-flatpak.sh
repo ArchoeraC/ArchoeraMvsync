@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# ArchoeraMusic Flatpak 打包（"包装预构建 bundle"方式，无需 flatpak-builder 从源码构建）。
+# ArchoeraMvsync Flatpak 打包（"包装预构建 bundle"方式，无需 flatpak-builder 从源码构建）。
 #
 # 用法：
 #   package-flatpak.sh <bundle> <版本>
-# 产物：dist/linux/ArchoeraMusic-v<版本>-flatpak-x86_64.flatpak
+# 产物：dist/linux/ArchoeraMvsync-v<版本>-flatpak-x86_64.flatpak
 #
 # 前置：flatpak 已安装，且已配置 flathub remote（脚本自动安装 Platform 运行时）。
 # 说明：bundle 整体放入 /app（files/），以保留 FFI/引擎子进程的相对路径；
-#       /app/bin/archoera_music 为包装脚本，真正入口是 /app/archoera_music。
+#       /app/bin/archoera_mvsync 为包装脚本，真正入口是 /app/archoera_mvsync。
 set -euo pipefail
 
-APP_NAME="ArchoeraMusic"
-APP_ID="awa.archoera.betastudio2.archoera_music"
-BIN="archoera_music"
+APP_NAME="ArchoeraMvsync"
+APP_ID="awa.archoera.betastudio2.archoera_mvsync"
+BIN="archoera_mvsync"
 RUNTIME="org.freedesktop.Platform//24.08"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,10 +52,10 @@ cat > "$appdir/files/bin/$BIN" <<EOF
 exec /app/$BIN "\$@"
 EOF
 chmod +x "$appdir/files/bin/$BIN"
-sed "s|@EXEC@|/app/bin/$BIN %U|g" "$HERE/archoera-music.desktop.in" \
+sed "s|@EXEC@|/app/bin/$BIN %U|g" "$HERE/archoera-mvsync.desktop.in" \
   > "$appdir/files/share/applications/$APP_ID.desktop"
 sed "s|@VERSION@|$version|g" \
-  "$HERE/awa.archoera.betastudio2.archoera_music.metainfo.xml.in" \
+  "$HERE/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml.in" \
   > "$appdir/files/share/metainfo/$APP_ID.metainfo.xml"
 for size in 32 48 64 128 256 512; do
   icon="$ROOT/app/linux/runner/resources/app_icon_${size}.png"

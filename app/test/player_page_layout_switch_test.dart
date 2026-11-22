@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,16 +14,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/pages/player_page.dart';
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/stores/lyrics_provider.dart';
-import 'package:archoera_music/widgets/player/player_cover.dart';
-import 'package:archoera_music/widgets/player/player_lyrics_block.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/pages/player_page.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/lyrics_provider.dart';
+import 'package:archoera_mvsync/widgets/player/player_cover.dart';
+import 'package:archoera_mvsync/widgets/player/player_lyrics_block.dart';
 
 class _StubPrefs extends AppPrefsNotifier {
   @override

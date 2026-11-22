@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -20,7 +20,7 @@ import '../widgets/list/song_list.dart';
 import '../widgets/common/cross_fade_switcher.dart';
 import '../widgets/common/toast.dart';
 import '../widgets/dialogs/track_context_menu.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'history/history_page_actions.dart';
 part 'history/history_page_view.dart';

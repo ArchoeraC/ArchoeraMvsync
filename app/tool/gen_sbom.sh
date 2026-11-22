@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 发布 SBOM 生成（CycloneDX JSON，SEC-25）
+#  ArchoeraMvsync 发布 SBOM 生成（CycloneDX JSON，SEC-25）
 #
 #  把「发布产物」与「各生态依赖清单（锁文件）」聚到一个暂存目录，交给 syft
 #  一次扫描，再经 sbom_normalize.py 归一化：
@@ -81,7 +81,7 @@ copy_manifest "$ROOT/app/core/indexer/packages.lock.json"         nuget/indexer
 # 否则 syft 会把扫描目录名（如 artifacts）当成产品名、且没有版本。
 echo "[gen_sbom] syft 扫描中（产物 + 锁文件）…"
 syft scan "dir:$STAGE" \
-  --source-name ArchoeraMusic \
+  --source-name ArchoeraMvsync \
   --source-version "$VER" \
   --output "cyclonedx-json=$RAW" \
   --quiet

@@ -198,7 +198,7 @@ SongloftSessions（Dart，单例）
   "accessToken": "…",
   "refreshToken": "…",
   "expiresAt": 1760000000,
-  "coverCacheDir": "/home/alice/.local/share/ArchoeraMusic/cache/songloft_covers",
+  "coverCacheDir": "/home/alice/.local/share/ArchoeraMvsync/cache/songloft_covers",
   "requestTimeoutMs": 30000
 }
 ```

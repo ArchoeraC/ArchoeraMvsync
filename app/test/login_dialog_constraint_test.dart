@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -21,13 +21,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/kugou/kugou_api.dart';
-import 'package:archoera_music/services/netease/apis_netease_caller.dart';
-import 'package:archoera_music/services/netease/netease_api.dart';
-import 'package:archoera_music/stores/providers.dart';
-import 'package:archoera_music/widgets/dialogs/kugou_login_button.dart';
-import 'package:archoera_music/widgets/dialogs/netease_login_dialog.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_api.dart';
+import 'package:archoera_mvsync/services/netease/apis_netease_caller.dart';
+import 'package:archoera_mvsync/services/netease/netease_api.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
+import 'package:archoera_mvsync/widgets/dialogs/kugou_login_button.dart';
+import 'package:archoera_mvsync/widgets/dialogs/netease_login_dialog.dart';
 
 /// 立即抛超长错误文本的网易 API（触发错误分支渲染长文本）。
 class _FailingNeteaseApi extends NeteaseApi {

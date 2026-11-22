@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: BSD-3-Clause
-// EraSync — ArchoeraMusic 音频内核
+// EraSync — ArchoeraMvsync 音频内核
 //
 // ⚠ 衍生作品：移植自 libopus 1.6.1（BSD-3-Clause）。
 // Copyright (c) 2001-2024 Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin,

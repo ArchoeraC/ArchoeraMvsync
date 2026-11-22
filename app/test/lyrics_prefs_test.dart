@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,9 +7,30 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 void main() {
+  group('lyricEngine', () {
+    test('三档：默认 / 歌词墙 / AMLL', () {
+      expect(AppPrefs().lyricEngine, 'simple');
+      expect(
+        AppPrefs(initialData: {lyricEngineKey: 'wall'}).lyricEngine,
+        'wall',
+      );
+      expect(
+        AppPrefs(initialData: {lyricEngineKey: 'amll'}).lyricEngine,
+        'amll',
+      );
+    });
+
+    test('非法值回落到默认', () {
+      expect(
+        AppPrefs(initialData: {lyricEngineKey: 'unknown'}).lyricEngine,
+        'simple',
+      );
+    });
+  });
+
   group('lyricFollowAccent', () {
     test('默认关闭', () {
       expect(AppPrefs().lyricFollowAccent, isFalse);
@@ -104,5 +125,4 @@ void main() {
       );
     });
   });
-
 }

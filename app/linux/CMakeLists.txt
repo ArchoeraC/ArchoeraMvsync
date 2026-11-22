@@ -4,10 +4,10 @@ project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "archoera_music")
+set(BINARY_NAME "archoera_mvsync")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "awa.archoera.betastudio2.archoera_music")
+set(APPLICATION_ID "awa.archoera.betastudio2.archoera_mvsync")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -60,7 +60,7 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
-# === ArchoeraMusic downloader：内嵌 cargo 编译链（一键构建）===
+# === ArchoeraMvsync downloader：内嵌 cargo 编译链（一键构建）===
 # flutter build / flutter run 时自动调用 cargo 产出 libarchoera_downloader.{so,dylib,dll}
 # 并镜像进 bundle，无需手动先 cargo build。cargo 自身增量编译，无变更时仅 ~0.1s。
 # 构建模式与 Flutter 对齐：Debug → target/debug（cargo build），
@@ -93,7 +93,7 @@ add_custom_target(downloader_cargo ALL
 # 二进制 target 构建/安装前先完成 Rust 编译。
 add_dependencies(${BINARY_NAME} downloader_cargo)
 
-# === ArchoeraMusic archoerashell：内嵌 cargo staticlib（一键构建） ===
+# === ArchoeraMvsync archoerashell：内嵌 cargo staticlib（一键构建） ===
 # 以 staticlib 形式链入 runner：main() 检测到 `archoerashell` 子命令时直接调用
 # Rust 入口，命令行调用完全不初始化 Flutter/Dart（见 app/core/shell）。
 #
@@ -135,7 +135,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE "${SHELL_STATIC_LIB}")
 # Rust std 在 Linux 上的系统依赖。
 target_link_libraries(${BINARY_NAME} PRIVATE pthread dl m rt util)
 
-# === ArchoeraMusic subsonic：内嵌 Go + cargo 构建链（一键构建）===
+# === ArchoeraMvsync subsonic：内嵌 Go + cargo 构建链（一键构建）===
 # flutter build / flutter run 时自动调用 build.sh（cargo cdylib 转码器 +
 # go build -buildmode=c-shared 服务端库 + 产物拷贝到 subsonic/build/），
 # 与 downloader 一致，无需手动预构建；go/cargo 自身增量，无变更时仅 ~0.1s。
@@ -154,7 +154,7 @@ if(GO)
   add_dependencies(${BINARY_NAME} subsonic_go)
 endif()
 
-# === ArchoeraMusic audio-engine：内嵌 CMake 构建链（一键构建）===
+# === ArchoeraMvsync audio-engine：内嵌 CMake 构建链（一键构建）===
 # flutter build / flutter run 时自动调用 cmake 产出
 # libarchoera_mediaengine.so / archoera-audio-engine 到 audio-engine/build/
 #（与下方 OPTIONAL install 路径一致），无需手动 cmake 预构建。
@@ -252,7 +252,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
     " COMPONENT Runtime)
 endif()
 
-# === ArchoeraMusic 原生产物打包（FFI 直连，降低运行时依赖）===
+# === ArchoeraMvsync 原生产物打包（FFI 直连，降低运行时依赖）===
 # 引擎模块位于 app/core/{audio-engine,scanner,indexer,scraper,subsonic}（app 内部，
 # 路径关系固定，可随 app 独立部署），产物统一安装进 bundle/native/ 平铺（对齐
 # ffi-libs-layout 计划；NativeLibPaths 祖先链优先查 native/，随后回退旧 <module>/build 布局）：
@@ -321,7 +321,7 @@ install(FILES "${DOWNLOADER_TARGET_DIR}/${DOWNLOADER_LIB_NAME}"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/native"
   COMPONENT Runtime)
 
-# === ArchoeraMusic platform bridge：内嵌 CMake 构建链（一键构建）===
+# === ArchoeraMvsync platform bridge：内嵌 CMake 构建链（一键构建）===
 # flutter build / flutter run 时自动调用 cmake 产出 libarchoera_platform.so 到
 # app/native/platform/build/，无需手动 cmake 预构建；cmake 自身增量编译。
 set(PLATFORM_BRIDGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/platform")
@@ -339,7 +339,7 @@ add_dependencies(${BINARY_NAME} platform_bridge_cmake)
 install(FILES "${PLATFORM_BRIDGE_BUILD_DIR}/out/libarchoera_platform.so"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/native" COMPONENT Runtime)
 
-# === ArchoeraMusic 统一日志核心：内嵌 CMake 构建链（一键构建）===
+# === ArchoeraMvsync 统一日志核心：内嵌 CMake 构建链（一键构建）===
 # 产出 libarchoera_log.so 到 app/native/log/build/out/；Dart 载入后把其
 # archoera_log_write 指针注入桥接/引擎/下载器/内核，全层日志走统一格式。
 set(ARCHOERA_LOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/log")

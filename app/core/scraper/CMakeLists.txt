@@ -176,7 +176,7 @@ if(WIN32)
         "${CMAKE_CURRENT_BINARY_DIR}/archoera_scraper.rc"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../pubspec.yaml"
         "archoera_scraper.dll"
-        "ArchoeraMusic metadata scraper"
+        "ArchoeraMvsync metadata scraper"
         "archoera_scraper"
         2)
     target_sources(archoera_scraper PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/archoera_scraper.rc")

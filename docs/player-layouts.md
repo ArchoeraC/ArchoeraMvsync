@@ -56,7 +56,7 @@ app/lib/pages/player/layouts/
 - **vutron**：对齐 VutronMusic Classic——左右两栏各半，左栏垂直居中（正方形
   封面 + 标题/副标题 + 进度 + 循环/上一首/播放/下一首/随机 + 音量），右栏歌词
   取 90% 宽右对齐；`lyricsAlign = left` 对 `simple`（原文/译文左对齐、
-  其余行 0.95 缩放、上下 25% 渐隐）与 `amll` 物理墙同时生效。歌词颜色
+  其余行 0.95 缩放、上下 25% 渐隐）与两种歌词墙（`wall` / `amll`）同时生效。歌词颜色
   统一走偏好（已唱/未唱/跟随主题/跟随封面）。控制区在左栏内，不使用
   共享底栏。进度与音量共用 `PlayerSliderRow` 栅格 + `PlaybackSlider`
   （同一套轨道/悬停样式，左右边缘严格对齐；样式参数由调用方声明，
@@ -92,10 +92,10 @@ chrome 参与淡出，退场期间 `TickerMode` 冻结。
 ## 5. 性能纪律（vutron 为例）
 
 - **不新增渲染器**：`simple` 用重写后的 `LyricsView`（自绘视口 + 行高实测缓存 +
-  线性滚动，只构建视口附近的行），`amll` 复用 v7 物理墙；对齐作为段落属性 +
-  缓存键，不重算行高；
+  线性滚动，只构建视口附近的行），`wall` 用四层重写墙，`amll` 复用 v7 物理墙；
+  对齐作为段落属性 + 缓存键，不重算行高；
 - **不做重复模糊**：封面投影用一层 `BoxShadow`，不复制封面再做 blur；
-- **静态遮罩**：歌词上下渐隐默认**逐行 alpha**（simple 与 amll 都支持，
+- **静态遮罩**：歌词上下渐隐默认**逐行 alpha**（simple / wall / amll 都支持，
   零离屏层；曲线沿用 SPlayer `.lyric-area` 的 0→60%→100%→100%→60%→0）；
   `ShaderMask` 仅作回退（`render.lyricsEdgeFade=shader`）。整幅封面布局的顶/底
   遮罩用 SPlayer `cover-mask` 的 8 段非线性 alpha，避免色阶与硬边；

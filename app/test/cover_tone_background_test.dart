@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -17,12 +17,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/theme/cover_color.dart';
-import 'package:archoera_music/widgets/player/background/cover_tone_background.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/theme/cover_color.dart';
+import 'package:archoera_mvsync/widgets/player/background/cover_tone_background.dart';
 
 /// 测试基色（中等明度蓝，接近取色器输出的典型基色）。
 const Color _base = Color(0xFF3E6F9E);

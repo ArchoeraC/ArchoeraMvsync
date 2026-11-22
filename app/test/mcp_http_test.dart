@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,10 +7,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archoera_music/services/mcp/mcp_tools.dart';
-import 'package:archoera_music/services/mcp/mcp_http.dart';
-import 'package:archoera_music/services/mcp/mcp_protocol.dart';
-import 'package:archoera_music/services/mcp/mcp_models.dart';
+import 'package:archoera_mvsync/services/mcp/mcp_tools.dart';
+import 'package:archoera_mvsync/services/mcp/mcp_http.dart';
+import 'package:archoera_mvsync/services/mcp/mcp_protocol.dart';
+import 'package:archoera_mvsync/services/mcp/mcp_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -110,7 +110,7 @@ void main() {
 
     final authorized = await call('GET', '/api/info');
     expect(authorized.status, 200);
-    expect(authorized.body['name'], 'ArchoeraMusic');
+    expect(authorized.body['name'], 'ArchoeraMvsync');
     final service = authorized.body['service'] as Map;
     expect(service['lan'], isFalse);
   });

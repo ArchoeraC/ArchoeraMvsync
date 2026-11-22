@@ -1,12 +1,12 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/search/search_models.dart';
-import 'package:archoera_music/services/search/search_service.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/services/search/search_models.dart';
+import 'package:archoera_mvsync/services/search/search_service.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 /// 总开关门控：**关闭时不加载 indexer / 不触碰 search.db**，搜索返回 null
 /// （调用方回退 `LIKE`）。这里不提供真实 indexer，仅验证门控短路。

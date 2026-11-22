@@ -1,16 +1,16 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Windows 控制台引导（仅在 `cfg(windows)` 下编译）。
 //!
-//! Windows runner 是 GUI 子系统可执行文件：被终端以 `archoera_music archoerashell …`
+//! Windows runner 是 GUI 子系统可执行文件：被终端以 `archoera_mvsync archoerashell …`
 //! 调用时不会自动继承调用方的标准流。本模块在进入 CLI 前接管父控制台（必要时新建），
 //! 补齐缺失的标准句柄、切到 UTF-8 输出/输入并打开 ANSI 转义，使原生 CLI 与 Unix 端
 //! 观感一致。
 //!
 //! **不无条件覆盖既有句柄**：标准流可能已被重定向到管道/文件（如
-//! `echo status | archoera_music archoerashell`），此时必须保留调用方句柄。
+//! `echo status | archoera_mvsync archoerashell`），此时必须保留调用方句柄。
 
 use std::os::raw::{c_int, c_void};
 

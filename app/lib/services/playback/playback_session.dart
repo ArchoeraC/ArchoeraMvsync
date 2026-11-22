@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -150,7 +150,7 @@ String _sanitizeRepeatMode(String? raw) =>
 class PlaybackSessionStore {
   const PlaybackSessionStore();
 
-  /// 快照文件路径：数据目录（`~/.local/share/ArchoeraMusic`）。
+  /// 快照文件路径：数据目录（`~/.local/share/ArchoeraMvsync`）。
   static String get filePath => '${resolveDataDir()}/last_session.json';
 
   /// 写入快照（覆盖旧快照；失败静默，不影响播放主流程）。

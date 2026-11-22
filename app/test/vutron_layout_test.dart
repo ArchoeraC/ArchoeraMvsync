@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,23 +13,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/pages/player/layouts/player_layout.dart';
-import 'package:archoera_music/pages/player/layouts/vutron_layout.dart';
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/stores/lyrics_provider.dart';
-import 'package:archoera_music/widgets/player/lyrics_edge_fade.dart';
-import 'package:archoera_music/widgets/player/lyrics_view.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
-import 'package:archoera_music/widgets/player/playback_progress_slider.dart';
-import 'package:archoera_music/widgets/player/playback_slider.dart';
-import 'package:archoera_music/widgets/player/player_lyrics_block.dart';
-import 'package:archoera_music/widgets/player/player_shared_elements.dart';
-import 'package:archoera_music/widgets/player/play_pause_button.dart';
-import 'package:archoera_music/widgets/player/spectrum_view.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/pages/player/layouts/player_layout.dart';
+import 'package:archoera_mvsync/pages/player/layouts/vutron_layout.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/lyrics_provider.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_edge_fade.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_view.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_wall_next/lyrics_wall_next.dart';
+import 'package:archoera_mvsync/widgets/player/playback_progress_slider.dart';
+import 'package:archoera_mvsync/widgets/player/playback_slider.dart';
+import 'package:archoera_mvsync/widgets/player/player_lyrics_block.dart';
+import 'package:archoera_mvsync/widgets/player/player_shared_elements.dart';
+import 'package:archoera_mvsync/widgets/player/play_pause_button.dart';
+import 'package:archoera_mvsync/widgets/player/spectrum_view.dart';
 
 class _StubPrefs extends AppPrefsNotifier {
   _StubPrefs([this.data = const <String, dynamic>{}]);
@@ -218,6 +219,18 @@ void main() {
     expect(wall.edgeFade, isTrue);
     expect(find.byType(LyricsEdgeFade), findsNothing);
     expect(find.byType(LyricsView), findsNothing);
+  });
+
+  testWidgets('歌词墙引擎：接入四层重写墙并共享配色', (tester) async {
+    await _pumpVutron(tester, prefs: _prefsData('wall'));
+    final wall = tester.widget<LyricsWallNext>(find.byType(LyricsWallNext));
+    expect(wall.playedColor, const Color(_played));
+    expect(wall.unplayedColor, const Color(_unplayed));
+    expect(wall.textAlign, TextAlign.left);
+    expect(wall.edgeFade, isTrue);
+    expect(find.byType(AmllPhysicsWall), findsNothing);
+    expect(find.byType(LyricsView), findsNothing);
+    expect(find.byType(LyricsEdgeFade), findsNothing);
   });
 
   testWidgets('关闭歌词：经典布局只保留居中的封面/控制区', (tester) async {

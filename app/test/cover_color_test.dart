@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,7 +13,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
-import 'package:archoera_music/theme/cover_color.dart';
+import 'package:archoera_mvsync/theme/cover_color.dart';
 
 /// 生成 64×64 封面 PNG（[argbAt] 返回 0xAARRGGBB）。
 Future<String> _writeCover(int Function(int x, int y) argbAt) async {

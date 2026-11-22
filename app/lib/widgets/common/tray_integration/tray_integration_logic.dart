@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -54,7 +54,7 @@ extension _TrayIntegrationLogic on _TrayIntegrationState {
     if (tray.create(path) != 0) {
       throw StateError('无法创建系统托盘图标');
     }
-    tray.setTooltip('ArchoeraMusic');
+    tray.setTooltip('ArchoeraMvsync');
     // 菜单唤出方式：Linux 的 StatusNotifierItem 由面板在左键时展开菜单；
     // Windows / macOS 用右键唤出，左键留给「显示主窗口」。
     tray.setMenuTrigger(Platform.isLinux);

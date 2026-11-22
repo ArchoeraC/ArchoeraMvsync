@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,9 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/widgets/common/cross_fade_switcher.dart';
-import 'package:archoera_music/widgets/player/background/player_background.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/common/cross_fade_switcher.dart';
+import 'package:archoera_mvsync/widgets/player/background/player_background.dart';
 
 class _StubPrefs extends AppPrefsNotifier {
   _StubPrefs(this.value);

@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -316,7 +316,7 @@ fn set_phase(task_id: &str, to: TaskPhase) {
 // 下载历史持久化（v2：重启恢复）
 //
 // 数据存储位置：由 Dart 通过 set_history_path 注入（app 数据目录
-// `~/.local/share/ArchoeraMusic/download_history.json`），Rust 内部
+// `~/.local/share/ArchoeraMvsync/download_history.json`），Rust 内部
 // 原子写（tmp + rename）。只记录进行中任务（queued/resolving/running/
 // paused）；done/failed/canceled 已从 tasks 移除，不落盘。
 // ============================================================

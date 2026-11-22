@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,8 +14,8 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/utils/app_version.dart';
-import 'package:archoera_music/widgets/common/release_channel_badge.dart';
+import 'package:archoera_mvsync/utils/app_version.dart';
+import 'package:archoera_mvsync/widgets/common/release_channel_badge.dart';
 
 Widget _wrap(Widget child, {Brightness brightness = Brightness.dark}) =>
     MaterialApp(

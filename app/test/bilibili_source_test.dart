@@ -1,14 +1,14 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/downloader/download_platform.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/source/media_request_headers.dart';
-import 'package:archoera_music/services/source/source_platform.dart';
-import 'package:archoera_music/widgets/dialogs/collection_platform.dart';
+import 'package:archoera_mvsync/services/downloader/download_platform.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/source/media_request_headers.dart';
+import 'package:archoera_mvsync/services/source/source_platform.dart';
+import 'package:archoera_mvsync/widgets/dialogs/collection_platform.dart';
 
 void main() {
   group('Bilibili 注册表', () {

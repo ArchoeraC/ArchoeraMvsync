@@ -1,6 +1,6 @@
 #!/bin/sh
 # =====================================================================
-#  ArchoeraMusic 原生库完整性清单生成（SEC-08）。
+#  ArchoeraMvsync 原生库完整性清单生成（SEC-08）。
 #
 #  构建期对 bundled native/ 目录（及额外运行时文件）计算 SHA-256，产出
 #  <native_dir>/ARCHOERA-NATIVE-MANIFEST.txt，供 Dart 运行期在

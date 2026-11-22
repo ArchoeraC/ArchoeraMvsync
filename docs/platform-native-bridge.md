@@ -115,7 +115,7 @@ Linux 本机与 Dart 测试都看不见——对应后端在 Linux 上根本不�
 
 - **Windows 32 位（x86）**：Flutter 平台限制（无 32 位构建），**放弃**。
 - **macOS 发行包（2026-11 起）**：每个架构同时提供
-  `ArchoeraMusic-<ver>-macos-<arm64|x64>.dmg`（拖拽安装镜像，含 `应用程序`
+  `ArchoeraMvsync-<ver>-macos-<arm64|x64>.dmg`（拖拽安装镜像，含 `应用程序`
   快捷方式与首次打开说明）与 `.zip`（`ditto` 保留符号链接/可执行位，便携解压）。
   由 `packaging/macos/build-release.sh` 生成；未做 Developer ID 签名与公证（无付费
   证书），首次打开需右键「打开」，详见镜像内说明。不构建 universal：`native/` 下
@@ -411,7 +411,7 @@ int32_t apl_system_accent_set_events(int32_t on);
   Player 方法（Play/Pause/PlayPause/Stop/Next/Previous/Seek/SetPosition）→ 事件回调；
   `Seeked` 信号在 Dart seek 校正时发出；`CanGoNext/CanSeek` 等按队列状态恒真/恒假
   （首期恒真，Dart 命令落空即忽略，行为等价）。
-- **休眠抑制**：`org.freedesktop.ScreenSaver.Inhibit("ArchoeraMusic", reason)`，
+- **休眠抑制**：`org.freedesktop.ScreenSaver.Inhibit("ArchoeraMvsync", reason)`，
   保存 cookie 供 UnInhibit；KDE/GNOME 均实现该接口（portal 依赖不再需要——
   wakelock_plus 的 Linux 路径即 portal，本实现改为直连会话总线，语义等价）。
 - **窗口状态（P5，已落地）**：**会话检测 + GTK/GDK 统一模式**（`linux_window.zig`）
@@ -569,7 +569,7 @@ vtable 槽位正确（写读回一致）。
 「系统主题色恒读不到」：
 
 - **单实例（native）**：`backend_windows.zig` 用命名互斥体
-  `CreateMutexW("Local\\ArchoeraMusic.SingleInstance")` + `ERROR_ALREADY_EXISTS`
+  `CreateMutexW("Local\\ArchoeraMvsync.SingleInstance")` + `ERROR_ALREADY_EXISTS`
   实现（此前恒返回 1 放行）。`Local\` 会话命名空间 = 每登录会话一个实例，语义对齐
   Linux `XDG_RUNTIME_DIR` 文件锁 / macOS 文件锁；句柄持有至进程退出，`apl_shutdown` 关闭。
 - **单实例（移除 Dart 兜底）**：`platform_capabilities.dart` 的

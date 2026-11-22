@@ -1,4 +1,4 @@
-# ArchoeraMusic 平台能力原生桥接 —— CMake 构建
+# ArchoeraMvsync 平台能力原生桥接 —— CMake 构建
 # Copyright (C) 2026 Archoera && BetaStudio2
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -66,7 +66,7 @@ if(WIN32)
     "${CMAKE_CURRENT_BINARY_DIR}/archoera_platform.rc"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../pubspec.yaml"
     "archoera_platform.dll"
-    "ArchoeraMusic platform bridge"
+    "ArchoeraMvsync platform bridge"
     "archoera_platform"
     2)
   target_sources(archoera_platform PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/archoera_platform.rc")

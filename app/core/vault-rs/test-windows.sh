@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ArchoeraMusic vault（Rust）Windows 目标端到端测试（msvc-wine + Wine）。
+# ArchoeraMvsync vault（Rust）Windows 目标端到端测试（msvc-wine + Wine）。
 #
 # 覆盖（全部在 Wine 上用真实 Windows 产物运行）：
 #   1. 构建标记（TEST）+ 各模式 init/status/serve/destroy（crypto 默认 DPAPI / file /
 #      m1 / m2a / m2b）+ 错误口令与退避锁定 + KDF 强度与 set-kdf 重键 + 越界拒绝
-#   2. 打包布局血缘校验（`<dir>/native/<vault>` + `<dir>/archoera_music.exe`）：
+#   2. 打包布局血缘校验（`<dir>/native/<vault>` + `<dir>/archoera_mvsync.exe`）：
 #      预期主程序 spawn → 放行；非预期主程序 → 拒绝；大小写不敏感比较
 #   3. 会话超时语义（C# `ReadLineAsync().WaitAsync(s)` 对齐）：握手 10s、空闲 30s 自退、
 #      set 负载 30s；父进程消失后空闲超时兜底自退
@@ -292,7 +292,7 @@ print("== 7. 打包布局血缘校验（native/ + 预期主程序）==")
 PKG = newdir("pkg-")
 os.makedirs(os.path.join(PKG, "native"), exist_ok=True)
 shutil.copy2(V, os.path.join(PKG, "native", "archoera-vault-test.exe"))
-shutil.copy2(os.path.join(WORK, "probe-parent.exe"), os.path.join(PKG, "archoera_music.exe"))
+shutil.copy2(os.path.join(WORK, "probe-parent.exe"), os.path.join(PKG, "archoera_mvsync.exe"))
 shutil.copy2(os.path.join(WORK, "probe-parent.exe"), os.path.join(PKG, "other.exe"))
 run("init-crypto", winpath(PKG))
 
@@ -310,9 +310,9 @@ def spawn_handshake(parent_exe):
     return line
 
 
-line = spawn_handshake(winpath(os.path.join(PKG, "archoera_music.exe")))
+line = spawn_handshake(winpath(os.path.join(PKG, "archoera_mvsync.exe")))
 check("预期主程序 spawn → 放行", line.startswith("ok handshake"), line)
-line = spawn_handshake(winpath(os.path.join(PKG, "archoera_music.exe")).upper())
+line = spawn_handshake(winpath(os.path.join(PKG, "archoera_mvsync.exe")).upper())
 check("全大写路径 → 放行（大小写不敏感比较）", line.startswith("ok handshake"), line)
 line = spawn_handshake(winpath(os.path.join(PKG, "other.exe")))
 check("非预期主程序 spawn → 拒绝", line.startswith("err") and "主程序" in line, line)

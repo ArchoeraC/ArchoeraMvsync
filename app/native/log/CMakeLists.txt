@@ -1,4 +1,4 @@
-# ArchoeraMusic 统一日志核心 —— CMake 构建
+# ArchoeraMvsync 统一日志核心 —— CMake 构建
 # Copyright (C) 2026 Archoera && BetaStudio2
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -43,7 +43,7 @@ if(WIN32)
     "${CMAKE_CURRENT_BINARY_DIR}/archoera_log.rc"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../pubspec.yaml"
     "archoera_log.dll"
-    "ArchoeraMusic unified logging core"
+    "ArchoeraMvsync unified logging core"
     "archoera_log"
     2)
   target_sources(archoera_log PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/archoera_log.rc")

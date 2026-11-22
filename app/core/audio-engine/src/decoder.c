@@ -1,4 +1,4 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -149,7 +149,7 @@ void decoder_apply_http_headers(AVDictionary **opts, const char *headers)
     char ua[256] = {0};
     /* 是否显式提供了 User-Agent（即使值为空）：空值也要设进 user_agent，
      * 否则 FFmpeg http 会用默认 `Lavf/…`（会被按客户端区分的服务端拦截）。
-     * 第三方源会带非空客户端 UA——诚实自报 `ArchoeraMusic/<版本>`；
+     * 第三方源会带非空客户端 UA——诚实自报 `ArchoeraMvsync/<版本>`；
      * 不再使用已拆除的「空 UA 放行」。 */
     int has_ua = 0;
     char extra[1024] = {0};

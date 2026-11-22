@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -39,7 +39,7 @@ import '../../../widgets/player/player_slider_row.dart';
 import '../../../widgets/player/spectrum_view.dart';
 import 'player_layout.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// Vutron 两条滑杆的统一轨道粗细（主题默认 3px，按设计稿略粗一档）。
 const double _barTrackHeight = 4;

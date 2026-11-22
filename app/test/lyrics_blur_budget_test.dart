@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_blur_budget.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_v7/lyrics_blur_budget.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
 
 void main() {
   group('LyricsBlurBudget', () {

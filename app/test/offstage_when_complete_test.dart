@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,7 +11,7 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/common/offstage_when_complete.dart';
+import 'package:archoera_mvsync/widgets/common/offstage_when_complete.dart';
 
 void main() {
   testWidgets('完成阈值前后切换停绘，子树状态保留', (tester) async {

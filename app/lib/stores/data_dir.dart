@@ -1,35 +1,50 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:convert';
 import 'dart:io';
+
 import '../utils/safe_file.dart';
 
 /// 应用数据根目录（按平台约定）：
-///   - Linux：`~/.local/share/ArchoeraMusic`（XDG）
-///   - macOS：`~/Library/Application Support/ArchoeraMusic`
-///   - Windows：`%LOCALAPPDATA%\ArchoeraMusic`
+///   - Linux：`~/.local/share/ArchoeraMvsync`（XDG）
+///   - macOS：`~/Library/Application Support/ArchoeraMvsync`
+///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsync`
 /// 可用环境变量 `ARCHOERA_DATA_DIR` 覆盖（与 scanner 侧一致）。
 ///
-/// 原实现内嵌于 sidecar 进程管理器，去侧车化后提取为共享 helper，
-/// 供偏好（prefs.json）、流媒体服务器列表（streaming_servers.json）与
-/// 扫描器默认库路径统一使用。
+/// 改名后**不迁移**旧 `ArchoeraMusic` 目录：旧目录原样保留，新版本从新目录
+/// 开始（避免跨盘复制/保险库文件锁导致迁移不完整）。
 String resolveDataDir() {
   final override = Platform.environment['ARCHOERA_DATA_DIR'];
   if (override != null && override.isNotEmpty) return override;
+  return '${_platformDataRoot()}/$_dataDirName';
+}
+
+/// 确保数据目录存在（首次启动/清空后）。失败时由各调用方自行降级。
+Future<void> ensureDataDir() async {
+  try {
+    await Directory(resolveDataDir()).create(recursive: true);
+  } catch (_) {
+    // 权限/磁盘问题：后续读写会走各自的错误处理。
+  }
+}
+
+const String _dataDirName = 'ArchoeraMvsync';
+
+String _platformDataRoot() {
   final home =
-      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '.';
+      Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      '.';
   if (Platform.isMacOS) {
-    return '$home/Library/Application Support/ArchoeraMusic';
+    return '$home/Library/Application Support';
   }
   if (Platform.isWindows) {
     // LOCALAPPDATA 尊重用户重定向（如自定义用户目录 / 迁移盘符）
-    final local =
-        Platform.environment['LOCALAPPDATA'] ?? '$home/AppData/Local';
-    return '$local/ArchoeraMusic';
+    return Platform.environment['LOCALAPPDATA'] ?? '$home/AppData/Local';
   }
-  return '$home/.local/share/ArchoeraMusic';
+  return '$home/.local/share';
 }
 
 /// 应用「媒体库音乐目录」：读取扫描目录配置（scan_dirs.json，与

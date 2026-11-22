@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // 回归：隔离区列表首次无记录时（quarantine 目录不存在）应正常显示「空」，
@@ -8,9 +8,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/settings/scans_section.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/settings/scans_section.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 class _NoSideEffectPrefs extends AppPrefsNotifier {
   @override

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,7 +9,7 @@ import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/render/damage_region.dart';
+import 'package:archoera_mvsync/services/render/damage_region.dart';
 
 void main() {
   test('add 保留不相交矩形与插入顺序', () {

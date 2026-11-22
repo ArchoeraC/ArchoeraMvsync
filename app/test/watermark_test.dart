@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/app/watermark.dart';
+import 'package:archoera_mvsync/app/watermark.dart';
 
 void main() {
   test('官方负载验签通过', () {
@@ -19,7 +19,7 @@ void main() {
   test('篡改负载后验签失败（无官方私钥无法伪造）', () {
     expect(
       verifyWatermarkData(
-        payload: 'ARCHOERA DESIGNED|ArchoeraMusic|EvilFork|MIT',
+        payload: 'ARCHOERA DESIGNED|ArchoeraMvsync|EvilFork|MIT',
         pubKeyHex: archoeraWatermarkPubKeyHex,
         sigDerHex: archoeraWatermarkSigDerHex,
       ),

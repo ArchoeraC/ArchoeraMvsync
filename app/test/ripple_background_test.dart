@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,8 +13,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/background/ripple_background.dart';
-import 'package:archoera_music/widgets/list/cover_image.dart';
+import 'package:archoera_mvsync/widgets/player/background/ripple_background.dart';
+import 'package:archoera_mvsync/widgets/list/cover_image.dart';
 
 /// 组件内部按「屏幕长边物理像素」解码封面（钳 256~2048）。测试预热**同一个**
 /// provider，使解析同步命中 imageCache（否则 fake-async 下异步解码不会完成）。

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -17,7 +17,7 @@ import '../../l10n/l10n.dart';
 import '../../widgets/common/cross_fade_switcher.dart';
 import '../../widgets/list/cover_image.dart';
 import '../../widgets/player/s_controls.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 详情页骨架：返回栏 + 头部 + 内容。
 class DetailScaffold extends StatelessWidget {

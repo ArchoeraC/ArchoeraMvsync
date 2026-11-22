@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,8 +11,8 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/widgets/common/cross_fade_switcher.dart';
-import 'package:archoera_music/widgets/player/cover_switcher.dart';
+import 'package:archoera_mvsync/widgets/common/cross_fade_switcher.dart';
+import 'package:archoera_mvsync/widgets/player/cover_switcher.dart';
 
 Widget _app({
   required ValueNotifier<int> track,

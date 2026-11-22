@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -210,7 +210,7 @@ class LibraryScanner {
     _progressController.close();
   }
 
-  /// 默认数据目录（~/.local/share/ArchoeraMusic，ARCHOERA_DATA_DIR 可覆盖）。
+  /// 默认数据目录（~/.local/share/ArchoeraMvsync，ARCHOERA_DATA_DIR 可覆盖）。
   static String defaultDataDir() => resolveDataDir();
 
   /// 默认曲库 DB 路径。

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,10 +9,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:archoera_music/services/native_lib_paths.dart';
-import 'package:archoera_music/services/search/indexer_ffi.dart';
-import 'package:archoera_music/services/search/search_index.dart';
-import 'package:archoera_music/services/search/search_models.dart';
+import 'package:archoera_mvsync/services/native_lib_paths.dart';
+import 'package:archoera_mvsync/services/search/indexer_ffi.dart';
+import 'package:archoera_mvsync/services/search/search_index.dart';
+import 'package:archoera_mvsync/services/search/search_models.dart';
 
 /// indexer 原生冒烟测试（受保护：无 `.so` 时整体 skip）。
 ///

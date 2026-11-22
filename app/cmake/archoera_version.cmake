@@ -1,4 +1,4 @@
-# ArchoeraMusic — Windows VERSIONINFO 统一生成
+# ArchoeraMvsync — Windows VERSIONINFO 统一生成
 # Copyright (C) 2026 Archoera && BetaStudio2
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -11,15 +11,15 @@
 #   archoera_configure_version_rc(
 #     "${CMAKE_CURRENT_BINARY_DIR}/archoera_xxx.rc"
 #     "${CMAKE_CURRENT_SOURCE_DIR}/../../pubspec.yaml"
-#     "archoera_xxx.dll" "ArchoeraMusic xxx" "archoera_xxx" 2)
+#     "archoera_xxx.dll" "ArchoeraMvsync xxx" "archoera_xxx" 2)
 #   target_sources(archoera_xxx PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/archoera_xxx.rc")
 #
 # FILETYPE: 1 = EXE，2 = DLL。
 
 set(ARCHOERA_COMPANY "io.awa.archoera.betastudio2")
-set(ARCHOERA_PRODUCT "ArchoeraMusic")
+set(ARCHOERA_PRODUCT "ArchoeraMvsync")
 set(ARCHOERA_COPYRIGHT "Copyright (C) 2026 io.awa.archoera.betastudio2")
-set(ARCHOERA_HOMEPAGE "https://github.com/ArchoeraC/ArchoeraMusic")
+set(ARCHOERA_HOMEPAGE "https://github.com/ArchoeraC/ArchoeraMvsync")
 set(ARCHOERA_VERSION_RC_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/archoera_version.rc.in")
 
 function(archoera_configure_version_rc OUT_RC PUBSPEC ORIGINAL_FILENAME FILE_DESCRIPTION INTERNAL_NAME FILETYPE)

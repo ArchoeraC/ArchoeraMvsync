@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 平台桥接 —— Windows 端本地编译验证（Linux 主机）
+#  ArchoeraMvsync 平台桥接 —— Windows 端本地编译验证（Linux 主机）
 #
 #  用 msvc-wine（MSVC cl.exe + Wine）编译并链接 Windows 桥接
 #  （core.cpp / apl.cpp / backend_windows.cpp → archoera_platform.dll），

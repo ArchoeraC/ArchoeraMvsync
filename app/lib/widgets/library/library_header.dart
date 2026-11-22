@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -19,7 +19,7 @@ import '../dialogs/folder_manager.dart';
 import '../dialogs/s_dialog.dart';
 import '../player/s_controls.dart';
 import 'library_search_field.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'library_header/library_header_actions.dart';
 part 'library_header/library_header_view.dart';
