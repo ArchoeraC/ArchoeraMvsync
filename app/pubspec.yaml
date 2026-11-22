@@ -1,5 +1,5 @@
 name: archoera_mvsync
-description: "An open-source music player, connect to alternative music service, support offline playback."
+description: "ArchoeraMvsync — an open-source, multi-platform music player with alternative music services and offline playback."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
