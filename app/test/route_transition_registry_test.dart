@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/app/route_transitions/route_transition_registry.dart';
-import 'package:archoera_mvsumc/stores/prefs_appearance.dart' as prefs;
+import 'package:archoera_mvsync/app/route_transitions/route_transition_registry.dart';
+import 'package:archoera_mvsync/stores/prefs_appearance.dart' as prefs;
 
 void main() {
   test('注册表 id 与偏好白名单一致', () {

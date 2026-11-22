@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,8 +11,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/search/search_service.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsync/services/search/search_service.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 void main() {
   final service = SearchService.instance;

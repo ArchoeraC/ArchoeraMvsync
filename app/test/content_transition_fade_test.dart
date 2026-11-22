@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,8 +14,8 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/widgets/common/cross_fade_switcher.dart';
-import 'package:archoera_mvsumc/widgets/list/cover_image.dart';
+import 'package:archoera_mvsync/widgets/common/cross_fade_switcher.dart';
+import 'package:archoera_mvsync/widgets/list/cover_image.dart';
 
 /// 空状态 ↔ 内容 的极简宿主：`phase` 决定挂哪一层，`body` 模拟同相位的
 /// 内容更新（例如列表数据刷新但仍是「内容」态）。

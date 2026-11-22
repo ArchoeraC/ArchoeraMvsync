@@ -16,9 +16,9 @@
 
 | 平台 | 数据目录（含 `logs/`） |
 |---|---|
-| Linux | `~/.local/share/ArchoeraMvsumc` |
-| macOS | `~/Library/Application Support/ArchoeraMvsumc` |
-| Windows | `%LOCALAPPDATA%\ArchoeraMvsumc` |
+| Linux | `~/.local/share/ArchoeraMvsync` |
+| macOS | `~/Library/Application Support/ArchoeraMvsync` |
+| Windows | `%LOCALAPPDATA%\ArchoeraMvsync` |
 
 - 可用环境变量 `ARCHOERA_DATA_DIR` 覆盖（迁移 / 便携场景）。
 - 需要更详细的日志时，用 `ARCHOERA_LOG_LEVEL=debug` 启动（取值
@@ -128,7 +128,7 @@ sudo apt install libgtk-3-0 libdbus-1-3 libsqlite3-0 liblzma5
 安装 deb 请走 `apt` 而不是 `dpkg -i` 或图形包管理器双击，让依赖一起装上：
 
 ```bash
-sudo apt install ./ArchoeraMvsumc-*.deb
+sudo apt install ./ArchoeraMvsync-*.deb
 ```
 
 若提示「软件包系统已损坏」并建议 `apt-get install -f`，注意两点：`apt-get` 需要 `sudo`
@@ -136,26 +136,26 @@ sudo apt install ./ArchoeraMvsumc-*.deb
 第三方源经常是依赖缺口的来源，先 `sudo apt-get update`，仍失败就临时禁用第三方源再
 `sudo apt-get install -f`。
 
-AppImage 在无 FUSE 的环境可解包运行：`./ArchoeraMvsumc-*.AppImage --appimage-extract-and-run`。
+AppImage 在无 FUSE 的环境可解包运行：`./ArchoeraMvsync-*.AppImage --appimage-extract-and-run`。
 
 ### 1.5 macOS 提示「已损坏」或无法验证开发者
 
 自编译产物未签名，首次运行需右键「打开」，或清除隔离属性：
 
 ```bash
-xattr -dr com.apple.quarantine ArchoeraMvsumc.app
+xattr -dr com.apple.quarantine ArchoeraMvsync.app
 ```
 
 ### 1.6 Windows Defender 报 `Trojan:Win32/Bearfoos.A!ml`（误报）
 
 这是 **机器学习误报**（`!ml`），不是程序行为异常。官方 Windows 产物目前**未做
 Authenticode 签名**，Defender 会依据「未签名 + 低信誉 + 原生导入/安装器形态」打分；
-`archoera_mvsumc.exe` 曾被静态链接的 Rust CLI 带入 `WS2_32`/控制台/`dbghelp` 等导入，
+`archoera_mvsync.exe` 曾被静态链接的 Rust CLI 带入 `WS2_32`/控制台/`dbghelp` 等导入，
 进一步抬高了分数。
 
 发布侧已做的收敛：GUI 主程序**不再**静态链接命令行客户端（Windows 改为转发到同目录
 `archoerashell.exe`）；Release 不再包含调试器/控制台创建代码（`IsDebuggerPresent`/
-`AllocConsole`）；`archoera_mvsumc.exe`、`archoerashell.exe`、`archoera-vault.exe` 与
+`AllocConsole`）；`archoera_mvsync.exe`、`archoerashell.exe`、`archoera-vault.exe` 与
 安装器都带完整 VERSIONINFO。
 
 用户侧处理（**不建议**直接关闭实时保护）：
@@ -273,7 +273,7 @@ Authenticode 签名**，Defender 会依据「未签名 + 低信誉 + 原生导�
 仍无法播放时可以手动指定信任源（内核与 FFmpeg 都认，优先级最高）：
 
 ```bash
-SSL_CERT_FILE=/path/to/ca-bundle.pem ./archoera_mvsumc
+SSL_CERT_FILE=/path/to/ca-bundle.pem ./archoera_mvsync
 SSL_CERT_DIR=/path/to/certs            # 目录列表，`:` 分隔
 ```
 

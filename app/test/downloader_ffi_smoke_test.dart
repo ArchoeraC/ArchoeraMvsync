@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_mvsumc/services/downloader/downloader_ffi.dart';
+import 'package:archoera_mvsync/services/downloader/downloader_ffi.dart';
 
 /// downloader cdylib 的 FFI 冒烟测试：验证 .so 可加载、全部导出符号签名匹配、
 /// init → enqueue → cancel → destroy 全生命周期可用。

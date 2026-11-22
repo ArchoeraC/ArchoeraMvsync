@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMvsumc vault（Rust）macOS 目标**交叉编译检查**（Linux 宿主，无需 Mac）。
+# ArchoeraMvsync vault（Rust）macOS 目标**交叉编译检查**（Linux 宿主，无需 Mac）。
 #
 # 作用：在非 macOS 机器上验证 `cfg(target_os = "macos")` 分支（Keychain 后端
 # `security-framework`、`proc_pidpath` 的 dlopen/dlsym 回退、RLIMIT_CORE 等）

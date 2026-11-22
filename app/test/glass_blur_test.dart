@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,8 +12,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/widgets/common/glass_blur.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/common/glass_blur.dart';
 
 /// 不读/写磁盘的偏好 Notifier，可指定性能模式。
 class _TestPrefsNotifier extends AppPrefsNotifier {

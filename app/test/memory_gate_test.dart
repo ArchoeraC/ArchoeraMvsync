@@ -1,10 +1,10 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // M2.2 内存门禁决策纯函数测试：故意压低内存（ARCHOERA_MEMORY_CEIL_MB / FLOOR_MB）
 // 观察决策（整首可驻留 ⇄ 回退 URL 路径），无需引擎/网络。
-import 'package:archoera_mvsumc/services/playback/store_source.dart';
+import 'package:archoera_mvsync/services/playback/store_source.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

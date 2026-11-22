@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,9 +7,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archoera_mvsumc/services/log/log.dart';
-import 'package:archoera_mvsumc/services/mcp/mcp_key_store.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsync/services/log/log.dart';
+import 'package:archoera_mvsync/services/mcp/mcp_key_store.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

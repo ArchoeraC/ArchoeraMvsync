@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import '../../l10n/l10n.dart';
 import '../../services/playback/playback_notifier.dart';
 import 'ctrl_icon.dart';
 
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'hover_volume/hover_volume_control_state.dart';
 

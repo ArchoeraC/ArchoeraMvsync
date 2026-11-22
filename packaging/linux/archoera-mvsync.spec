@@ -1,14 +1,14 @@
 # RPM 打包定义（Fedora / RHEL / openSUSE 系）
 # 由 packaging/linux/package.sh rpm 调用 rpmbuild 构建：
 #   rpmbuild -bb --define "stage_path <abs>" --define "app_version <ver>" ...
-# 产物：archoera-mvsumc-<version>-1.x86_64.rpm
+# 产物：archoera-mvsync-<version>-1.x86_64.rpm
 
-Name:           archoera-mvsumc
+Name:           archoera-mvsync
 Version:        %{app_version}
 Release:        1
 Summary:        An open-source music player
 License:        AGPL-3.0-only
-URL:            https://github.com/ArchoeraC/ArchoeraMvsumc
+URL:            https://github.com/ArchoeraC/ArchoeraMvsync
 BuildArch:      x86_64
 Group:          Applications/Multimedia
 AutoReqProv:    no
@@ -17,7 +17,7 @@ AutoReqProv:    no
 Requires:       glibc, libstdc++, zlib, gtk3, dbus-libs, libepoxy, fontconfig, fribidi, libX11, libXi, at-spi2-atk, libcloudproviders, taglib, sqlite-libs, xz-libs
 
 %description
-ArchoeraMvsumc is an open-source music player that connects to alternative
+ArchoeraMvsync is an open-source music player that connects to alternative
 music services, supports offline playback, local library scanning and a
 built-in subsonic-compatible server.
 
@@ -26,26 +26,26 @@ built-in subsonic-compatible server.
 %build
 
 %install
-# 整个 bundle 装到 /opt/archoera-mvsumc（FFI/引擎子进程均相对可执行文件定位）
-mkdir -p %{buildroot}/opt/archoera-mvsumc
-cp -a %{stage_path}/bundle/. %{buildroot}/opt/archoera-mvsumc/
+# 整个 bundle 装到 /opt/archoera-mvsync（FFI/引擎子进程均相对可执行文件定位）
+mkdir -p %{buildroot}/opt/archoera-mvsync
+cp -a %{stage_path}/bundle/. %{buildroot}/opt/archoera-mvsync/
 mkdir -p %{buildroot}/usr/bin
-ln -s /opt/archoera-mvsumc/archoera_mvsumc %{buildroot}/usr/bin/archoera_mvsumc
+ln -s /opt/archoera-mvsync/archoera_mvsync %{buildroot}/usr/bin/archoera_mvsync
 # 桌面条目 + metainfo + 图标（文件名 = 应用 ID，保证 Wayland 任务栏图标映射）
 mkdir -p %{buildroot}/usr/share/applications
-install -m 644 %{stage_path}/archoera-mvsumc.desktop \
-  %{buildroot}/usr/share/applications/awa.archoera.betastudio2.archoera_mvsumc.desktop
+install -m 644 %{stage_path}/archoera-mvsync.desktop \
+  %{buildroot}/usr/share/applications/awa.archoera.betastudio2.archoera_mvsync.desktop
 mkdir -p %{buildroot}/usr/share/metainfo
-install -m 644 %{stage_path}/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml \
-  %{buildroot}/usr/share/metainfo/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml
+install -m 644 %{stage_path}/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml \
+  %{buildroot}/usr/share/metainfo/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml
 # 先建 icons 目录再 cp -a：否则 hicolor 层级会被吞掉（icons 直接落在 icons/ 下，
 # 导致 %files 的 hicolor/*/apps/*.png 通配匹配不到——CI 曾因此失败）
 mkdir -p %{buildroot}/usr/share/icons
 cp -a %{stage_path}/icons/hicolor %{buildroot}/usr/share/icons/
 
 %files
-/opt/archoera-mvsumc
-/usr/bin/archoera_mvsumc
-/usr/share/applications/awa.archoera.betastudio2.archoera_mvsumc.desktop
-/usr/share/metainfo/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml
-/usr/share/icons/hicolor/*/apps/awa.archoera.betastudio2.archoera_mvsumc.png
+/opt/archoera-mvsync
+/usr/bin/archoera_mvsync
+/usr/share/applications/awa.archoera.betastudio2.archoera_mvsync.desktop
+/usr/share/metainfo/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml
+/usr/share/icons/hicolor/*/apps/awa.archoera.betastudio2.archoera_mvsync.png

@@ -413,7 +413,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Remember my choice and don\'t ask again';
 
   @override
-  String get appName => 'ArchoeraMvsumc';
+  String get appName => 'ArchoeraMvsync';
 
   @override
   String get brandNetease => 'NT';
@@ -3435,7 +3435,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      'This software (ArchoeraMvsumc) is open source under AGPL-3.0: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
+      'This software (ArchoeraMvsync) is open source under AGPL-3.0: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
 
   @override
   String get settingsDecline1Title => '1. Software nature\n';
@@ -3526,7 +3526,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPrivacyIntro =>
-      'Welcome to ArchoeraMvsumc (the “Software” or “we”). We understand the importance of your personal information and are always committed to protecting your privacy and data security. This policy explains how we handle, store and protect your information during your use of the Software, and the rights you enjoy.\n\nPlease read and fully understand this policy carefully. By starting to use the Software, you confirm that you have read, understood and agreed to all of its contents.\n\n';
+      'Welcome to ArchoeraMvsync (the “Software” or “we”). We understand the importance of your personal information and are always committed to protecting your privacy and data security. This policy explains how we handle, store and protect your information during your use of the Software, and the rights you enjoy.\n\nPlease read and fully understand this policy carefully. By starting to use the Software, you confirm that you have read, understood and agreed to all of its contents.\n\n';
 
   @override
   String get settingsPrivacy1Title => '1. Basic principles\n';
@@ -3561,7 +3561,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPrivacy5Body =>
-      'The vast majority of your data is stored in the local data directory (Linux: ~/.local/share/ArchoeraMvsumc; macOS: ~/Library/Application Support/ArchoeraMvsumc; Windows: %LOCALAPPDATA%\\ArchoeraMvsumc, overridable via the ARCHOERA_DATA_DIR environment variable) until you clear or delete it yourself. Sensitive credentials are encrypted using the operating system’s native secure storage where possible and isolated within the credential vault; network transmission uses HTTPS / TLS whenever the target supports it.\nAlthough we take reasonable security measures, inherent limitations of computing and storage technology mean no system can guarantee absolute 100% security; please keep your device and third-party account credentials safe.\n\n';
+      'The vast majority of your data is stored in the local data directory (Linux: ~/.local/share/ArchoeraMvsync; macOS: ~/Library/Application Support/ArchoeraMvsync; Windows: %LOCALAPPDATA%\\ArchoeraMvsync, overridable via the ARCHOERA_DATA_DIR environment variable) until you clear or delete it yourself. Sensitive credentials are encrypted using the operating system’s native secure storage where possible and isolated within the credential vault; network transmission uses HTTPS / TLS whenever the target supports it.\nAlthough we take reasonable security measures, inherent limitations of computing and storage technology mean no system can guarantee absolute 100% security; please keep your device and third-party account credentials safe.\n\n';
 
   @override
   String get settingsPrivacy6Title => '6. Your rights & data management\n';
@@ -3589,7 +3589,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPrivacy9Body =>
-      'If you have any questions, comments or complaints about this policy, your information security or related matters, you are welcome to contact the developer at:\n· GitHub repository & Issues: https://github.com/ArchoeraC/ArchoeraMvsumc\nWe will reply as soon as possible after receiving your feedback.\n\n';
+      'If you have any questions, comments or complaints about this policy, your information security or related matters, you are welcome to contact the developer at:\n· GitHub repository & Issues: https://github.com/ArchoeraC/ArchoeraMvsync\nWe will reply as soon as possible after receiving your feedback.\n\n';
 
   @override
   String get settingsPrivacyFooter =>
@@ -4822,7 +4822,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Find the running window in the system tray or taskbar.';
 
   @override
-  String get instanceAlreadyRunningTitle => 'ArchoeraMvsumc is already running';
+  String get instanceAlreadyRunningTitle => 'ArchoeraMvsync is already running';
 
   @override
   String get settingsCatShortcuts => 'Shortcuts';
@@ -5834,7 +5834,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mcpShellUsage =>
-      'archoerashell — ArchoeraMvsumc command-line control (Unix-like)\n\nUsage:\n  archoera_mvsumc archoerashell [global options] <command> [args...]\n\nHint:\n  <command> --help or help <command> for per-command usage.\n\nGlobal options:\n  -h, --help            Show this help\n  -V, --version         Show version\n  -j, --json            JSON output (for scripts)\n  -q, --quiet           Only print errors\n      --host <host>     Server host (default 127.0.0.1)\n  -p, --port <port>     Server port (default from app settings)\n  -k, --key  <key>      Access key (default from app settings)\n\nPlayback:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nQueue:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nSearch / library:\n  search <source> <query> [-n n] [-p page]\n  search-all <query> [-n n]\n  library [query] [-n n] [--offset n] / library-random / library-stats\n\nFavourites / history / lyrics:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDownloads:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nOther:\n  theme <light|dark|system> / sleep <minutes>|--end / sleep-cancel\n  prefs [keys...] / tools / info / call <tool> [--json <json>]';
+      'archoerashell — ArchoeraMvsync command-line control (Unix-like)\n\nUsage:\n  archoera_mvsync archoerashell [global options] <command> [args...]\n\nHint:\n  <command> --help or help <command> for per-command usage.\n\nGlobal options:\n  -h, --help            Show this help\n  -V, --version         Show version\n  -j, --json            JSON output (for scripts)\n  -q, --quiet           Only print errors\n      --host <host>     Server host (default 127.0.0.1)\n  -p, --port <port>     Server port (default from app settings)\n  -k, --key  <key>      Access key (default from app settings)\n\nPlayback:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nQueue:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nSearch / library:\n  search <source> <query> [-n n] [-p page]\n  search-all <query> [-n n]\n  library [query] [-n n] [--offset n] / library-random / library-stats\n\nFavourites / history / lyrics:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDownloads:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nOther:\n  theme <light|dark|system> / sleep <minutes>|--end / sleep-cancel\n  prefs [keys...] / tools / info / call <tool> [--json <json>]';
 
   @override
   String get mcpShellHint =>
@@ -6448,7 +6448,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String elevationGateBody({required String kind}) {
-    return 'ArchoeraMvsumc is running as $kind. Playback, downloads and the credential vault never need elevation. Continuing elevated hands the whole machine to any flaw in this app: a single remote-code-execution or supply-chain issue can affect the entire system, and preferences, caches and logs are written with $kind rights, where a normal user may be unable to read or clean them up.\n\nExit and restart ArchoeraMvsumc as your normal user.';
+    return 'ArchoeraMvsync is running as $kind. Playback, downloads and the credential vault never need elevation. Continuing elevated hands the whole machine to any flaw in this app: a single remote-code-execution or supply-chain issue can affect the entire system, and preferences, caches and logs are written with $kind rights, where a normal user may be unable to read or clean them up.\n\nExit and restart ArchoeraMvsync as your normal user.';
   }
 
   @override

@@ -1,4 +1,4 @@
-# ArchoeraMvsumc 内置 Subsonic 服务端（standalone/Docker）镜像
+# ArchoeraMvsync 内置 Subsonic 服务端（standalone/Docker）镜像
 #
 # 多阶段构建：
 #   1. rust   → libarchoera_transcoder.so（symphonia 解码 + mp3lame 编码）

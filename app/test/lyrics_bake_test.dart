@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -20,8 +20,8 @@ import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
-import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
 
 final _wallKey = GlobalKey();
 const _boundaryKey = ValueKey('wall_boundary');

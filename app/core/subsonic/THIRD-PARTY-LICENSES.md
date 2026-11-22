@@ -1,6 +1,6 @@
 # Subsonic Go 后端第三方许可证声明
 
-本目录 `app/core/subsonic` 为 ArchoeraMvsumc 的 Subsonic 兼容 Go 后端，
+本目录 `app/core/subsonic` 为 ArchoeraMvsync 的 Subsonic 兼容 Go 后端，
 其自研代码随本软件以 AGPL-3.0 授权，第三方组件按各自许可使用（逐项登记见下）。
 
 ## 直接依赖

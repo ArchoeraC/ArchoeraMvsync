@@ -1,4 +1,4 @@
-﻿; ArchoeraMvsumc Windows Installer (Inno Setup 6.3+)
+﻿; ArchoeraMvsync Windows Installer (Inno Setup 6.3+)
 ; 双安装模式（默认 per-user 免提权，符合 AGENTS.md「最小权限」红线及其 Windows
 ; 安装向导唯一例外）：
 ;   - 仅为我安装：默认 %LOCALAPPDATA%\Programs，全程无需管理员/UAC；
@@ -7,7 +7,7 @@
 ; 自动识别，无需自存位置）；模式不一致则以失败退出。
 ; 用法（CI）：
 ;   ISCC.exe /DVersion=0.9.16+4 /DVersionNumeric=0.9.16.4 /DAppDir=<release目录> \
-;     /DOutputDir=<输出目录> packaging\windows\archoera_mvsumc.iss
+;     /DOutputDir=<输出目录> packaging\windows\archoera_mvsync.iss
 
 #ifndef Version
   #define Version "0.0.0"
@@ -24,11 +24,11 @@
   #define OutputDir "."
 #endif
 
-#define AppName "ArchoeraMvsumc"
-#define AppExeName "archoera_mvsumc.exe"
+#define AppName "ArchoeraMvsync"
+#define AppExeName "archoera_mvsync.exe"
 ; Toast 前提：安装器建快捷方式时写入的 AUMID，须与 app 的
 ; backend_windows.cpp kAumid / watermark 侧常量一致。
-#define Aumid "Archoera.ArchoeraMvsumc"
+#define Aumid "Archoera.ArchoeraMvsync"
 
 [Setup]
 ; ── 应用标识（AppId 一旦发布不可更改：决定升级/卸载身份）──
@@ -38,9 +38,9 @@ AppVersion={#Version}
 AppVerName={#AppName} {#Version}
 AppPublisher=io.awa.archoera.betastudio2
 AppCopyright=Copyright (C) 2026 io.awa.archoera.betastudio2
-AppPublisherURL=https://github.com/ArchoeraC/ArchoeraMvsumc
-AppSupportURL=https://github.com/ArchoeraC/ArchoeraMvsumc/issues
-AppUpdatesURL=https://github.com/ArchoeraC/ArchoeraMvsumc/releases
+AppPublisherURL=https://github.com/ArchoeraC/ArchoeraMvsync
+AppSupportURL=https://github.com/ArchoeraC/ArchoeraMvsync/issues
+AppUpdatesURL=https://github.com/ArchoeraC/ArchoeraMvsync/releases
 
 ; ── 安装器自身 PE 的 VERSIONINFO ──
 ; 不写这些字段时 setup.exe 的文件属性是空的（FileVersion/版权/原始文件名都缺失），
@@ -94,7 +94,7 @@ WizardSmallImageFileDynamicDark=brand\wizard-small-64.png,brand\wizard-small-128
 
 ; ── 输出与压缩 ──
 OutputDir={#OutputDir}
-OutputBaseFilename=ArchoeraMvsumc-{#Version}-windows-x64-setup
+OutputBaseFilename=ArchoeraMvsync-{#Version}-windows-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -174,7 +174,7 @@ korean.UninstallDeleteUserData=사용자 데이터(설정, 캐시, 다운로드 
 english.UpdateWelcomeLabel1=Updating [name]
 chinesesimp.UpdateWelcomeLabel1=正在更新 [name]
 chinesetrad.UpdateWelcomeLabel1=正在更新 [name]
-german.UpdateWelcomeLabel1=ArchoeraMvsumc wird aktualisiert
+german.UpdateWelcomeLabel1=ArchoeraMvsync wird aktualisiert
 spanish.UpdateWelcomeLabel1=Actualizando [name]
 french.UpdateWelcomeLabel1=Mise à jour de [name]
 japanese.UpdateWelcomeLabel1=[name] を更新しています
@@ -189,23 +189,23 @@ french.UpdateWelcomeLabel2=L'installation va mettre à jour [name] de la version
 japanese.UpdateWelcomeLabel2=[name] をバージョン %1 から %2 に更新します。%n%n続行する前に、他のアプリケーションをすべて終了することをお勧めします。
 korean.UpdateWelcomeLabel2=[name]을(를) 버전 %1에서 %2(으)로 업데이트합니다.%n%n계속하기 전에 다른 모든 응용 프로그램을 닫는 것이 좋습니다.
 
-english.UpdateNeedsAdmin=ArchoeraMvsumc is currently installed for all users. Updating it requires administrative privileges: choose "Install for all users" in the wizard and approve the UAC prompt.
-chinesesimp.UpdateNeedsAdmin=检测到 ArchoeraMvsumc 已为所有用户安装。更新需要管理员权限：请在向导中选择「为所有用户安装」，并确认 UAC 提示。
-chinesetrad.UpdateNeedsAdmin=偵測到 ArchoeraMvsumc 已為所有使用者安裝。更新需要系統管理員權限：請在精靈中選擇「為所有使用者安裝」，並確認 UAC 提示。
-german.UpdateNeedsAdmin=ArchoeraMvsumc ist derzeit für alle Benutzer installiert. Für das Update sind Administratorrechte erforderlich: Wählen Sie im Setup "Für alle Benutzer installieren" und bestätigen Sie die UAC-Abfrage.
-spanish.UpdateNeedsAdmin=ArchoeraMvsumc está instalado para todos los usuarios. La actualización requiere privilegios administrativos: seleccione "Instalar para todos los usuarios" y confirme el aviso de UAC.
-french.UpdateNeedsAdmin=ArchoeraMvsumc est installé pour tous les utilisateurs. La mise à jour nécessite des privilèges administrateur : choisissez « Installer pour tous les utilisateurs » et confirmez l'invite UAC.
-japanese.UpdateNeedsAdmin=ArchoeraMvsumc は現在すべてのユーザー用にインストールされています。更新には管理者権限が必要です。セットアップで「すべてのユーザー用にインストール」を選び、UAC の確認を承認してください。
-korean.UpdateNeedsAdmin=ArchoeraMvsumc이(가) 모든 사용자용으로 설치되어 있습니다. 업데이트에는 관리자 권한이 필요합니다. 설치 마법사에서 "모든 사용자용으로 설치"를 선택하고 UAC 확인을 승인하세요.
+english.UpdateNeedsAdmin=ArchoeraMvsync is currently installed for all users. Updating it requires administrative privileges: choose "Install for all users" in the wizard and approve the UAC prompt.
+chinesesimp.UpdateNeedsAdmin=检测到 ArchoeraMvsync 已为所有用户安装。更新需要管理员权限：请在向导中选择「为所有用户安装」，并确认 UAC 提示。
+chinesetrad.UpdateNeedsAdmin=偵測到 ArchoeraMvsync 已為所有使用者安裝。更新需要系統管理員權限：請在精靈中選擇「為所有使用者安裝」，並確認 UAC 提示。
+german.UpdateNeedsAdmin=ArchoeraMvsync ist derzeit für alle Benutzer installiert. Für das Update sind Administratorrechte erforderlich: Wählen Sie im Setup "Für alle Benutzer installieren" und bestätigen Sie die UAC-Abfrage.
+spanish.UpdateNeedsAdmin=ArchoeraMvsync está instalado para todos los usuarios. La actualización requiere privilegios administrativos: seleccione "Instalar para todos los usuarios" y confirme el aviso de UAC.
+french.UpdateNeedsAdmin=ArchoeraMvsync est installé pour tous les utilisateurs. La mise à jour nécessite des privilèges administrateur : choisissez « Installer pour tous les utilisateurs » et confirmez l'invite UAC.
+japanese.UpdateNeedsAdmin=ArchoeraMvsync は現在すべてのユーザー用にインストールされています。更新には管理者権限が必要です。セットアップで「すべてのユーザー用にインストール」を選び、UAC の確認を承認してください。
+korean.UpdateNeedsAdmin=ArchoeraMvsync이(가) 모든 사용자용으로 설치되어 있습니다. 업데이트에는 관리자 권한이 필요합니다. 설치 마법사에서 "모든 사용자용으로 설치"를 선택하고 UAC 확인을 승인하세요.
 
-english.UpdateModeMismatch=ArchoeraMvsumc is currently installed for the current user only. To keep this installation, choose "Install for me only". To install for all users, uninstall the existing version first.
-chinesesimp.UpdateModeMismatch=检测到 ArchoeraMvsumc 仅安装在当前用户下。若要保留此安装，请选择「仅为我安装」；若要为所有用户安装，请先卸载现有版本。
-chinesetrad.UpdateModeMismatch=偵測到 ArchoeraMvsumc 僅安裝在目前使用者下。若要保留此安裝，請選擇「僅為我安裝」；若要為所有使用者安裝，請先解除安裝現有版本。
-german.UpdateModeMismatch=ArchoeraMvsumc ist derzeit nur für den aktuellen Benutzer installiert. Um diese Installation beizubehalten, wählen Sie "Nur für mich installieren". Für eine Installation für alle Benutzer deinstallieren Sie bitte zuerst die vorhandene Version.
-spanish.UpdateModeMismatch=ArchoeraMvsumc está instalado solo para el usuario actual. Para conservar esta instalación, seleccione "Instalar solo para mí". Para instalar para todos los usuarios, desinstale primero la versión existente.
-french.UpdateModeMismatch=ArchoeraMvsumc est installé uniquement pour l'utilisateur actuel. Pour conserver cette installation, choisissez « Installer pour moi uniquement ». Pour installer pour tous les utilisateurs, désinstallez d'abord la version existante.
-japanese.UpdateModeMismatch=ArchoeraMvsumc は現在、現在のユーザー用にのみインストールされています。このインストールを維持するには「自分のみにインストール」を選んでください。すべてのユーザー用にインストールするには、先に既存のバージョンをアンインストールしてください。
-korean.UpdateModeMismatch=ArchoeraMvsumc이(가) 현재 사용자용으로만 설치되어 있습니다. 이 설치를 유지하려면 "나만 설치"를 선택하세요. 모든 사용자용으로 설치하려면 기존 버전을 먼저 제거하세요.
+english.UpdateModeMismatch=ArchoeraMvsync is currently installed for the current user only. To keep this installation, choose "Install for me only". To install for all users, uninstall the existing version first.
+chinesesimp.UpdateModeMismatch=检测到 ArchoeraMvsync 仅安装在当前用户下。若要保留此安装，请选择「仅为我安装」；若要为所有用户安装，请先卸载现有版本。
+chinesetrad.UpdateModeMismatch=偵測到 ArchoeraMvsync 僅安裝在目前使用者下。若要保留此安裝，請選擇「僅為我安裝」；若要為所有使用者安裝，請先解除安裝現有版本。
+german.UpdateModeMismatch=ArchoeraMvsync ist derzeit nur für den aktuellen Benutzer installiert. Um diese Installation beizubehalten, wählen Sie "Nur für mich installieren". Für eine Installation für alle Benutzer deinstallieren Sie bitte zuerst die vorhandene Version.
+spanish.UpdateModeMismatch=ArchoeraMvsync está instalado solo para el usuario actual. Para conservar esta instalación, seleccione "Instalar solo para mí". Para instalar para todos los usuarios, desinstale primero la versión existente.
+french.UpdateModeMismatch=ArchoeraMvsync est installé uniquement pour l'utilisateur actuel. Pour conserver cette installation, choisissez « Installer pour moi uniquement ». Pour installer pour tous les utilisateurs, désinstallez d'abord la version existante.
+japanese.UpdateModeMismatch=ArchoeraMvsync は現在、現在のユーザー用にのみインストールされています。このインストールを維持するには「自分のみにインストール」を選んでください。すべてのユーザー用にインストールするには、先に既存のバージョンをアンインストールしてください。
+korean.UpdateModeMismatch=ArchoeraMvsync이(가) 현재 사용자용으로만 설치되어 있습니다. 이 설치를 유지하려면 "나만 설치"를 선택하세요. 모든 사용자용으로 설치하려면 기존 버전을 먼저 제거하세요.
 
 [Tasks]
 Name: "menuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
@@ -226,7 +226,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 [Registry]
 ; HKA（HKEY_AUTO）：per-user → HKCU，per-machine → HKLM（随安装模式自动选择）。
 ; 安装标记：应用据此判定「安装版」（Inno 的自动卸载键名带 _is1 后缀，不宜依赖）。
-; uninsdeletekey：卸载时删除整个 Software\ArchoeraMvsumc（含下方 StartMenuShortcut）；
+; uninsdeletekey：卸载时删除整个 Software\ArchoeraMvsync（含下方 StartMenuShortcut）；
 ; [Code] CurUninstallStepChanged 另做显式兜底删除，防止残留。
 Root: HKA; Subkey: "Software\{#AppName}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
 ; 开始菜单快捷方式偏好：0 = 用户选择不创建（应用不得为 Toast 悄悄重建）。
@@ -240,7 +240,7 @@ Type: files; Name: "{autoprograms}\{#AppName}.lnk"
 [UninstallDelete]
 ; 快捷方式兜底：安装器已直接写 AUMID，但 app 侧 ensureToastShortcut 仍可能就地
 ; 重写开始菜单 .lnk，未必都在 Inno 的 [Icons] 记录里，故卸载时按固定路径再清一遍。
-; （散装 `{autoprograms}\ArchoeraMvsumc.lnk` 已在安装时由 [InstallDelete] 清理，
+; （散装 `{autoprograms}\ArchoeraMvsync.lnk` 已在安装时由 [InstallDelete] 清理，
 ;   新版安装器不再产生，无需在卸载阶段处理。）
 Type: files; Name: "{autoprograms}\{#AppName}\{#AppName}.lnk"
 Type: files; Name: "{autodesktop}\{#AppName}.lnk"
@@ -456,14 +456,14 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    { 删除安装器写入的注册表项 Software\ArchoeraMvsumc（HKA：per-user=HKCU /
+    { 删除安装器写入的注册表项 Software\ArchoeraMvsync（HKA：per-user=HKCU /
       per-machine=HKLM）。两个根都显式清理：非特权的 per-user 卸载对 HKLM
       会静默失败（无权限，不弹 UAC），per-machine 卸载则能清 HKLM；
       应用自身不写注册表，故此处删除即为全部注册表足迹。 }
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\{#AppName}');
     RegDeleteKeyIncludingSubkeys(HKEY_LOCAL_MACHINE, 'Software\{#AppName}');
 
-    { 用户数据目录：%LOCALAPPDATA%\ArchoeraMvsumc（与 app 的 data_dir 一致）}
+    { 用户数据目录：%LOCALAPPDATA%\ArchoeraMvsync（与 app 的 data_dir 一致）}
     DataDir := ExpandConstant('{localappdata}\{#AppName}');
     if DirExists(DataDir) then
     begin

@@ -1,4 +1,4 @@
-# ArchoeraMvsumc CODEOWNERS
+# ArchoeraMvsync CODEOWNERS
 #
 # 关键路径（发布/签名/打包/CI）必须由维护者审阅，防止供应链篡改。
 # 语法：<path> <owner...>（GitHub 取最后一个匹配规则）。

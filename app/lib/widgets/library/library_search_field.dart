@@ -1,11 +1,11 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:material_ui/material_ui.dart';
 
 import '../player/s_controls.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 音乐库搜索框：文本由外部（[LibraryState.searchQuery]，见
 /// `services/scanner/library_store.dart`）**单向驱动**，组件自身不持有真值。

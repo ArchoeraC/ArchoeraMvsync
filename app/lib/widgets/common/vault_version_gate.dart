@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,7 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/l10n.dart';
 import '../../services/security/vault_process.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// vault 版本异常门（fail-closed）：握手时发现 vault 二进制非官方生产构建
 /// （TEST 标记/缺失 marker）→ 副本已删除、解密已拒绝——本门显示全屏警告，

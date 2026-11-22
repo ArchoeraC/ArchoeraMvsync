@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/widgets/player/background/blurred_cover.dart';
+import 'package:archoera_mvsync/widgets/player/background/blurred_cover.dart';
 
 /// 1x1 透明 PNG（避免引入额外测试依赖）。
 final Uint8List _transparentPng = Uint8List.fromList(<int>[

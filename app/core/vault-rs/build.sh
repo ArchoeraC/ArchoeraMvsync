@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMvsumc vault（凭据保险库）Rust 构建脚本（幂等）。
+# ArchoeraMvsync vault（凭据保险库）Rust 构建脚本（幂等）。
 #
 # 产物：vault-rs/build/archoera-vault —— **静态链接**单文件可执行（无动态库依赖），
 # 按需会话进程，经 stdin/stdout 行协议服务凭据（init/set/get/delete/destroy/status）。

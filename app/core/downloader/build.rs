@@ -1,4 +1,4 @@
-// ArchoeraMvsumc
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -23,12 +23,12 @@ fn main() {
 
     let mut res = winres::WindowsResource::new();
     res.set("CompanyName", "io.awa.archoera.betastudio2")
-        .set("FileDescription", "ArchoeraMvsumc download engine")
+        .set("FileDescription", "ArchoeraMvsync download engine")
         .set("InternalName", "archoera_downloader")
         .set("LegalCopyright", "Copyright (C) 2026 io.awa.archoera.betastudio2")
         .set("OriginalFilename", "archoera_downloader.dll")
-        .set("ProductName", "ArchoeraMvsumc")
-        .set("Comments", "https://github.com/ArchoeraC/ArchoeraMvsumc")
+        .set("ProductName", "ArchoeraMvsync")
+        .set("Comments", "https://github.com/ArchoeraC/ArchoeraMvsync")
         .set("FileVersion", &version)
         .set("ProductVersion", &version)
         .set_version_info(winres::VersionInfo::FILEVERSION, packed)

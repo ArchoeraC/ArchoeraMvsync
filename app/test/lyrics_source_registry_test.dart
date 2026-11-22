@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,10 +15,10 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/lyrics/engine/lyric_source.dart';
-import 'package:archoera_mvsumc/services/lyrics/engine/lyrics_engine.dart';
-import 'package:archoera_mvsumc/services/source/source_platform.dart';
-import 'package:archoera_mvsumc/stores/prefs_lyrics.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyric_source.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyrics_engine.dart';
+import 'package:archoera_mvsync/services/source/source_platform.dart';
+import 'package:archoera_mvsync/stores/prefs_lyrics.dart';
 
 /// 音源 → 歌词来源（在 Provider 内拿真实 [Ref]，与生产 `lyricsEngineProvider` 一致）。
 final _sourcesOfProvider = Provider.family<List<LyricSource>, SourcePlatform>(

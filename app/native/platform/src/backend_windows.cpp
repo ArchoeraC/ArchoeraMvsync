@@ -1,4 +1,4 @@
-// ArchoeraMvsumc 平台能力原生桥接
+// ArchoeraMvsync 平台能力原生桥接
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -129,7 +129,7 @@ void logReset() {}
 //   2) 开始菜单/All Programs 有一个带 `System.AppUserModel.ID` 的快捷方式，
 //      其值与 CreateToastNotifier(appId) 一致——否则桌面应用**无法弹 Toast**。
 // 安装器通常负责；便携版/首次运行由这里补齐（COM IShellLink 方案）。
-constexpr wchar_t kAumid[] = L"Archoera.ArchoeraMvsumc";
+constexpr wchar_t kAumid[] = L"Archoera.ArchoeraMvsync";
 
 void setAumid() {
     if (HMODULE shell = ::LoadLibraryA("shell32.dll")) {
@@ -141,9 +141,9 @@ void setAumid() {
 }
 
 // 是否"安装版"（与安装目录无关，用户可自定义）：
-//   - Inno Setup（现行）在安装模式对应的 hive 写 Software\ArchoeraMvsumc（HKA：
+//   - Inno Setup（现行）在安装模式对应的 hive 写 Software\ArchoeraMvsync（HKA：
 //     per-user → HKCU，per-machine → HKLM）；
-//   - 旧 NSIS（HKLM\...\Uninstall\ArchoeraMvsumc）、旧 per-user 卸载项（HKCU 同名）。
+//   - 旧 NSIS（HKLM\...\Uninstall\ArchoeraMvsync）、旧 per-user 卸载项（HKCU 同名）。
 // 便携版无任何标记 → 不创建快捷方式（无痕）。读取 HKCU/HKLM 普通用户即可。
 bool regKeyExists(HKEY root, const wchar_t* sub) {
     HKEY key = nullptr;
@@ -154,24 +154,24 @@ bool regKeyExists(HKEY root, const wchar_t* sub) {
 }
 
 constexpr wchar_t kUninstallSubkey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ArchoeraMvsumc";
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ArchoeraMvsync";
 
 // per-machine（为所有用户安装）：卸载项在 HKLM（Inno 在 admin 模式写 HKLM）。
 // per-user 只在 HKCU；便携版两者皆无。
 bool isAdminInstall() {
-    return regKeyExists(HKEY_LOCAL_MACHINE, L"Software\\ArchoeraMvsumc") ||
+    return regKeyExists(HKEY_LOCAL_MACHINE, L"Software\\ArchoeraMvsync") ||
            regKeyExists(HKEY_LOCAL_MACHINE, kUninstallSubkey);
 }
 
 bool isInstalled() {
     return isAdminInstall() ||
-           regKeyExists(HKEY_CURRENT_USER, L"Software\\ArchoeraMvsumc") ||
+           regKeyExists(HKEY_CURRENT_USER, L"Software\\ArchoeraMvsync") ||
            regKeyExists(HKEY_CURRENT_USER, kUninstallSubkey);
 }
 
 bool shortcutDisabledAt(HKEY root) {
     HKEY key = nullptr;
-    if (::RegOpenKeyExW(root, L"Software\\ArchoeraMvsumc", 0, KEY_READ, &key) !=
+    if (::RegOpenKeyExW(root, L"Software\\ArchoeraMvsync", 0, KEY_READ, &key) !=
         ERROR_SUCCESS) {
         return false;
     }
@@ -208,12 +208,12 @@ void ensureToastShortcut() {
     wchar_t dir[MAX_PATH];
     if (std::swprintf(
             dir, MAX_PATH,
-            L"%s\\Microsoft\\Windows\\Start Menu\\Programs\\ArchoeraMvsumc",
+            L"%s\\Microsoft\\Windows\\Start Menu\\Programs\\ArchoeraMvsync",
             base) <= 0) {
         return;
     }
     wchar_t lnk[MAX_PATH];
-    if (std::swprintf(lnk, MAX_PATH, L"%s\\ArchoeraMvsumc.lnk", dir) <= 0) return;
+    if (std::swprintf(lnk, MAX_PATH, L"%s\\ArchoeraMvsync.lnk", dir) <= 0) return;
 
     ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);  // 冲突/重复初始化忽略
     IShellLinkW* link = nullptr;
@@ -911,10 +911,10 @@ void messageBox(const char* title, const char* body) {
 // ── DeepLink / 协议唤醒（HKCU 注册 + 隐藏消息窗口 + WM_COPYDATA 转发）──
 // 全程当前用户、免提权：scheme 写 HKCU\Software\Classes；跨实例转发用隐藏
 // 消息窗口 + WM_COPYDATA（不依赖提权，也不起子进程）。
-constexpr wchar_t kDeepLinkClass[] = L"ArchoeraMvsumc.DeepLink";
+constexpr wchar_t kDeepLinkClass[] = L"ArchoeraMvsync.DeepLink";
 // 单向转发：第二实例把 URI 写入共享内存，再 PostMessage 通知隐藏窗口；
 // 不 SendMessage / 不等待首实例处理（UI 线程卡住也不会拖死第二实例）。
-constexpr wchar_t kDeepLinkMapName[] = L"Local\\ArchoeraMvsumc.DeepLink.Uri";
+constexpr wchar_t kDeepLinkMapName[] = L"Local\\ArchoeraMvsync.DeepLink.Uri";
 constexpr UINT kDeepLinkPushMsg = WM_APP + 0x52;
 constexpr DWORD kDeepLinkMapSize = 8192;
 // 隐藏窗口必须运行在**自己的消息循环线程**上：Dart FFI 调用发生在 UI
@@ -1048,7 +1048,7 @@ void deepLinkThreadProc() {
 
     HWND hwnd = ::CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kDeepLinkClass,
-        L"ArchoeraMvsumc.DeepLink", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst,
+        L"ArchoeraMvsync.DeepLink", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst,
         nullptr);
     HANDLE map = nullptr;
     if (hwnd != nullptr) {
@@ -1153,7 +1153,7 @@ int32_t protocolRegisterWin(const char* scheme) {
                           KEY_WRITE, nullptr, &hkey, nullptr) != ERROR_SUCCESS) {
         return ERR_BACKEND;
     }
-    const wchar_t* desc = L"URL:ArchoeraMvsumc";
+    const wchar_t* desc = L"URL:ArchoeraMvsync";
     ::RegSetValueExW(
         hkey, nullptr, 0, REG_SZ,
         reinterpret_cast<const BYTE*>(desc),
@@ -1258,7 +1258,7 @@ int32_t deepLinkForwardWin() {
 // ── 系统托盘（Shell_NotifyIconW + 隐藏消息窗口线程）───────────────
 // Dart 可从任意线程调用 tray*；所有 Win32 窗口/菜单操作都投递到独立托盘窗口
 // 线程执行（PostMessage 自定义消息 + 队列），避免跨线程直接碰 HWND/HMENU。
-constexpr wchar_t kTrayClass[] = L"ArchoeraMvsumc.Tray";
+constexpr wchar_t kTrayClass[] = L"ArchoeraMvsync.Tray";
 constexpr UINT kTrayCallback = WM_APP + 0x64;  // NOTIFYICONDATAW::uCallbackMessage
 constexpr UINT kTrayTask = WM_APP + 0x65;      // 投递到窗口线程的任务
 constexpr UINT kTrayQuit = WM_APP + 0x66;      // 请求窗口线程退出
@@ -1488,7 +1488,7 @@ void trayThreadProc() {
     g_tray_taskbar_created = ::RegisterWindowMessageW(L"TaskbarCreated");
 
     const HWND hwnd = ::CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kTrayClass, L"ArchoeraMvsumc.Tray",
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kTrayClass, L"ArchoeraMvsync.Tray",
         WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
     {
         std::lock_guard<std::mutex> lock(g_tray_mutex);
@@ -1693,7 +1693,7 @@ int32_t appInstanceAcquire() {
         ensureDeepLinkWindow(); // 幂等：保证隐藏窗口/共享内存存在
         return 1;
     }
-    HANDLE h = ::CreateMutexW(nullptr, FALSE, L"Local\\ArchoeraMvsumc.SingleInstance");
+    HANDLE h = ::CreateMutexW(nullptr, FALSE, L"Local\\ArchoeraMvsync.SingleInstance");
     if (h == nullptr) return ERR_BACKEND;
     if (::GetLastError() == ERROR_ALREADY_EXISTS) {
         ::CloseHandle(h);

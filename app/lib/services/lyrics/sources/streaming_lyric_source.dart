@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@
 /// - 服务器返回歌词（内嵌扫描）→ 直接用；
 /// - 服务端**自带**逐字（`lxlyric`）或罗马音（`rlyric`）时按其格式交给引擎，
 ///   只在 `preferRich` 时优先逐字；**客户端不主动在线抓取**逐字 / 罗马音；
-/// - 服务器为 ArchoeraMvsumc 且曲库无内嵌歌词时，返回扩展标记
+/// - 服务器为 ArchoeraMvsync 且曲库无内嵌歌词时，返回扩展标记
 ///   [StreamingLyrics.fetchOnline]，此时由**客户端**（本机）自行在线补全：
 ///   按用户来源顺序查询 netease/qqmusic/kugou。该扩展仅我方服务端 + 我方
 ///   客户端之间生效，标准 Subsonic 客户端不受影响。

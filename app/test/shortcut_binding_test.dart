@@ -1,9 +1,9 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import 'package:archoera_mvsumc/services/shortcuts/shortcut_action.dart';
-import 'package:archoera_mvsumc/services/shortcuts/shortcut_binding.dart';
+import 'package:archoera_mvsync/services/shortcuts/shortcut_action.dart';
+import 'package:archoera_mvsync/services/shortcuts/shortcut_binding.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show SingleActivator;
 import 'package:flutter_test/flutter_test.dart';

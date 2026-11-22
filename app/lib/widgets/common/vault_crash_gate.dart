@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,7 +8,7 @@ import '../../l10n/l10n.dart';
 import '../../services/log/log.dart';
 import '../../services/security/vault_process.dart';
 import '../../stores/data_dir.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 凭据模块崩溃警告门（credential-vault-plan §3.7 fail-closed）：
 /// 启动时若上次会话异常退出（`vault.marker` = crash），首帧弹显著警告——

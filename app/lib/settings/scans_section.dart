@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,7 +15,7 @@ import '../../services/platform/platform_capabilities.dart';
 import '../../services/scanner/library_scanner.dart';
 import '../../stores/app_prefs.dart';
 import 'settings_widgets.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 扫描分类：并行度 / 批大小 / 安全上限 / 额外扩展名 / 坏文件隔离管理。
 ///

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -35,7 +35,7 @@ import '../common/glass_blur.dart';
 import '../common/toast.dart';
 import 'window_controls.dart';
 
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'nav_header/nav_header_accounts.dart';
 part 'nav_header/nav_header_search_dropdown.dart';

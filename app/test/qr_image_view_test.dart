@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,7 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/widgets/common/qr_image_view.dart';
+import 'package:archoera_mvsync/widgets/common/qr_image_view.dart';
 
 void main() {
   testWidgets('QrImageView 渲染出码点（含深色模块）', (tester) async {

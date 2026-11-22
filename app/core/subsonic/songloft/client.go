@@ -1,4 +1,4 @@
-// ArchoeraMvsumc
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -428,7 +428,7 @@ func (s *Session) do(
 		return nil, 0, newError(CodeProtocol, "请求构造失败: %v", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "ArchoeraMvsumc")
+	req.Header.Set("User-Agent", "ArchoeraMvsync")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -854,7 +854,7 @@ func (s *Session) fetchBinary(ctx context.Context, path string) ([]byte, string,
 	if err != nil {
 		return nil, "", newError(CodeProtocol, "请求构造失败: %v", err)
 	}
-	req.Header.Set("User-Agent", "ArchoeraMvsumc")
+	req.Header.Set("User-Agent", "ArchoeraMvsync")
 	if tok := s.token(); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}

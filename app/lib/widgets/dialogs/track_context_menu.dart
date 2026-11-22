@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -30,7 +30,7 @@ import 's_dialog.dart';
 import 'track_detail_dialog.dart';
 import '../common/toast.dart';
 
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'track_context_menu/track_context_menu_menu.dart';
 part 'track_context_menu/track_context_menu_download.dart';

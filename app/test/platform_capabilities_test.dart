@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,13 +8,13 @@
 // 注意：PlatformCapabilities 为进程级单例，测试只验证 Noop 形态，
 // 不与 FFI 实现混用（bridgeLoaded 仅在真机带产物时为 true）。
 
-import 'package:archoera_mvsumc/services/platform/ffi_system_power.dart';
-import 'package:archoera_mvsumc/services/platform/platform_bindings.dart'
+import 'package:archoera_mvsync/services/platform/ffi_system_power.dart';
+import 'package:archoera_mvsync/services/platform/platform_bindings.dart'
     show aplErrUnsupported;
-import 'package:archoera_mvsumc/services/platform/platform_capabilities.dart';
-import 'package:archoera_mvsumc/services/platform/system_media.dart';
-import 'package:archoera_mvsumc/services/platform/system_power.dart';
-import 'package:archoera_mvsumc/services/platform/system_window.dart';
+import 'package:archoera_mvsync/services/platform/platform_capabilities.dart';
+import 'package:archoera_mvsync/services/platform/system_media.dart';
+import 'package:archoera_mvsync/services/platform/system_power.dart';
+import 'package:archoera_mvsync/services/platform/system_window.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

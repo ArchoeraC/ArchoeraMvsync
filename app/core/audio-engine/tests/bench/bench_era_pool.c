@@ -1,9 +1,9 @@
-// ArchoeraMvsumc Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMvsumc 自研音频内核
+// EraSync — ArchoeraMvsync 自研音频内核
 
-// ArchoeraMvsumc Audio Framework · bench_era_pool.c
+// ArchoeraMvsync Audio Framework · bench_era_pool.c
 // 常驻内核池（ZkEngine）并发解码基准（headless：静音、无设备）。
 // 用法：
 //   bench_era_pool HOST_MAX FILE...       并发解码（pthread 数 = FILE 数，各开一个流式会话

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import '../../services/streaming/streaming_provider.dart';
 import '../dialogs/track_context_menu.dart';
 import '../list/song_list.dart';
 import '../player/s_controls.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 歌曲 Tab：播放全部 + 本地过滤搜索 + 歌曲列表。
 class StreamingSongsTab extends ConsumerStatefulWidget {

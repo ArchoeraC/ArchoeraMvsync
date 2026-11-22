@@ -1,20 +1,20 @@
 <p align="center">
-  <img src="logo.png" width="128" height="128" alt="ArchoeraMvsumc">
+  <img src="logo.png" width="128" height="128" alt="ArchoeraMvsync">
 </p>
 
-# ArchoeraMvsumc
+# ArchoeraMvsync
 
 > 开源、多端、面向本地与在线音乐的混合架构播放器
 
 <p align="center">
-  <img src="screenshot.png" width="720" alt="ArchoeraMvsumc 主界面">
+  <img src="screenshot.png" width="720" alt="ArchoeraMvsync 主界面">
 </p>
 
-> 想先看看观感？[宣传页](https://betastudio2.github.io/ArchoeraMvsumc/) 用静态页面复刻了开屏动效，并整理了功能、引擎与下载入口。
+> 想先看看观感？[宣传页](https://betastudio2.github.io/ArchoeraMvsync/) 用静态页面复刻了开屏动效，并整理了功能、引擎与下载入口。
 
 ---
 
-ArchoeraMvsumc 是一个开源的**多平台音乐播放器**
+ArchoeraMvsync 是一个开源的**多平台音乐播放器**
 
 - 连接**NT / KG / QM / BL**等在线服务（另含实验性第三方音源）
 - 本地音乐库扫描与元数据刮削
@@ -26,8 +26,8 @@ ArchoeraMvsumc 是一个开源的**多平台音乐播放器**
 > 完整的自编译手册（三端环境 / 逐模块构建 / 调试 / 打包 / 常见问题）见 **[docs/user-build-from-source.md](docs/user-build-from-source.md)**；三端打包由 [CI workflows](.github/workflows) 提供。
 
 ```bash
-git clone https://github.com/ArchoeraC/ArchoeraMvsumc.git
-cd ArchoeraMvsumc
+git clone https://github.com/ArchoeraC/ArchoeraMvsync.git
+cd ArchoeraMvsync
 
 # 编译模块：Linux/macOS 逐模块，Windows 用 app/core/build_windows.bat（详见上述手册）
 cd app
@@ -79,6 +79,6 @@ flutter run -d linux      # 或 windows / macos
 
 ## 联系与贡献
 
-- 仓库：<https://github.com/ArchoeraC/ArchoeraMvsumc>
+- 仓库：<https://github.com/ArchoeraC/ArchoeraMvsync>
 - 贡献前请阅读 **[CONTRIBUTING.md](CONTRIBUTING.md)**；安全漏洞请按 [SECURITY.md](SECURITY.md) 隐式报告。
 - PR 合入前需通过签名或显式确认接受 [贡献者授权](docs/licensing.md#21-贡献者授权contributor-license-grant)。

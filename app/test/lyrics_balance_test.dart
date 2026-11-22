@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,8 +8,8 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
-import 'package:archoera_mvsumc/widgets/player/lyrics_view/lyrics_balance.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/widgets/player/lyrics_view/lyrics_balance.dart';
 
 const _style = TextStyle(fontSize: 14);
 const _width = 14.0 * 10; // Ahem：每字 14px，一行 10 字。

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,9 +13,9 @@ pub const DEFAULT_MCP_PORT: u16 = 14559;
 
 /// 应用数据根目录：
 ///   - `ARCHOERA_DATA_DIR` 覆盖；
-///   - Linux：`~/.local/share/ArchoeraMvsumc`
-///   - macOS：`~/Library/Application Support/ArchoeraMvsumc`
-///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsumc`
+///   - Linux：`~/.local/share/ArchoeraMvsync`
+///   - macOS：`~/Library/Application Support/ArchoeraMvsync`
+///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsync`
 pub fn data_dir() -> PathBuf {
     if let Some(v) = std::env::var_os("ARCHOERA_DATA_DIR") {
         if !v.is_empty() {
@@ -27,15 +27,15 @@ pub fn data_dir() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
     if cfg!(target_os = "macos") {
-        return home.join("Library/Application Support/ArchoeraMvsumc");
+        return home.join("Library/Application Support/ArchoeraMvsync");
     }
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData/Local"));
-        return local.join("ArchoeraMvsumc");
+        return local.join("ArchoeraMvsync");
     }
-    home.join(".local/share/ArchoeraMvsumc")
+    home.join(".local/share/ArchoeraMvsync")
 }
 
 fn load() -> Value {

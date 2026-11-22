@@ -71,7 +71,7 @@
   `mcp` / `unified-logging` / `local-library` / `audio-kernel-zig` / `ffi-libs-layout-plan`
   及 `docs/archive/`。
 - **第二轮扩面（2026-10-11，其它位置）**：CI 与发布供应链（`.github/workflows/build-all.yml`、
-  `.github/actions/build-linux/action.yml`、`.github/CODEOWNERS`）、打包（`packaging/windows/archoera_mvsumc.iss`、
+  `.github/actions/build-linux/action.yml`、`.github/CODEOWNERS`）、打包（`packaging/windows/archoera_mvsync.iss`、
   `packaging/linux/*`）、工具脚本（`app/tool/sign_release.sh` / `verify_release.sh` / `sign_watermark.sh`）、
   hooks（`.githooks/pre-commit`）、平台能力（`platform-native-bridge.md` / `platform-capability-facade.md` /
   `archive/CROSS_PLATFORM_CAPABILITY_IMPROVEMENT.md` / `module-on-demand-load-plan.md`）与内存稿

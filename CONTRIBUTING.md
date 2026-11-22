@@ -1,4 +1,4 @@
-# ArchoeraMvsumc 开发规范（贡献者与协作者必读）
+# ArchoeraMvsync 开发规范（贡献者与协作者必读）
 
 > **温馨提醒**：开发者可能呆但不傻，请在完整阅读完贡献条款，确认您可以接受后，再进行 fork、PR 等操作。
 
@@ -449,7 +449,7 @@ PR 描述需包含：
   [docs/ui-design-baseline.md](docs/ui-design-baseline.md)。
 - **字体 / 图标资源**同样受管：新字形来源与改作说明进 `app/eta-tools/` 对应 README 与 [docs/acknowledgements.md](docs/acknowledgements.md)；
   非 OFL 字体（MiSans / HarmonyOS Sans）不得二次分发源文件或改编。
-- **品牌与 fork（品牌未授权）**：AGPL 授予的是**代码**自由，不含品牌——项目名 ArchoeraMvsumc、logo、
+- **品牌与 fork（品牌未授权）**：AGPL 授予的是**代码**自由，不含品牌——项目名 ArchoeraMvsync、logo、
   自有品牌标识字体 EtaMark、官方发布渠道与签名，不得被 fork 用于暗示官方背书。fork 再分发须：
   更换名称与品牌标识、使用自有更新渠道、完整保留 AGPL 合规义务（源码开放 / LICENSE /
   各模块 `THIRD-PARTY-LICENSES.md`）；官方产物仅以本仓库 GitHub Releases 为准，

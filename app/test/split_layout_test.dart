@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,15 +11,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/pages/player/layouts/player_layout.dart';
-import 'package:archoera_mvsumc/pages/player/layouts/split_layout.dart';
-import 'package:archoera_mvsumc/services/playback/playback_notifier.dart';
-import 'package:archoera_mvsumc/services/playback/playback_state.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/stores/lyrics_provider.dart';
-import 'package:archoera_mvsumc/widgets/player/player_cover.dart';
-import 'package:archoera_mvsumc/widgets/player/player_shared_elements.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/pages/player/layouts/player_layout.dart';
+import 'package:archoera_mvsync/pages/player/layouts/split_layout.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_state.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/lyrics_provider.dart';
+import 'package:archoera_mvsync/widgets/player/player_cover.dart';
+import 'package:archoera_mvsync/widgets/player/player_shared_elements.dart';
 
 class _StubPrefs extends AppPrefsNotifier {
   @override

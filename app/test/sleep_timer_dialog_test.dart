@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,10 +10,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/widgets/dialogs/sleep_timer_dialogs.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/dialogs/sleep_timer_dialogs.dart';
 
 /// 不读写磁盘的偏好 Notifier。
 class _TestPrefsNotifier extends AppPrefsNotifier {

@@ -1,6 +1,6 @@
 {
-    "name": "archoera_mvsumc",
-    "short_name": "archoera_mvsumc",
+    "name": "archoera_mvsync",
+    "short_name": "archoera_mvsync",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

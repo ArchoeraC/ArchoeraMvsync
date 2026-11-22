@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // 仅目录整理（organize）集成回归：源目录内文件按模板移入目标目录树。
@@ -6,8 +6,8 @@
 
 import 'dart:io';
 
-import 'package:archoera_mvsumc/services/scraper/scraper_bindings.dart';
-import 'package:archoera_mvsumc/services/scraper/scrape_controller.dart';
+import 'package:archoera_mvsync/services/scraper/scraper_bindings.dart';
+import 'package:archoera_mvsync/services/scraper/scrape_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

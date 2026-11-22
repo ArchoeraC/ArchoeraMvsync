@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ArchoeraMvsumc UI
+# ArchoeraMvsync UI
 # Copyright (C) 2026 Archoera && BetaStudio2
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """发布 SBOM 归一化（CycloneDX JSON，配合 `gen_sbom.sh` 使用）。
@@ -7,7 +7,7 @@
 syft 直接扫「产物 + 锁文件」得到的原始清单有三处不适合直接发布：
 
 1. **主体是文件/目录**：目录扫描会把 `metadata.component.type` 记成 `file`，
-   而发布物的主体应当是**应用**（ArchoeraMvsumc <版本>）；
+   而发布物的主体应当是**应用**（ArchoeraMvsync <版本>）；
 2. **文件条目噪音**：目录里的普通文件会被记成 `type: file` 组件（绝对路径 +
    码值），它们不是依赖；发布资产的字节校验由 `SHA256SUMS` / `.sig1` 负责；
 3. **重复**：同一 crate / NuGet 包会出现在多个锁文件里（5 份 `Cargo.lock`、
@@ -70,11 +70,11 @@ def normalize(raw_path: str, out_path: str, version: str) -> None:
         {"ref": ref, "dependsOn": sorted(deps)} for ref, deps in merged.items()
     ]
 
-    # 4) 主体：应用（ArchoeraMvsumc <版本>），而不是「被扫描的文件/目录」。
+    # 4) 主体：应用（ArchoeraMvsync <版本>），而不是「被扫描的文件/目录」。
     metadata = doc.setdefault("metadata", {})
     root = metadata.setdefault("component", {})
     root["type"] = "application"
-    root["name"] = "ArchoeraMvsumc"
+    root["name"] = "ArchoeraMvsync"
     root["version"] = version
     # 根节点展开为「包含全部组件」，便于 Dependency-Track 等工具按项目展开。
     root_ref = root.get("bom-ref")

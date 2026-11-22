@@ -82,7 +82,7 @@
 ```json
 {
   "mcpServers": {
-    "archoera-mvsumc": {
+    "archoera-mvsync": {
       "type": "http",
       "url": "http://127.0.0.1:14559/mcp",
       "headers": { "X-Archoera-Key": "<设置页显示的访问密钥>" }
@@ -197,8 +197,8 @@
 随桌面端二进制内置一个命令行客户端，采用类 Unix 语法：
 
 ```bash
-archoera_mvsumc archoerashell [全局选项] <命令> [参数...]   # Linux / macOS
-archoera_mvsumc archoerashell [全局选项] <命令> ...         # Windows（转发到伴生程序）
+archoera_mvsync archoerashell [全局选项] <命令> [参数...]   # Linux / macOS
+archoera_mvsync archoerashell [全局选项] <命令> ...         # Windows（转发到伴生程序）
 archoerashell.exe [全局选项] <命令> [参数...]             # Windows（控制台伴生程序，推荐）
 ```
 
@@ -210,7 +210,7 @@ archoerashell.exe [全局选项] <命令> [参数...]             # Windows（�
 - **Windows**：Rust CLI **只**编进控制台伴生程序 `archoerashell.exe`
   （`app/windows/runner/shell_main.cpp`，控制台子系统）——cmd/PowerShell 会等待其
   退出且独占控制台输入，REPL 与脚本都稳。
-  `archoera_mvsumc.exe archoerashell …` 仍保留兼容：`main.cpp` 在 `wWinMain` 起始处
+  `archoera_mvsync.exe archoerashell …` 仍保留兼容：`main.cpp` 在 `wWinMain` 起始处
   检测到子命令后，**转发**给同目录的 `archoerashell.exe`（继承标准输入/输出与退出码），
   因此 GUI 主程序不再静态链入 Rust std（不引入 `WS2_32`/控制台/`dbghelp` 等导入，
   避免未签名 GUI 被 AV 误判为内置网络命令行的 loader）。
@@ -240,7 +240,7 @@ archoerashell.exe [全局选项] <命令> [参数...]             # Windows（�
 > archoerashell status
 > archoerashell            # 进入交互式 REPL
 > ```
-> 主程序子命令 `archoera_mvsumc archoerashell …` 是兼容入口：GUI 进程把参数转发给
+> 主程序子命令 `archoera_mvsync archoerashell …` 是兼容入口：GUI 进程把参数转发给
 > 同目录的 `archoerashell.exe` 并等待其退出，行为与直接调用伴生程序一致；需要严格
 > 同步时仍建议直接用 `archoerashell.exe`。`stdout` 被重定向/管道时输出自动回退纯文本。
 
@@ -294,8 +294,8 @@ archoerashell --json library 周杰伦 | jq '.tracks[].title'
 
 > **macOS**：独立 CLI 位于 app bundle 内，未加入 `PATH`；可直接调用或自行软链：
 > ```bash
-> /Applications/ArchoeraMvsumc.app/Contents/MacOS/archoerashell status
-> ln -s /Applications/ArchoeraMvsumc.app/Contents/MacOS/archoerashell ~/.local/bin/archoerashell
+> /Applications/ArchoeraMvsync.app/Contents/MacOS/archoerashell status
+> ln -s /Applications/ArchoeraMvsync.app/Contents/MacOS/archoerashell ~/.local/bin/archoerashell
 > ```
 
 ---
@@ -314,7 +314,7 @@ archoerashell --json library 周杰伦 | jq '.tracks[].title'
   `width.rs` 显示宽度、`render.rs` TUI、`http.rs` 回环 HTTP、`cli.rs` 解析/分派/REPL、
   `lineedit.rs` 行编辑（原始模式按键解析、会话历史、CJK 感知重绘）、
   `console.rs` Windows 控制台/原始输入引导、`build.rs` 从 ARB 生成帮助文案）。
-  staticlib 由各平台主 GUI 程序链入，在 Flutter 初始化前分派 `archoera_mvsumc
+  staticlib 由各平台主 GUI 程序链入，在 Flutter 初始化前分派 `archoera_mvsync
   archoerashell …`（Linux `app/linux/runner/main.cc`、macOS
   `app/macos/Runner/main.swift`、Windows `app/windows/runner/main.cpp`）；Windows 另
   提供控制台子系统伴生程序 `app/windows/runner/shell_main.cpp`（`archoerashell.exe`，

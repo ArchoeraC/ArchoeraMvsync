@@ -1,5 +1,5 @@
 {
-  # ArchoeraMvsumc —— NixOS「源构建」flake（脱离 Ubuntu/发行版，nixpkgs 工具链）。
+  # ArchoeraMvsync —— NixOS「源构建」flake（脱离 Ubuntu/发行版，nixpkgs 工具链）。
   #
   # 拆成多个 derivation，便于**增量构建**：Nix 按输入哈希缓存成功产物，改动某一
   # 模块只重编它及其下游，已成功的阶段直接跳过。
@@ -13,7 +13,7 @@
   # LGPL·仅音频**版本（保持 GPL 防火墙与内嵌 native/ 布局一致），不用 nixpkgs
   # 的 ffmpeg（其构建含 GPL 组件）。
 
-  description = "ArchoeraMvsumc — 开源音乐播放器（Nix 源构建）";
+  description = "ArchoeraMvsync — 开源音乐播放器（Nix 源构建）";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -114,7 +114,7 @@ NUGETCFG
           runHook postInstall
         '';
         meta = commonMeta // {
-          description = "ArchoeraMvsumc 使用的 Zig 编译器（官方预编译发行包）";
+          description = "ArchoeraMvsync 使用的 Zig 编译器（官方预编译发行包）";
         };
       });
 
@@ -175,7 +175,7 @@ NUGETCFG
           runHook postBuild
         '';
         dontInstall = true;
-        meta = commonMeta // { description = "ArchoeraMvsumc minimal audio-only LGPL FFmpeg"; };
+        meta = commonMeta // { description = "ArchoeraMvsync minimal audio-only LGPL FFmpeg"; };
       };
 
       # ── 2. Zig 内核（静态库给引擎，动态库给 scanner）─────────────────────
@@ -196,7 +196,7 @@ NUGETCFG
           runHook postBuild
         '';
         dontInstall = true;
-        meta = commonMeta // { description = "ArchoeraMvsumc Zig decode kernel"; };
+        meta = commonMeta // { description = "ArchoeraMvsync Zig decode kernel"; };
       };
 
       # ── 3. audio-engine（C + CMake + Rust tempo，链接内核/FFmpeg）─────────
@@ -244,7 +244,7 @@ NUGETCFG
           cp -a app/core/audio-engine/build/ffmpeg $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc audio engine"; };
+        meta = commonMeta // { description = "ArchoeraMvsync audio engine"; };
       };
 
       # ── 4. scraper（C++ + CMake）─────────────────────────────────────────
@@ -276,7 +276,7 @@ NUGETCFG
           cp -a app/core/scraper/build/libarchoera_scraper.so $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc metadata scraper"; };
+        meta = commonMeta // { description = "ArchoeraMvsync metadata scraper"; };
       };
 
       # ── 5. scanner（.NET NativeAOT，内嵌内核动态库）──────────────────────
@@ -317,7 +317,7 @@ NUGETCFG
                 app/core/scanner/build/libe_sqlite3.so $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc library scanner (NativeAOT)"; };
+        meta = commonMeta // { description = "ArchoeraMvsync library scanner (NativeAOT)"; };
       };
 
       # ── 6. indexer（.NET NativeAOT 本地曲库搜索索引；与 scanner 同栈）─────
@@ -357,7 +357,7 @@ NUGETCFG
                 app/core/indexer/build/libe_sqlite3.so $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc local search indexer (NativeAOT)"; };
+        meta = commonMeta // { description = "ArchoeraMvsync local search indexer (NativeAOT)"; };
       };
 
       # ── 7. vault（Rust 静态单文件；C# 版已于 2026-10-12 删除）────────────
@@ -393,7 +393,7 @@ NUGETCFG
           cp -a app/core/vault-rs/build/archoera-vault $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc credential vault (Rust, static)"; };
+        meta = commonMeta // { description = "ArchoeraMvsync credential vault (Rust, static)"; };
       };
 
       # ── 8. downloader（Rust cdylib）──────────────────────────────────────
@@ -423,7 +423,7 @@ NUGETCFG
           cp -a app/core/downloader/target/release/libarchoera_downloader.so $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc downloader (Rust)"; };
+        meta = commonMeta // { description = "ArchoeraMvsync downloader (Rust)"; };
       };
 
       # ── 9. subsonic（Go c-shared + Rust 转码器）──────────────────────────
@@ -455,7 +455,7 @@ NUGETCFG
           cp -a app/core/subsonic/build/. $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc subsonic server (Go + Rust)"; };
+        meta = commonMeta // { description = "ArchoeraMvsync subsonic server (Go + Rust)"; };
       };
 
       # ── 10. platform bridge（C++ + CMake，dbus）───────────────────────────
@@ -483,12 +483,12 @@ NUGETCFG
           cp -a app/native/platform/build/out/. $out/
           runHook postInstall
         '';
-        meta = commonMeta // { description = "ArchoeraMvsumc platform bridge"; };
+        meta = commonMeta // { description = "ArchoeraMvsync platform bridge"; };
       };
 
       # ── 11. Flutter 应用 + 组装 ──────────────────────────────────────────
-      archoera-mvsumc = pkgs.stdenv.mkDerivation {
-        pname = "archoera-mvsumc";
+      archoera-mvsync = pkgs.stdenv.mkDerivation {
+        pname = "archoera-mvsync";
         inherit version;
         src = src;
 
@@ -624,20 +624,20 @@ HOOKPC
 
         installPhase = ''
           runHook preInstall
-          APP_ID="awa.archoera.betastudio2.archoera_mvsumc"
+          APP_ID="awa.archoera.betastudio2.archoera_mvsync"
 
-          mkdir -p $out/lib/archoera-mvsumc $out/bin \
+          mkdir -p $out/lib/archoera-mvsync $out/bin \
             $out/share/applications $out/share/icons/hicolor/512x512/apps \
             $out/share/metainfo
-          cp -r app/build/linux/x64/release/bundle/. $out/lib/archoera-mvsumc/
-          chmod +x $out/lib/archoera-mvsumc/archoera_mvsumc
-          makeWrapper $out/lib/archoera-mvsumc/archoera_mvsumc $out/bin/archoera-mvsumc
+          cp -r app/build/linux/x64/release/bundle/. $out/lib/archoera-mvsync/
+          chmod +x $out/lib/archoera-mvsync/archoera_mvsync
+          makeWrapper $out/lib/archoera-mvsync/archoera_mvsync $out/bin/archoera-mvsync
 
-          sed "s|@EXEC@|archoera-mvsumc %U|g" \
-            packaging/linux/archoera-mvsumc.desktop.in \
+          sed "s|@EXEC@|archoera-mvsync %U|g" \
+            packaging/linux/archoera-mvsync.desktop.in \
             > $out/share/applications/$APP_ID.desktop
           sed "s|@VERSION@|${version}|g" \
-            packaging/linux/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml.in \
+            packaging/linux/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml.in \
             > $out/share/metainfo/$APP_ID.metainfo.xml
           install -Dm644 app/linux/runner/resources/app_icon_512.png \
             $out/share/icons/hicolor/512x512/apps/$APP_ID.png
@@ -660,17 +660,17 @@ HOOKPC
 
         meta = with lib; {
           description = "开源、多端、面向本地与在线音乐的混合架构播放器";
-          homepage = "https://github.com/ArchoeraC/ArchoeraMvsumc";
+          homepage = "https://github.com/ArchoeraC/ArchoeraMvsync";
           license = licenses.agpl3Only;
-          mainProgram = "archoera-mvsumc";
+          mainProgram = "archoera-mvsync";
           platforms = [ "x86_64-linux" ];
         };
       };
     in
     {
       packages.${system} = {
-        default = archoera-mvsumc;
-        archoera-mvsumc = archoera-mvsumc;
+        default = archoera-mvsync;
+        archoera-mvsync = archoera-mvsync;
         inherit
           ffmpegMinimal
           kernel

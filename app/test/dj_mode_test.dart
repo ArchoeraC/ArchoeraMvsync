@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/netease/track.dart';
-import 'package:archoera_mvsumc/services/playback/dj_mode.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/playback/dj_mode.dart';
 
 Track _t(String title, {String artist = 'X', String? album}) => Track(
   id: '1',

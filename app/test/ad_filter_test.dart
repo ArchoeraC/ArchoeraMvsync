@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,9 +6,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/lyrics/ad_filter.dart';
-import 'package:archoera_mvsumc/services/lyrics/engine/lyric_pipeline.dart';
-import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/lyrics/ad_filter.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyric_pipeline.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
 
 void main() {
   test('isAdMetadataText：命中站点推广，放过正规歌词', () {

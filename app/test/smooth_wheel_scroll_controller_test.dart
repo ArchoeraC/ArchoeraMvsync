@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,7 +14,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/widgets/common/smooth_wheel_scroll_controller.dart';
+import 'package:archoera_mvsync/widgets/common/smooth_wheel_scroll_controller.dart';
 
 /// 被测列表：树形**恒定**（`Builder > Theme > MediaQuery > ListView`），
 /// 只改继承数据——与真实主题动画（封面主色变化）同一路径：

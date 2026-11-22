@@ -1,7 +1,7 @@
-// ArchoeraMvsumc Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: BSD-3-Clause
-// EraSync — ArchoeraMvsumc 音频内核
+// EraSync — ArchoeraMvsync 音频内核
 //
 // ⚠ 衍生作品：移植 / 对照自 WavPack（BSD-3-Clause，David Bryant 等）。
 // 上游版权归 WavPack 作者所有；本文件按 BSD-3-Clause 分发，

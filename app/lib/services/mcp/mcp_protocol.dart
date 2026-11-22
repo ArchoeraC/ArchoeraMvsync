@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -181,12 +181,12 @@ class McpRpcHandler {
             'resources': const {'subscribe': false, 'listChanged': false},
           },
           'serverInfo': {
-            'name': 'archoera-mvsumc',
-            'title': 'ArchoeraMvsumc',
+            'name': 'archoera-mvsync',
+            'title': 'ArchoeraMvsync',
             'version': appVersion,
           },
           'instructions':
-              'ArchoeraMvsumc 本地控制服务：可查询播放状态、控制播放/队列、'
+              'ArchoeraMvsync 本地控制服务：可查询播放状态、控制播放/队列、'
               '搜索在线音源与本地曲库、读取应用偏好。',
         },
       },

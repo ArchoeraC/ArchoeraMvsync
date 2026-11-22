@@ -1,10 +1,10 @@
-# ArchoeraMvsumc 隐私政策
+# ArchoeraMvsync 隐私政策
 
 **版本：v1.0**<br>
 **生效日期：2026 年 9 月 29 日**<br>
 **最近更新：2026 年 9 月 29 日**
 
-欢迎使用 ArchoeraMvsumc（以下简称「本软件」或「我们」）。我们深知个人信息对您的重要性，并始终致力于保护您的隐私与数据安全。本政策向您说明在您使用本软件的过程中，我们如何处理、存储与保护您的信息，以及您所享有的相关权利。
+欢迎使用 ArchoeraMvsync（以下简称「本软件」或「我们」）。我们深知个人信息对您的重要性，并始终致力于保护您的隐私与数据安全。本政策向您说明在您使用本软件的过程中，我们如何处理、存储与保护您的信息，以及您所享有的相关权利。
 
 请务必仔细阅读并充分理解本政策。**一旦您开始使用本软件，即表示您已阅读、理解并同意本政策所述全部内容。**
 
@@ -58,9 +58,9 @@
 
 | 平台 | 默认数据目录 |
 | --- | --- |
-| Linux | `~/.local/share/ArchoeraMvsumc` |
-| macOS | `~/Library/Application Support/ArchoeraMvsumc` |
-| Windows | `%LOCALAPPDATA%\ArchoeraMvsumc` |
+| Linux | `~/.local/share/ArchoeraMvsync` |
+| macOS | `~/Library/Application Support/ArchoeraMvsync` |
+| Windows | `%LOCALAPPDATA%\ArchoeraMvsync` |
 
 可用环境变量 `ARCHOERA_DATA_DIR` 覆盖，直至您主动清除或删除。
 
@@ -102,6 +102,6 @@
 
 如对本政策的内容、您的信息安全或相关事项有任何疑问、意见或申诉，欢迎通过以下方式与开发者联系：
 
-- **GitHub 仓库与 Issue**：https://github.com/ArchoeraC/ArchoeraMvsumc
+- **GitHub 仓库与 Issue**：https://github.com/ArchoeraC/ArchoeraMvsync
 
 我们将在收到反馈后尽快答复。

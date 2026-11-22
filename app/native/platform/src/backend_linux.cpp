@@ -1,4 +1,4 @@
-// ArchoeraMvsumc 平台能力原生桥接
+// ArchoeraMvsync 平台能力原生桥接
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -234,10 +234,10 @@ void writePropValue(DBusMessageIter* it, const char* iface, const char* name) {
             dbus_bool_t v = FALSE;
             dbus_message_iter_append_basic(it, DBUS_TYPE_BOOLEAN, &v);
         } else if (std::strcmp(name, "Identity") == 0) {
-            const char* v = "ArchoeraMvsumc";
+            const char* v = "ArchoeraMvsync";
             dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &v);
         } else if (std::strcmp(name, "DesktopEntry") == 0) {
-            const char* v = "awa.archoera.betastudio2.archoera_mvsumc";
+            const char* v = "awa.archoera.betastudio2.archoera_mvsync";
             dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &v);
         } else {
             DBusMessageIter arr;
@@ -718,7 +718,7 @@ std::string desktopFilePath() {
     const char* home = std::getenv("HOME");
     if (home == nullptr || *home == '\0') return std::string();
     // 只用固定文件名（历史兼容）；当前 ABI 仅注册 archoera:// 一个方案。
-    return std::string(home) + "/.local/share/applications/archoera_mvsumc.desktop";
+    return std::string(home) + "/.local/share/applications/archoera_mvsync.desktop";
 }
 
 // scheme 会写进 .desktop 的 MimeType（外部输入）：只允许小写字母 / 数字 / 连字符。
@@ -916,7 +916,7 @@ void applyInhibit(DBusConnection* c) {
     if (want == on) return;
     if (want) {
         DBusMessage* reply =
-            inhibitCall(c, "Inhibit", "ArchoeraMvsumc", "playback", 0);
+            inhibitCall(c, "Inhibit", "ArchoeraMvsync", "playback", 0);
         if (reply == nullptr) return;
         uint32_t cookie = 0;
         const bool ok = dbus_message_get_args(reply, nullptr, DBUS_TYPE_UINT32,
@@ -1169,7 +1169,7 @@ DBusConnection* g_tray_conn = nullptr;
 std::thread* g_tray_pump = nullptr;
 std::atomic<bool> g_tray_running{false};
 bool g_tray_created = false;
-std::string g_tray_tooltip = "ArchoeraMvsumc";
+std::string g_tray_tooltip = "ArchoeraMvsync";
 bool g_tray_visible = true;
 int32_t g_tray_trigger = 0;  // 0=左键展开菜单；1=右键
 uint32_t g_tray_revision = 0;
@@ -1334,7 +1334,7 @@ std::string installIconFallback(const char* srcPath) {
     const std::string dir =
         std::string(home) + "/.local/share/icons/hicolor/48x48/apps";
     ensureDirs(dir);
-    const std::string dst = dir + "/archoeramvsumc.png";
+    const std::string dst = dir + "/archoeramvsync.png";
     FILE* in = ::fopen(srcPath, "rb");
     if (in == nullptr) return std::string();
     FILE* out = ::fopen(dst.c_str(), "wb");
@@ -1349,7 +1349,7 @@ std::string installIconFallback(const char* srcPath) {
     }
     std::fclose(in);
     std::fclose(out);
-    return std::string("archoeramvsumc");
+    return std::string("archoeramvsync");
 }
 
 struct IconData {
@@ -1433,7 +1433,7 @@ void appendToolTip(DBusMessageIter* it, const TraySnapshot& s) {
     const char* iconName = s.iconName.c_str();
     dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &iconName);
     appendIconPixmap(&st, s);
-    const char* title = "ArchoeraMvsumc";
+    const char* title = "ArchoeraMvsync";
     const char* subtitle = s.tooltip.c_str();
     dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &title);
     dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &subtitle);
@@ -1460,10 +1460,10 @@ void writeSniProp(DBusMessageIter* it, const char* name,
         const char* v = "ApplicationStatus";
         dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &v);
     } else if (std::strcmp(name, "Id") == 0) {
-        const char* v = "archoeramvsumc";
+        const char* v = "archoeramvsync";
         dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &v);
     } else if (std::strcmp(name, "Title") == 0) {
-        const char* v = s.tooltip.empty() ? "ArchoeraMvsumc" : s.tooltip.c_str();
+        const char* v = s.tooltip.empty() ? "ArchoeraMvsync" : s.tooltip.c_str();
         dbus_message_iter_append_basic(it, DBUS_TYPE_STRING, &v);
     } else if (std::strcmp(name, "Status") == 0) {
         const char* v = s.visible ? "Active" : "Passive";
@@ -1918,7 +1918,7 @@ bool notifyViaDbus(const char* title, const char* body) {
         "org.freedesktop.Notifications", "Notify");
     DBusMessageIter it, actions, hints;
     dbus_message_iter_init_append(msg, &it);
-    const char* app = "ArchoeraMvsumc";
+    const char* app = "ArchoeraMvsync";
     uint32_t replaces = 0;
     const char* icon = "";
     const char* summary = title;
@@ -2099,7 +2099,7 @@ int32_t appInstanceAcquire() {
     if (g_instance_fd >= 0) return 1;
     const char* runtime = std::getenv("XDG_RUNTIME_DIR");
     std::string dir = runtime != nullptr ? runtime : "/tmp";
-    std::string path = dir + "/archoera_mvsumc.lock";
+    std::string path = dir + "/archoera_mvsync.lock";
     const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (fd < 0) return ERR_BACKEND;
     if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
@@ -2129,7 +2129,7 @@ int32_t protocolRegister(const char* scheme) {
     std::fprintf(f,
                  "[Desktop Entry]\n"
                  "Type=Application\n"
-                 "Name=ArchoeraMvsumc\n"
+                 "Name=ArchoeraMvsync\n"
                  "Exec=\"%s\" %%U\n"
                  "Terminal=false\n"
                  "NoDisplay=true\n"

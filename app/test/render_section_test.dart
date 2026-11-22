@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,10 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/settings/settings_sections.dart';
-import 'package:archoera_mvsumc/settings/settings_widgets.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/settings/settings_sections.dart';
+import 'package:archoera_mvsync/settings/settings_widgets.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 /// 不落盘的偏好容器（避免测试写入真实 prefs.json）。
 class _NoSavePrefs extends AppPrefsNotifier {

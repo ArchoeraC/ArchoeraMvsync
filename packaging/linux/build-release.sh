@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMvsumc Linux 发布脚本（**Linux 专用，自包含**）
+#  ArchoeraMvsync Linux 发布脚本（**Linux 专用，自包含**）
 #
 #  规则（AGENTS.md「禁止脚本混合」）：
 #    - 平台构建/装配/校验/打包只在本文件与 packaging/linux/ 内，不调用其它
@@ -151,7 +151,7 @@ do_prepare() {
   cp "$ROOT/app/tool/watermark_pub.pem" "$bundle/ARCHOERA_PUBKEY.pem"
 
   # 完整性清单（SEC-08）：必须在收拢/改写之后生成
-  sh "$ROOT/app/tool/gen_native_manifest.sh" "$bundle/native" "$bundle/archoera_mvsumc"
+  sh "$ROOT/app/tool/gen_native_manifest.sh" "$bundle/native" "$bundle/archoera_mvsync"
 }
 
 # ─────────────────────────── guard ──────────────────────────
@@ -179,7 +179,7 @@ do_guard() {
   is_elf() { readelf -h "$1" >/dev/null 2>&1; }
   require_file() { [ -f "$1" ] || fail "缺少发布必需文件：${1#"$bundle"/}"; }
 
-  require_file "$bundle/archoera_mvsumc"
+  require_file "$bundle/archoera_mvsync"
   require_file "$native/archoera-audio-engine"
   require_file "$native/archoera-vault"
   require_file "$native/libarchoera_mediaengine.so"
@@ -301,7 +301,7 @@ do_guard() {
 
   report="$bundle/ARCHOERA-DEPENDENCIES.txt"
   {
-    echo "# ArchoeraMvsumc 发布依赖清单（自动生成，勿手改）"
+    echo "# ArchoeraMvsync 发布依赖清单（自动生成，勿手改）"
     echo "# bundle: $(basename "$bundle")"
     echo
     echo "[system] 由发行版提供（打包 depends / AppImage 自带）"
@@ -458,7 +458,7 @@ do_verify() {
   grep -q 'indexer-ffi.so' "$native/ARCHOERA-NATIVE-MANIFEST.txt" \
     || die "完整性清单缺 indexer-ffi.so"
 
-  smoke_run "$bundle/archoera_mvsumc"
+  smoke_run "$bundle/archoera_mvsync"
 }
 
 # ──────────────────────────── 分发 ──────────────────────────

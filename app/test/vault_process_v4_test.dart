@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_mvsumc/services/security/vault_process.dart';
-import 'package:archoera_mvsumc/services/security/vault_switch_snapshot.dart';
+import 'package:archoera_mvsync/services/security/vault_process.dart';
+import 'package:archoera_mvsync/services/security/vault_switch_snapshot.dart';
 
 /// vault 会话（credential-vault-plan §3.7/§3.8）端到端测试（真实二进制）：
 ///   1. crypto/file 正常会话：set/get 中文往返 + 正常收尾 marker=ok

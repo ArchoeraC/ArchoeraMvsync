@@ -1,4 +1,4 @@
-// ArchoeraMvsumc
+// ArchoeraMvsync
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -45,7 +45,7 @@ struct Response {
 };
 
 Response request(const std::string& method, const std::string& url,
-                 const std::string& ua = "ArchoeraMvsumc-test/1.0",
+                 const std::string& ua = "ArchoeraMvsync-test/1.0",
                  long timeoutMs = 15000,
                  const std::vector<std::string>& headers = {},
                  const std::string* body = nullptr) {
@@ -135,7 +135,7 @@ void testOnline() {
 
     // 自定义请求头 + 跟随重定向。
     Response hdrs = request("GET", "https://httpbin.org/headers",
-                            "ArchoeraMvsumc-test/1.0", 20000,
+                            "ArchoeraMvsync-test/1.0", 20000,
                             {"X-Archoera-Test", "1"});
     CHECK(hdrs.rc == ERA_HTTP_OK);
     CHECK(hdrs.status == 200);
@@ -144,7 +144,7 @@ void testOnline() {
     // POST 请求体 + Content-Type。
     const std::string payload = "{\"hello\":\"world\"}";
     Response post = request("POST", "https://httpbin.org/post",
-                            "ArchoeraMvsumc-test/1.0", 20000,
+                            "ArchoeraMvsync-test/1.0", 20000,
                             {"Content-Type", "application/json"}, &payload);
     CHECK(post.rc == ERA_HTTP_OK);
     CHECK(post.status == 200);

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -48,12 +48,12 @@ import 'theme_provider.dart';
 final bool _kDesktop =
     Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
-/// ArchoeraMvsumc 应用根：主题 + 路由 + 启动门。
+/// ArchoeraMvsync 应用根：主题 + 路由 + 启动门。
 ///
 /// 主题逻辑在 theme_provider.dart，路由在 router.dart，启动初始化
 /// （登录态恢复 / Splash 过渡）在 bootstrap.dart——本文件只负责组装。
-class ArchoeraMvsumcApp extends ConsumerWidget {
-  const ArchoeraMvsumcApp({super.key});
+class ArchoeraMvsyncApp extends ConsumerWidget {
+  const ArchoeraMvsyncApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -113,7 +113,7 @@ class ArchoeraMvsumcApp extends ConsumerWidget {
         child: MediaSessionHost(
           child: AuthBootstrap(
             child: MaterialApp.router(
-              title: 'ArchoeraMvsumc',
+              title: 'ArchoeraMvsync',
               // 国际化：locale 跟随设置/系统；Material 内建文案（菜单/日期等）自动本地化
               locale: locale,
               supportedLocales: AppLocalizations.supportedLocales,

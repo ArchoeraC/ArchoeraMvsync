@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -25,7 +25,7 @@ import '../common/smooth_wheel_scroll_controller.dart';
 import '../player/s_controls.dart';
 import '../common/toast.dart';
 import 'comment_platform.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'comment_dialog/comment_dialog_actions.dart';
 part 'comment_dialog/comment_dialog_view.dart';

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,7 +13,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/scraper/tag_editor_service.dart';
+import 'package:archoera_mvsync/services/scraper/tag_editor_service.dart';
 
 void main() {
   group('TrackScrapeOptions.toJson', () {

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -18,10 +18,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/stores/shell_page_state.dart';
-import 'package:archoera_mvsumc/widgets/layout/nav_header.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/shell_page_state.dart';
+import 'package:archoera_mvsync/widgets/layout/nav_header.dart';
 
 /// 不读/写真实偏好文件（搜索历史等经它写入）。
 class _NoSideEffectsPrefsNotifier extends AppPrefsNotifier {

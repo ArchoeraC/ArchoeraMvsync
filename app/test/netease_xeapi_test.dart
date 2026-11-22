@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,8 +14,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:archoera_mvsumc/apis/netease/core/crypto.dart';
-import 'package:archoera_mvsumc/apis/netease/core/xeapi.dart';
+import 'package:archoera_mvsync/apis/netease/core/crypto.dart';
+import 'package:archoera_mvsync/apis/netease/core/xeapi.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pointycastle/export.dart';
 

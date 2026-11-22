@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 void main() {
   group('流体背景偏好', () {

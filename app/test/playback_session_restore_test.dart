@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,9 +7,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archoera_mvsumc/services/netease/track.dart';
-import 'package:archoera_mvsumc/services/playback/playback_notifier.dart';
-import 'package:archoera_mvsumc/services/playback/playback_session.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsync/services/playback/playback_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

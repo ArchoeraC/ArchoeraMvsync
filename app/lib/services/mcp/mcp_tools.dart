@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -108,7 +108,7 @@ class McpActions {
   }
 
   Map<String, Object?> appInfo() => {
-    'name': 'ArchoeraMvsumc',
+    'name': 'ArchoeraMvsync',
     'version': appVersion,
     'platform': Platform.operatingSystem,
   };

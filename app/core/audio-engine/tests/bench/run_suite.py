@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ArchoeraMvsumc 统一能力检测入口（合并旧基准脚本）
+# ArchoeraMvsync 统一能力检测入口（合并旧基准脚本）
 #
 # 用法：
 #   python3 run_suite.py [--build] [--reps N] [--skip SCORECARD,POOL,SCANNER]
@@ -213,7 +213,7 @@ def main():
     if "POOL" not in skip: res["pool"] = sec_pool()
     if "SCANNER" not in skip: res["scan"] = sec_scanner()
 
-    A = [f"# ArchoeraMvsumc 统一能力检测（{DATE}）", "",
+    A = [f"# ArchoeraMvsync 统一能力检测（{DATE}）", "",
          "> `run_suite.py` 合并旧基准脚本：内核单测 + 引擎 ctest + 逐格式 scorecard + "
          "池并发压力 + scanner 吞吐。数据可复现，跨机比相对值。", ""]
     if "kernel" in res:

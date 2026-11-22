@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,11 +12,11 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/app/appearance_styles/appearance_style_registry.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/stores/prefs_appearance.dart' as prefs;
-import 'package:archoera_mvsumc/theme/theme_sources/theme_source_registry.dart';
-import 'package:archoera_mvsumc/theme/theme_sources/theme_source_style.dart';
+import 'package:archoera_mvsync/app/appearance_styles/appearance_style_registry.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/prefs_appearance.dart' as prefs;
+import 'package:archoera_mvsync/theme/theme_sources/theme_source_registry.dart';
+import 'package:archoera_mvsync/theme/theme_sources/theme_source_style.dart';
 
 void main() {
   group('注册表结构', () {

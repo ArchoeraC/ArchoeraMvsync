@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,11 +10,11 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/easter_egg/april_fools_state.dart';
-import 'package:archoera_mvsumc/easter_egg/easter_egg.dart';
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/widgets/common/toast.dart';
+import 'package:archoera_mvsync/easter_egg/april_fools_state.dart';
+import 'package:archoera_mvsync/easter_egg/easter_egg.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/widgets/common/toast.dart';
 
 /// 位于 Navigator 之外的探针（与 ToastOverlay / 各启动门同层）。
 ///

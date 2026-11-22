@@ -1,4 +1,4 @@
-# ArchoeraMvsumc 宣传页（GitHub Pages）
+# ArchoeraMvsync 宣传页（GitHub Pages）
 
 纯静态产品页：开屏动效按应用源码复刻，随后是电影感首屏、滚动叙事、能力清单、
 引擎管线、样式注册表、开屏演示、下载与文档。
@@ -107,7 +107,7 @@ Flutter 曲线到 CSS 的映射：`easeOutExpo → cubic-bezier(.16,1,.3,1)`、
 `.github/workflows/pages.yml` 在 `main` 上 `site/**` 变更时构建并发布。
 
 首次启用需要在仓库 **Settings → Pages → Build and deployment → Source** 选择
-**GitHub Actions**；之后推送即自动发布到 `https://betastudio2.github.io/ArchoeraMvsumc/`。
+**GitHub Actions**；之后推送即自动发布到 `https://betastudio2.github.io/ArchoeraMvsync/`。
 
 ## 许可与素材
 

@@ -1,7 +1,7 @@
-// ArchoeraMvsumc Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMvsumc 自研音频内核
+// EraSync — ArchoeraMvsync 自研音频内核
 
 pub const parcor_rice_table = [3][20][2]i8{
     .{ .{-52, 4}, .{-29, 5}, .{-31, 4}, .{19, 4}, .{-16, 4}, .{12, 3}, .{-7, 3}, .{9, 3}, .{-5, 3}, .{6, 3}, .{-4, 3}, .{3, 3}, .{-3, 2}, .{3, 2}, .{-2, 2}, .{3, 2}, .{-1, 2}, .{2, 2}, .{-1, 2}, .{2, 2} },

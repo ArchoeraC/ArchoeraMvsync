@@ -1,6 +1,6 @@
 #!/bin/sh
 # =====================================================================
-#  ArchoeraMvsumc 原生完整性清单签名（SEC-08）—— key1 ECDSA/SHA-256 分离签名。
+#  ArchoeraMvsync 原生完整性清单签名（SEC-08）—— key1 ECDSA/SHA-256 分离签名。
 #
 #  对 <dir>/ARCHOERA-NATIVE-MANIFEST.txt 原文签名，产出同目录
 #  <dir>/ARCHOERA-NATIVE-MANIFEST.sig1（DER）；运行期 NativeIntegrity 用

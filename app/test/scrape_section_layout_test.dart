@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // 设置 → 刮削 布局回归：空闲态应同时展示「开始刮削」与「开始整理」入口，
@@ -8,9 +8,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/settings/settings_sections.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/settings/settings_sections.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
 
 class _NoSideEffectPrefs extends AppPrefsNotifier {
   @override

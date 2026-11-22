@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -32,7 +32,7 @@ import 'utils/app_version.dart';
 import 'widgets/common/tray_integration.dart';
 import 'widgets/list/cover_image.dart';
 
-/// ArchoeraMvsumc — 应用入口。
+/// ArchoeraMvsync — 应用入口。
 ///
 /// 职责：ProviderScope 注入 + 宿主运行时注入（账号会话经凭据保险库
 /// vault 加密落盘，登录态跨重启保留；vault 不可用时降级内存并告警）
@@ -40,7 +40,7 @@ import 'widgets/list/cover_image.dart';
 /// （无 libmpv/media_kit 依赖）。
 Future<void> main(List<String> args) async {
   // 说明：CLI（`archoerashell`）由各平台 runner 在 Flutter 初始化前拦截
-  // `archoera_mvsumc archoerashell …` 子命令（见 app/core/shell）；Windows 转交
+  // `archoera_mvsync archoerashell …` 子命令（见 app/core/shell）；Windows 转交
   // 同目录的 `archoerashell.exe`，不经过本 Dart 入口（Dart 版 CLI 已删除）。
   //
   // 全局帧节流 Binding（节能模式渲染层）：必须最先初始化——既是 Flutter
@@ -49,7 +49,7 @@ Future<void> main(List<String> args) async {
   // 防伪锚点：把 'ARCHOERA DESIGNED' 编译进内核/AOT 快照字符串表
   // （见 app/watermark.dart；勿删，反编译识别非官方重新打包）。
   archoeraWatermarkAnchor();
-  // 品牌改名：使用新的 ArchoeraMvsumc 数据目录，不迁移旧 ArchoeraMusic
+  // 品牌改名：使用新的 ArchoeraMvsync 数据目录，不迁移旧 ArchoeraMusic
   // （旧目录原样保留；迁移跨盘/保险库文件锁不稳定，已撤掉）。
   await ensureDataDir();
   // 偏好先读一次（后面复用同一实例）：其中 `logToFile` 控制日志是否落盘。
@@ -71,7 +71,7 @@ Future<void> main(List<String> args) async {
   // 启动标记：与退出标记配对，用于区分「闪退」与「被外部结束 / 正常退出」。
   Log.i(
     'startup',
-    'ArchoeraMvsumc 启动 pid=$pid platform=${Platform.operatingSystem} '
+    'ArchoeraMvsync 启动 pid=$pid platform=${Platform.operatingSystem} '
         'logLevel=${Log.minLevel.label}',
   );
   // 查询日志（本机 JSONL，供 T2-7 助词容错矩阵分析）：与「日志落盘」同一开关，
@@ -202,7 +202,7 @@ Future<void> main(List<String> args) async {
     runtime: ApisRuntime(sessionStore: sessionStore, getSetting: readAppPref),
   );
   // 全局图片解码缓存：张数上限固定（防内存碎片）；字节上限由设置
-  // 「封面图片缓存上限」动态控制（默认下限 8 MiB，见 ArchoeraMvsumcApp，
+  // 「封面图片缓存上限」动态控制（默认下限 8 MiB，见 ArchoeraMvsyncApp，
   // null = 无上限仅按张数约束）。
   PaintingBinding.instance.imageCache.maximumSize = 1000;
   // 窗口管理（后台常驻：关闭到托盘需拦截窗口关闭事件，由 TrayIntegration
@@ -212,7 +212,7 @@ Future<void> main(List<String> args) async {
     unawaited(platformCaps.deepLink.register('archoera'));
   }
   runApp(
-    const ProviderScope(child: TrayIntegration(child: ArchoeraMvsumcApp())),
+    const ProviderScope(child: TrayIntegration(child: ArchoeraMvsyncApp())),
   );
   // 订阅 deep link 并派发（启动期链接先缓冲，首帧后统一处理）。
   final deepLinkRouter = DeepLinkRouter(platformCaps.deepLink);

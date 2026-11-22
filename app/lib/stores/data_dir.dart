@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,9 +8,9 @@ import 'dart:io';
 import '../utils/safe_file.dart';
 
 /// 应用数据根目录（按平台约定）：
-///   - Linux：`~/.local/share/ArchoeraMvsumc`（XDG）
-///   - macOS：`~/Library/Application Support/ArchoeraMvsumc`
-///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsumc`
+///   - Linux：`~/.local/share/ArchoeraMvsync`（XDG）
+///   - macOS：`~/Library/Application Support/ArchoeraMvsync`
+///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsync`
 /// 可用环境变量 `ARCHOERA_DATA_DIR` 覆盖（与 scanner 侧一致）。
 ///
 /// 改名后**不迁移**旧 `ArchoeraMusic` 目录：旧目录原样保留，新版本从新目录
@@ -30,7 +30,7 @@ Future<void> ensureDataDir() async {
   }
 }
 
-const String _dataDirName = 'ArchoeraMvsumc';
+const String _dataDirName = 'ArchoeraMvsync';
 
 String _platformDataRoot() {
   final home =

@@ -1,6 +1,6 @@
 # 曲库扫描器第三方许可证声明（scanner / C#）
 
-本目录 `app/core/scanner` 为 ArchoeraMvsumc 的 C# / .NET 曲库扫描器，
+本目录 `app/core/scanner` 为 ArchoeraMvsync 的 C# / .NET 曲库扫描器，
 其自研代码随本软件以 AGPL-3.0 授权，第三方组件按各自许可使用（逐项登记见下）。
 
 ## NuGet 依赖

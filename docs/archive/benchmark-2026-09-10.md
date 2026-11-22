@@ -1,4 +1,4 @@
-# ArchoeraMvsumc 综合 Benchmark（暴力压测 + 历史汇总）
+# ArchoeraMvsync 综合 Benchmark（暴力压测 + 历史汇总）
 
 > 日期：2026-09-10 · 机器：x86_64 cachyos，i9-13980HX（**P 核 cpu0–15 + E 核 cpu16–31**）· 构建：ReleaseFast 内核 + CMake 引擎。
 > 口径：墙钟 `time.monotonic`；CPU = user+sys；峰值 RSS = `/proc/<pid>/status VmHWM` 2ms 轮询；静音/headless（不写音频设备）。

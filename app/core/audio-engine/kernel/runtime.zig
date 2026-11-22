@@ -1,7 +1,7 @@
-// ArchoeraMvsumc Audio Framework
+// ArchoeraMvsync Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMvsumc 自研音频内核
+// EraSync — ArchoeraMvsync 自研音频内核
 
 //! 常驻内核 runtime：Master 停机/懒就绪协调 + 同质 worker 池（docs/archive/engine-master-pool-design.md §9 ②）
 //!

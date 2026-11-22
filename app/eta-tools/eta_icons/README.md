@@ -1,4 +1,4 @@
-# eta_icons — ArchoeraMvsumc 自建图标字体
+# eta_icons — ArchoeraMvsync 自建图标字体
 
 > **食用说明（开发向）见 [`app/lib/eta/README.md`](../../lib/eta/README.md)**：
 > 引用写法、实心/描边命名、新增字形、重新生成、审查清单全在这里。

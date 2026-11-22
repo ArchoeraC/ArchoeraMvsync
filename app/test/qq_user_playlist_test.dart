@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,10 +7,10 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/apis/qqmusic/core/config.dart';
-import 'package:archoera_mvsumc/apis/qqmusic/core/request.dart';
-import 'package:archoera_mvsumc/apis/qqmusic/modules/user_playlist.dart';
-import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/config.dart';
+import 'package:archoera_mvsync/apis/qqmusic/core/request.dart';
+import 'package:archoera_mvsync/apis/qqmusic/modules/user_playlist.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
 
 void main() {
   late QmHttpGetTransport original;

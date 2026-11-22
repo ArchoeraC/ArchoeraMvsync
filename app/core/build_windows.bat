@@ -1,6 +1,6 @@
 @echo off
 rem =====================================================================
-rem  ArchoeraMvsumc Windows 全模块一站式构建引导（bat 全量接管）
+rem  ArchoeraMvsync Windows 全模块一站式构建引导（bat 全量接管）
 rem
 rem  在单个 cmd 会话内完成：
 rem    1. vswhere 定位 VS + call vcvars64.bat（MSVC/cl.exe/link.exe 环境）
@@ -159,7 +159,7 @@ rem Zig 内核（EraAudio 原生 HTTP(S)/TLS）在 Windows 依赖系统库：cry
 rem 枚举/校验）、ws2_32（Winsock）、bcrypt（std.crypto.random）；MSVC 不会自动带上，
 rem 须在最终链接显式补齐（FFmpeg 覆盖了 ws2_32/bcrypt，但不含 crypt32）。
 :: /utf-8：源码含中文字符串字面量，须显式声明 UTF-8（与 native/platform 一致）。
-call :write_version_rc "build\archoera_mediaengine.rc" "archoera_mediaengine.dll" "ArchoeraMvsumc audio engine" "archoera_mediaengine" "2"
+call :write_version_rc "build\archoera_mediaengine.rc" "archoera_mediaengine.dll" "ArchoeraMvsync audio engine" "archoera_mediaengine" "2"
 rc /nologo /fo build\archoera_mediaengine.res build\archoera_mediaengine.rc
 if errorlevel 1 exit /b 1
 cl /nologo /O2 /std:c11 /MD /LD /utf-8 /I include /I src /I include\compat /I "%VCPKG_PREFIX%\include" ^
@@ -269,7 +269,7 @@ if errorlevel 1 exit /b 1
 popd
 
 echo [build_windows] 生成 Go 版本资源 (windows/amd64 .syso)...
-call :write_version_rc "version_windows_amd64.rc" "libarchoera_subsonic.dll" "ArchoeraMvsumc Subsonic server" "archoera_subsonic" "2"
+call :write_version_rc "version_windows_amd64.rc" "libarchoera_subsonic.dll" "ArchoeraMvsync Subsonic server" "archoera_subsonic" "2"
 del /q version_windows_amd64.syso 2>nul
 where windres >nul 2>nul
 if errorlevel 1 (
@@ -411,9 +411,9 @@ rem =====================================================================
   echo             VALUE "InternalName", "%~4"
   echo             VALUE "LegalCopyright", "Copyright ^(C^) 2026 io.awa.archoera.betastudio2"
   echo             VALUE "OriginalFilename", "%~2"
-  echo             VALUE "ProductName", "ArchoeraMvsumc"
+  echo             VALUE "ProductName", "ArchoeraMvsync"
   echo             VALUE "ProductVersion", "%APPVER%"
-  echo             VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMvsumc"
+  echo             VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMvsync"
   echo         END
   echo     END
   echo     BLOCK "VarFileInfo"

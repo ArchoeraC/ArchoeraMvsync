@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -110,8 +110,8 @@ class StreamingClient {
     if (config.isArchoeraServer && SubsonicLocalServer.port == null) {
       return Future.value(StreamingPingResult(
         ok: false,
-        error: '未检测到本机 ArchoeraMvsumc 服务端：请先启动本机内置服务端，'
-            '或关闭「连接 ArchoeraMvsumc 服务端」开关，手动填写主机和端口',
+        error: '未检测到本机 ArchoeraMvsync 服务端：请先启动本机内置服务端，'
+            '或关闭「连接 ArchoeraMvsync 服务端」开关，手动填写主机和端口',
       ));
     }
     final sub = _sub;

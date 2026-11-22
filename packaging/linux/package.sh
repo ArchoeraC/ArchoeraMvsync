@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMvsumc Linux 打包脚本（CI 与本地均可用）。
+# ArchoeraMvsync Linux 打包脚本（CI 与本地均可用）。
 #
 # 用法：
 #   package.sh tar       <bundle> <版本>   → dist/linux/*.tar.gz          纯二进制（保留）
@@ -16,11 +16,11 @@
 # 说明：bundle 必须保持完整目录结构（FFI 与引擎子进程均相对可执行文件定位）。
 set -euo pipefail
 
-APP_NAME="ArchoeraMvsumc"
-APP_ID="awa.archoera.betastudio2.archoera_mvsumc"
-BIN="archoera_mvsumc"
-DEST_PREFIX="/opt/archoera-mvsumc"
-REPO_URL="https://github.com/ArchoeraC/ArchoeraMvsumc"
+APP_NAME="ArchoeraMvsync"
+APP_ID="awa.archoera.betastudio2.archoera_mvsync"
+BIN="archoera_mvsync"
+DEST_PREFIX="/opt/archoera-mvsync"
+REPO_URL="https://github.com/ArchoeraC/ArchoeraMvsync"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -64,11 +64,11 @@ if [[ -f "$ROOT/app/tool/watermark_pub.pem" ]]; then
   cp "$ROOT/app/tool/watermark_pub.pem" "$stage/bundle/ARCHOERA_PUBKEY.pem"
 fi
 
-sed "s|@EXEC@|/usr/bin/$BIN %U|g" "$HERE/archoera-mvsumc.desktop.in" \
-  > "$stage/archoera-mvsumc.desktop"
+sed "s|@EXEC@|/usr/bin/$BIN %U|g" "$HERE/archoera-mvsync.desktop.in" \
+  > "$stage/archoera-mvsync.desktop"
 sed "s|@VERSION@|$version|g" \
-  "$HERE/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml.in" \
-  > "$stage/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml"
+  "$HERE/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml.in" \
+  > "$stage/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml"
 
 for size in 32 48 64 128 256 512; do
   icon="$ROOT/app/linux/runner/resources/app_icon_${size}.png"
@@ -78,8 +78,8 @@ for size in 32 48 64 128 256 512; do
 done
 
 stage_bundle="$stage/bundle"
-stage_desktop="$stage/archoera-mvsumc.desktop"
-stage_metainfo="$stage/awa.archoera.betastudio2.archoera_mvsumc.metainfo.xml"
+stage_desktop="$stage/archoera-mvsync.desktop"
+stage_metainfo="$stage/awa.archoera.betastudio2.archoera_mvsync.metainfo.xml"
 stage_icons="$stage/icons"
 
 # ── BUILD-INFO.txt：产物内显著标识（发行版 / 基线 / glibc 最低要求）──────
@@ -93,7 +93,7 @@ write_build_info() {
       | grep -o 'GLIBC_[0-9.]*' | sort -V | uniq | tail -1 || true)"
   fi
   cat > "$stage_bundle/BUILD-INFO.txt" <<EOF
-ArchoeraMvsumc $version
+ArchoeraMvsync $version
 构建目标   : $DISTRO_TAG
 构建基线   : $BUILD_BASE
 适用系统   : ${DISTRO_NOTE:-通用（见最低 glibc）}
@@ -108,7 +108,7 @@ write_build_info
 
 # ── tar.gz：纯二进制（保留 bundle 原结构，解压即用）───────────────────
 pkg_tar() {
-  local dir="$stage/tar/ArchoeraMvsumc-linux-x86_64"
+  local dir="$stage/tar/ArchoeraMvsync-linux-x86_64"
   mkdir -p "$stage/tar"
   cp -a "$stage_bundle" "$dir"
   tar -C "$stage/tar" -czf \
@@ -142,7 +142,7 @@ pkg_deb() {
   #   - 故 GTK3 用 t64 名优先 + 旧名回退（Debian 12 / Ubuntu 22.04 仍用旧名），
   #     其余保持稳定包名。
   cat > "$root/DEBIAN/control" <<EOF
-Package: archoera-mvsumc
+Package: archoera-mvsync
 Version: $version_deb
 Section: sound
 Priority: optional
@@ -186,12 +186,12 @@ EOF
 pkg_rpm() {
   local topdir="$stage/rpmbuild"
   mkdir -p "$topdir"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-  cp "$HERE/archoera-mvsumc.spec" "$topdir/SPECS/"
+  cp "$HERE/archoera-mvsync.spec" "$topdir/SPECS/"
   rpmbuild --define "_topdir $topdir" \
     --define "stage_path $stage" \
     --define "app_version $version_rpm" \
     --define "_rpmfilename %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm" \
-    -bb "$topdir/SPECS/archoera-mvsumc.spec"
+    -bb "$topdir/SPECS/archoera-mvsync.spec"
   # _rpmfilename 被 --define 重写后 rpm 将包输出到 RPMS/ 根目录（而非按 arch 分目录），
   # 用 find 兜底定位，避免路径假设（CI 曾因硬编码 RPMS/x86_64/ 失败）。
   # 统一命名为 <App>-v<ver>-<发行版>-x86_64.rpm（显著标识发行版；rpm 内部元数据不变）。
@@ -208,7 +208,7 @@ pkg_rpm() {
 # 进 usr/lib 并改写 RUNPATH（构建机为 Ubuntu，故收拢的是 Ubuntu 库，任意
 # 发行版均可加载）。
 pkg_appimage() {
-  local appdir="$stage/appimage/ArchoeraMvsumc.AppDir"
+  local appdir="$stage/appimage/ArchoeraMvsync.AppDir"
   mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications" \
     "$appdir/usr/share/metainfo" \
     "$appdir/usr/share/icons/hicolor/512x512/apps"
@@ -220,7 +220,7 @@ pkg_appimage() {
   # AppStream 要求 metainfo 的 <id> / <launchable> 与 .desktop 文件名对齐，
   # 否则 appimagetool 会报 "AppStream upstream metadata is missing"。
   local desktop="$appdir/usr/share/applications/$APP_ID.desktop"
-  sed "s|@EXEC@|$BIN %U|g" "$HERE/archoera-mvsumc.desktop.in" > "$desktop"
+  sed "s|@EXEC@|$BIN %U|g" "$HERE/archoera-mvsync.desktop.in" > "$desktop"
   cp "$stage_icons/hicolor/512x512/apps/$APP_ID.png" \
     "$appdir/usr/share/icons/hicolor/512x512/apps/$APP_ID.png"
   install -m644 "$stage_metainfo" \
@@ -279,7 +279,7 @@ pkg_arch() {
   tar --zstd -C "$stage" -cf "$arch_dir/bundle.tar.zst" bundle
   cp "$HERE/PKGBUILD" "$arch_dir/PKGBUILD"
   sed -i "s|^pkgver=.*|pkgver=$version_arch|" "$arch_dir/PKGBUILD"
-  cp "$stage_desktop" "$arch_dir/archoera-mvsumc.desktop"
+  cp "$stage_desktop" "$arch_dir/archoera-mvsync.desktop"
   cp "$stage_icons/hicolor/512x512/apps/$APP_ID.png" \
     "$arch_dir/$APP_ID.png"
   # 运行 makepkg 的容器命令（由 workflow 执行）：
@@ -294,9 +294,9 @@ pkg_nix() {
   cp "$HERE/nix/flake.nix" "$nix_dir/flake.nix"
   sed "s|@VERSION@|$version|g" "$HERE/nix/package.nix" > "$nix_dir/package.nix"
   cp -a "$stage_bundle" "$nix_dir/bundle"
-  cp "$stage_desktop" "$nix_dir/archoera-mvsumc.desktop"
+  cp "$stage_desktop" "$nix_dir/archoera-mvsync.desktop"
   cp "$stage_icons/hicolor/512x512/apps/$APP_ID.png" \
-    "$nix_dir/awa.archoera.betastudio2.archoera_mvsumc.png"
+    "$nix_dir/awa.archoera.betastudio2.archoera_mvsync.png"
   echo "→ $nix_dir （docker: nixos/nix 容器内运行 nix build .#default）"
 }
 

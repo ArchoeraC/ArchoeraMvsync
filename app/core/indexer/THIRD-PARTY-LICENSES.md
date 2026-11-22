@@ -1,6 +1,6 @@
 # 本地曲库搜索索引器第三方许可证声明（indexer / C#）
 
-本目录 `app/core/indexer` 为 ArchoeraMvsumc 的 C# / .NET 本地曲库搜索索引器，
+本目录 `app/core/indexer` 为 ArchoeraMvsync 的 C# / .NET 本地曲库搜索索引器，
 其自研代码随本软件以 AGPL-3.0 授权，第三方组件与数据按各自许可使用（逐项登记见下）。
 
 ## 自带数据表（Unicode License）

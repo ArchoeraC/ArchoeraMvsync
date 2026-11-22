@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,7 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/widgets/player/background/fluid_background.dart';
+import 'package:archoera_mvsync/widgets/player/background/fluid_background.dart';
 
 Future<String> _writeTempCover() async {
   final recorder = ui.PictureRecorder();

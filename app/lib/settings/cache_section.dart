@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -18,7 +18,7 @@ import '../../widgets/common/toast.dart';
 import '../../widgets/dialogs/s_dialog.dart';
 import '../../widgets/player/s_controls.dart';
 import 'settings_widgets.dart';
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 存储分类下的缓存管理面板（按介质分组、
 /// 逐项清除 + 一键清空，破坏性操作均二次确认）。

@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -28,7 +28,7 @@ import '../common/toast.dart';
 import '../common/anim.dart';
 import '../common/glass_blur.dart';
 
-import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'player_bar/player_bar_view.dart';
 part 'player_bar/player_bar_sections.dart';

@@ -1,17 +1,17 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/apis/lyric/format.dart';
-import 'package:archoera_mvsumc/apis/lyric/types.dart';
-import 'package:archoera_mvsumc/apis/runtime.dart';
-import 'package:archoera_mvsumc/services/lyrics/engine/lyric_pipeline.dart';
-import 'package:archoera_mvsumc/services/lyrics/engine/lyric_source.dart';
-import 'package:archoera_mvsumc/services/lyrics/engine/lyrics_engine.dart';
-import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
-import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsync/apis/lyric/format.dart';
+import 'package:archoera_mvsync/apis/lyric/types.dart';
+import 'package:archoera_mvsync/apis/runtime.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyric_pipeline.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyric_source.dart';
+import 'package:archoera_mvsync/services/lyrics/engine/lyrics_engine.dart';
+import 'package:archoera_mvsync/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
 
 Track _track(String source, {String id = 't1'}) =>
     Track(id: id, title: 'Title', source: source, artists: const []);

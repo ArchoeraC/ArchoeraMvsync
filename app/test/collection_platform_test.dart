@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,14 +12,14 @@ import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
-import 'package:archoera_mvsumc/services/kugou/kugou_api.dart';
-import 'package:archoera_mvsumc/services/netease/apis_netease_caller.dart';
-import 'package:archoera_mvsumc/services/netease/netease_api.dart';
-import 'package:archoera_mvsumc/services/netease/track.dart';
-import 'package:archoera_mvsumc/services/qqmusic/qqmusic_api.dart';
-import 'package:archoera_mvsumc/stores/providers.dart';
-import 'package:archoera_mvsumc/widgets/dialogs/collection_platform.dart';
+import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsync/services/kugou/kugou_api.dart';
+import 'package:archoera_mvsync/services/netease/apis_netease_caller.dart';
+import 'package:archoera_mvsync/services/netease/netease_api.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
+import 'package:archoera_mvsync/services/qqmusic/qqmusic_api.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
+import 'package:archoera_mvsync/widgets/dialogs/collection_platform.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

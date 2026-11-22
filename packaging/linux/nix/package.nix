@@ -1,7 +1,7 @@
-# ArchoeraMvsumc NixOS 打包定义（消费预构建 bundle，等价 Arch PKGBUILD）。
+# ArchoeraMvsync NixOS 打包定义（消费预构建 bundle，等价 Arch PKGBUILD）。
 #
-# 由 package.sh nix 预置：本文件与 bundle/、archoera-mvsumc.desktop、
-# awa.archoera.betastudio2.archoera_mvsumc.png 同目录，版本号经 sed 注入下方
+# 由 package.sh nix 预置：本文件与 bundle/、archoera-mvsync.desktop、
+# awa.archoera.betastudio2.archoera_mvsync.png 同目录，版本号经 sed 注入下方
 # version（占位 @VERSION@ 由 package.sh 替换为实际版本）。
 #
 # 二进制为 Release 预 strip 产物（Flutter/Rust/Go/NativeAOT/C 全无调试符号），
@@ -37,7 +37,7 @@
 }:
 
 stdenv.mkDerivation (finalAttrs: {
-  pname = "archoera-mvsumc";
+  pname = "archoera-mvsync";
   version = "@VERSION@"; # package.sh 注入；手动 nix build 前需先替换
 
   src = ./bundle; # package.sh 预置的构建产物（保持完整目录结构）
@@ -75,23 +75,23 @@ stdenv.mkDerivation (finalAttrs: {
 
   installPhase = ''
     runHook preInstall
-    mkdir -p $out/lib/archoera-mvsumc $out/bin
-    cp -a $src/. $out/lib/archoera-mvsumc/
+    mkdir -p $out/lib/archoera-mvsync $out/bin
+    cp -a $src/. $out/lib/archoera-mvsync/
     # 保留内嵌 FFmpeg/TagLib（自包含，$ORIGIN 解析）；autoPatchelfHook 只需补
     # 解释器与 libc/libm/libz 的 store RUNPATH（见 buildInputs）。
-    chmod -R u+w $out/lib/archoera-mvsumc
-    ln -s $out/lib/archoera-mvsumc/archoera_mvsumc $out/bin/archoera_mvsumc
+    chmod -R u+w $out/lib/archoera-mvsync
+    ln -s $out/lib/archoera-mvsync/archoera_mvsync $out/bin/archoera_mvsync
     # 桌面条目 + 图标（文件名 = 应用 ID，保证 Wayland 任务栏图标映射）
-    install -Dm644 ${./archoera-mvsumc.desktop} \
-      $out/share/applications/awa.archoera.betastudio2.archoera_mvsumc.desktop
-    install -Dm644 ${./awa.archoera.betastudio2.archoera_mvsumc.png} \
-      $out/share/icons/hicolor/512x512/apps/awa.archoera.betastudio2.archoera_mvsumc.png
+    install -Dm644 ${./archoera-mvsync.desktop} \
+      $out/share/applications/awa.archoera.betastudio2.archoera_mvsync.desktop
+    install -Dm644 ${./awa.archoera.betastudio2.archoera_mvsync.png} \
+      $out/share/icons/hicolor/512x512/apps/awa.archoera.betastudio2.archoera_mvsync.png
     runHook postInstall
   '';
 
   meta = {
     description = "An open-source music player, connect to alternative music service, support offline playback";
-    homepage = "https://github.com/ArchoeraC/ArchoeraMvsumc";
+    homepage = "https://github.com/ArchoeraC/ArchoeraMvsync";
     license = lib.licenses.agpl3Only;
     platforms = [ "x86_64-linux" ];
   };

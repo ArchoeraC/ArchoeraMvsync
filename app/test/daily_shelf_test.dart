@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,8 +9,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/services/daily/daily_shelf.dart';
-import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsync/services/daily/daily_shelf.dart';
+import 'package:archoera_mvsync/services/netease/track.dart';
 
 Track _t(String id) =>
     Track(id: id, title: 'T$id', source: 'netease', artists: const []);

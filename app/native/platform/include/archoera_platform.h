@@ -1,5 +1,5 @@
 /*
- * ArchoeraMvsumc 平台能力原生桥接 —— C ABI 契约（唯一头文件）
+ * ArchoeraMvsync 平台能力原生桥接 —— C ABI 契约（唯一头文件）
  * Copyright (C) 2026 Archoera && BetaStudio2
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *

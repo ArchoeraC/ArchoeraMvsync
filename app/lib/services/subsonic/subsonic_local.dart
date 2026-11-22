@@ -1,11 +1,11 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// 本机 ArchoeraMvsumc 内置 Subsonic 服务端（发送方）的运行时协商。
+/// 本机 ArchoeraMvsync 内置 Subsonic 服务端（发送方）的运行时协商。
 ///
 /// 客户端配置以「主机 + 端口」分开存储，开启 [StreamingServerConfig]
-/// 的 `isArchoeraServer`（连接 ArchoeraMvsumc 服务端）后无需填写端口：
+/// 的 `isArchoeraServer`（连接 ArchoeraMvsync 服务端）后无需填写端口：
 /// 服务端启动时绑定端口 0 由系统分配，实际端口经 started 事件回传，
 /// 由服务端生命周期持有者调用 [SubsonicLocalServer.register] 注册，
 /// 客户端连接时经 [resolvedServerBaseUrl] 换成真实端口。

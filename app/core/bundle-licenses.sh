@@ -25,7 +25,7 @@ mkdir -p "$dest"
 # 1) 聚合声明 + 本程序自身许可（AGPL-3.0 正文，随包保证 §4「附许可副本」）
 [[ -f "$root/THIRD-PARTY-NOTICES.md" ]] && cp -f "$root/THIRD-PARTY-NOTICES.md" "$dest/"
 if [[ -f "$root/LICENSE" ]]; then
-  cp -f "$root/LICENSE" "$dest/ArchoeraMvsumc-LICENSE.txt"
+  cp -f "$root/LICENSE" "$dest/ArchoeraMvsync-LICENSE.txt"
 fi
 
 # 2) 字体 / 图标官方许可正文（随包内嵌；与「设置 → 关于 → 字体署名」同源）

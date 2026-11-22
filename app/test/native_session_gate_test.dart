@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -16,8 +16,8 @@ library;
 
 import 'dart:async';
 
-import 'package:archoera_mvsumc/services/playback/audio_engine_process.dart';
-import 'package:archoera_mvsumc/services/playback/native_session_gate.dart';
+import 'package:archoera_mvsync/services/playback/audio_engine_process.dart';
+import 'package:archoera_mvsync/services/playback/native_session_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 微任务冲排（Completer 交付均为异步微任务）。

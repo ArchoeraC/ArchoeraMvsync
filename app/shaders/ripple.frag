@@ -1,7 +1,7 @@
 #version 460 core
 #include <flutter/runtime_effect.glsl>
 
-// ArchoeraMvsumc 播放页水纹背景（P2）。
+// ArchoeraMvsync 播放页水纹背景（P2）。
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //

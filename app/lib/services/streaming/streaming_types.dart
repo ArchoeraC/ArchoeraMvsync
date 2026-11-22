@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -48,7 +48,7 @@ extension StreamingServerTypeDefaults on StreamingServerType {
 ///
 /// 地址以「主机 + 端口」分开存储：[host]（localhost / 局域网 IP / 真实
 /// IPv4 / IPv6 / 域名，不含 scheme 与端口）+ [port]。开启 [isArchoeraServer]
-/// 时连接本机 ArchoeraMvsumc 内置 Subsonic 服务端，端口由运行时协商，
+/// 时连接本机 ArchoeraMvsync 内置 Subsonic 服务端，端口由运行时协商，
 /// 无需填写端口。
 class StreamingServerConfig {
   StreamingServerConfig({
@@ -79,7 +79,7 @@ class StreamingServerConfig {
   /// [isArchoeraServer] 时忽略（由运行时协商）。
   final int? port;
 
-  /// 是否连接本机 ArchoeraMvsumc 内置 Subsonic 服务端。
+  /// 是否连接本机 ArchoeraMvsync 内置 Subsonic 服务端。
   /// 开启后连接地址为主机 + 协商端口（服务端 started 事件回传），
   /// 服务端不可用（未运行/未注册）时连接报网络错误。
   final bool isArchoeraServer;
@@ -148,14 +148,14 @@ class StreamingServerConfig {
         lastConnected: lastConnected,
       );
 
-  /// 本机 ArchoeraMvsumc 内置 Subsonic 服务端配置：仅需填写主机
+  /// 本机 ArchoeraMvsync 内置 Subsonic 服务端配置：仅需填写主机
   /// （localhost / 局域网 IP / IPv6 / 域名均可），端口由运行时自动协商。
   factory StreamingServerConfig.ownSubsonic({
     required String id,
     required String host,
     required String username,
     required String password,
-    String name = '本机 ArchoeraMvsumc',
+    String name = '本机 ArchoeraMvsync',
   }) {
     return StreamingServerConfig(
       id: id,
@@ -287,7 +287,7 @@ class StreamingListParams {
 /// [translation] / [romaji] 同样只来自服务端（tlyric / rlyric），格式分别由
 /// [translationFormat] / [romajiFormat] 标注。
 ///
-/// [fetchOnline] 为 ArchoeraMvsumc 服务端扩展标记：曲库无内嵌歌词，提示客户端
+/// [fetchOnline] 为 ArchoeraMvsync 服务端扩展标记：曲库无内嵌歌词，提示客户端
 /// 自行在线补全（仅我方服务端 + 我方客户端会出现；标准 Subsonic 客户端不受影响）。
 class StreamingLyrics {
   const StreamingLyrics({

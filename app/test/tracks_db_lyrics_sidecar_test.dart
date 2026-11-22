@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:archoera_mvsumc/services/scanner/sqlite_preload.dart';
-import 'package:archoera_mvsumc/services/scanner/tracks_db.dart';
+import 'package:archoera_mvsync/services/scanner/sqlite_preload.dart';
+import 'package:archoera_mvsync/services/scanner/tracks_db.dart';
 
 /// `TracksDb` 歌词读取的**侧车回退**（v3）：内嵌 `tracks.lyrics` 为空时回退
 /// scanner 写入的 `.lrc` 侧车原始文本 `tracks.lyrics_lrc`——播放侧因此也能拿到 `.lrc`

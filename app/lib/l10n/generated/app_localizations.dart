@@ -869,7 +869,7 @@ abstract class AppLocalizations {
   /// No description provided for @appName.
   ///
   /// In zh_CN, this message translates to:
-  /// **'ArchoeraMvsumc'**
+  /// **'ArchoeraMvsync'**
   String get appName;
 
   /// No description provided for @brandNetease.
@@ -6109,7 +6109,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDeclineText.
   ///
   /// In zh_CN, this message translates to:
-  /// **'本软件（ArchoeraMvsumc）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n'**
+  /// **'本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n'**
   String get settingsDeclineText;
 
   /// No description provided for @settingsDecline1Title.
@@ -6259,7 +6259,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPrivacyIntro.
   ///
   /// In zh_CN, this message translates to:
-  /// **'欢迎使用 ArchoeraMvsumc（以下简称「本软件」或「我们」）。我们深知个人信息对您的重要性，并始终致力于保护您的隐私与数据安全。本政策向您说明在您使用本软件的过程中，我们如何处理、存储与保护您的信息，以及您所享有的相关权利。\n\n请务必仔细阅读并充分理解本政策。一旦您开始使用本软件，即表示您已阅读、理解并同意本政策所述全部内容。\n\n'**
+  /// **'欢迎使用 ArchoeraMvsync（以下简称「本软件」或「我们」）。我们深知个人信息对您的重要性，并始终致力于保护您的隐私与数据安全。本政策向您说明在您使用本软件的过程中，我们如何处理、存储与保护您的信息，以及您所享有的相关权利。\n\n请务必仔细阅读并充分理解本政策。一旦您开始使用本软件，即表示您已阅读、理解并同意本政策所述全部内容。\n\n'**
   String get settingsPrivacyIntro;
 
   /// No description provided for @settingsPrivacy1Title.
@@ -6319,7 +6319,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPrivacy5Body.
   ///
   /// In zh_CN, this message translates to:
-  /// **'您的绝大部分数据保存在本机数据目录（Linux：~/.local/share/ArchoeraMvsumc；macOS：~/Library/Application Support/ArchoeraMvsumc；Windows：%LOCALAPPDATA%\\ArchoeraMvsumc，可用环境变量 ARCHOERA_DATA_DIR 覆盖），直至您主动清除或删除。敏感凭据优先采用操作系统原生安全存储加密，并在凭据保险库内隔离保管；涉及网络传输的环节在目标支持时优先使用 HTTPS / TLS。\n尽管我们采取了合理的安全措施，但受计算机与存储技术固有局限，没有任何系统能保证 100% 绝对安全，请妥善保管您的设备与第三方账号凭据。\n\n'**
+  /// **'您的绝大部分数据保存在本机数据目录（Linux：~/.local/share/ArchoeraMvsync；macOS：~/Library/Application Support/ArchoeraMvsync；Windows：%LOCALAPPDATA%\\ArchoeraMvsync，可用环境变量 ARCHOERA_DATA_DIR 覆盖），直至您主动清除或删除。敏感凭据优先采用操作系统原生安全存储加密，并在凭据保险库内隔离保管；涉及网络传输的环节在目标支持时优先使用 HTTPS / TLS。\n尽管我们采取了合理的安全措施，但受计算机与存储技术固有局限，没有任何系统能保证 100% 绝对安全，请妥善保管您的设备与第三方账号凭据。\n\n'**
   String get settingsPrivacy5Body;
 
   /// No description provided for @settingsPrivacy6Title.
@@ -6367,7 +6367,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPrivacy9Body.
   ///
   /// In zh_CN, this message translates to:
-  /// **'如对本政策的内容、您的信息安全或相关事项有任何疑问、意见或申诉，欢迎通过以下方式与开发者联系：\n· GitHub 仓库与 Issue：https://github.com/ArchoeraC/ArchoeraMvsumc\n我们将在收到反馈后尽快答复。\n\n'**
+  /// **'如对本政策的内容、您的信息安全或相关事项有任何疑问、意见或申诉，欢迎通过以下方式与开发者联系：\n· GitHub 仓库与 Issue：https://github.com/ArchoeraC/ArchoeraMvsync\n我们将在收到反馈后尽快答复。\n\n'**
   String get settingsPrivacy9Body;
 
   /// No description provided for @settingsPrivacyFooter.
@@ -8508,7 +8508,7 @@ abstract class AppLocalizations {
   /// No description provided for @instanceAlreadyRunningTitle.
   ///
   /// In zh_CN, this message translates to:
-  /// **'ArchoeraMvsumc 已有一个实例在运行'**
+  /// **'ArchoeraMvsync 已有一个实例在运行'**
   String get instanceAlreadyRunningTitle;
 
   /// No description provided for @settingsCatShortcuts.
@@ -10361,7 +10361,7 @@ abstract class AppLocalizations {
   /// No description provided for @mcpShellUsage.
   ///
   /// In zh_CN, this message translates to:
-  /// **'archoerashell — ArchoeraMvsumc 命令行控制（类 Unix 语法）\n\n用法:\n  archoera_mvsumc archoerashell [全局选项] <命令> [参数...]\n\n提示:\n  「<命令> --help」或「help <命令>」查看单命令用法。\n\n全局选项:\n  -h, --help            显示本帮助\n  -V, --version         显示版本\n  -j, --json            以 JSON 输出（便于脚本处理）\n  -q, --quiet           只输出错误\n      --host <host>     服务地址（默认 127.0.0.1）\n  -p, --port <port>     服务端口（默认取应用设置）\n  -k, --key  <key>      访问密钥（默认取应用设置）\n\n播放:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\n队列:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\n搜索 / 曲库:\n  search <source> <关键词> [-n n] [-p page]\n  search-all <关键词> [-n n]\n  library [关键词] [-n n] [--offset n] / library-random / library-stats\n\n收藏 / 历史 / 歌词:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\n下载:\n  download [list|add <ref>... [--quality <档>]|cancel <id>|remove <id>]\n\n其它:\n  theme <light|dark|system> / sleep <分钟>|--end / sleep-cancel\n  prefs [键...] / tools / info / call <工具名> [--json <参数JSON>]\n\n示例:\n  archoera_mvsumc archoerashell status\n  archoera_mvsumc archoerashell search netease 周杰伦 -n 10\n  archoera_mvsumc archoerashell play-track netease:186016\n  archoera_mvsumc archoerashell --json library 周杰伦'**
+  /// **'archoerashell — ArchoeraMvsync 命令行控制（类 Unix 语法）\n\n用法:\n  archoera_mvsync archoerashell [全局选项] <命令> [参数...]\n\n提示:\n  「<命令> --help」或「help <命令>」查看单命令用法。\n\n全局选项:\n  -h, --help            显示本帮助\n  -V, --version         显示版本\n  -j, --json            以 JSON 输出（便于脚本处理）\n  -q, --quiet           只输出错误\n      --host <host>     服务地址（默认 127.0.0.1）\n  -p, --port <port>     服务端口（默认取应用设置）\n  -k, --key  <key>      访问密钥（默认取应用设置）\n\n播放:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\n队列:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\n搜索 / 曲库:\n  search <source> <关键词> [-n n] [-p page]\n  search-all <关键词> [-n n]\n  library [关键词] [-n n] [--offset n] / library-random / library-stats\n\n收藏 / 历史 / 歌词:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\n下载:\n  download [list|add <ref>... [--quality <档>]|cancel <id>|remove <id>]\n\n其它:\n  theme <light|dark|system> / sleep <分钟>|--end / sleep-cancel\n  prefs [键...] / tools / info / call <工具名> [--json <参数JSON>]\n\n示例:\n  archoera_mvsync archoerashell status\n  archoera_mvsync archoerashell search netease 周杰伦 -n 10\n  archoera_mvsync archoerashell play-track netease:186016\n  archoera_mvsync archoerashell --json library 周杰伦'**
   String get mcpShellUsage;
 
   /// No description provided for @mcpShellHint.
@@ -11433,7 +11433,7 @@ abstract class AppLocalizations {
   /// No description provided for @elevationGateBody.
   ///
   /// In zh_CN, this message translates to:
-  /// **'ArchoeraMvsumc 正以{kind}身份运行。播放、下载与凭据保险库都不需要提权：以提权身份继续，任何一处远程代码执行或供应链问题都会波及整台机器，偏好、缓存与日志也会以{kind}权限落盘，普通用户可能无法读取或清理。\n\n建议退出，然后以当前普通用户身份重新启动。'**
+  /// **'ArchoeraMvsync 正以{kind}身份运行。播放、下载与凭据保险库都不需要提权：以提权身份继续，任何一处远程代码执行或供应链问题都会波及整台机器，偏好、缓存与日志也会以{kind}权限落盘，普通用户可能无法读取或清理。\n\n建议退出，然后以当前普通用户身份重新启动。'**
   String elevationGateBody({required String kind});
 
   /// No description provided for @elevationGateKindRoot.

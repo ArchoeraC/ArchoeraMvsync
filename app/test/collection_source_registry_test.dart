@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -17,9 +17,9 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/services/source/source_platform.dart';
-import 'package:archoera_mvsumc/widgets/dialogs/collection_platform.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/services/source/source_platform.dart';
+import 'package:archoera_mvsync/widgets/dialogs/collection_platform.dart';
 
 /// 不读写磁盘偏好的测试用 prefs controller。
 class _NoSideEffectsPrefsNotifier extends AppPrefsNotifier {

@@ -68,7 +68,7 @@ bash packaging/linux/build-release.sh verify --bundle <bundle>
 （`verify` = 守卫 + 伴随库检查 + 冒烟；冒烟也可单独对 AppImage 执行：
 `bash packaging/linux/build-release.sh smoke-appimage --appimage <文件>`）
 
-在临时 `HOME` / `XDG_*` + Xvfb 虚拟显示下真实拉起 `archoera_mvsumc`：
+在临时 `HOME` / `XDG_*` + Xvfb 虚拟显示下真实拉起 `archoera_mvsync`：
 
 - `LD_BIND_NOW=1`：启动阶段立即解析全部动态符号，缺库/缺符号立刻失败；
 - 要求进程进入事件循环并存活 `ARCHOERA_SMOKE_SECONDS`（默认 15s）；

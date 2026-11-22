@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,10 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_mvsumc/app/player_theme.dart';
-import 'package:archoera_mvsumc/stores/app_prefs.dart';
-import 'package:archoera_mvsumc/stores/providers.dart';
-import 'package:archoera_mvsumc/theme/cover_color.dart';
+import 'package:archoera_mvsync/app/player_theme.dart';
+import 'package:archoera_mvsync/stores/app_prefs.dart';
+import 'package:archoera_mvsync/stores/providers.dart';
+import 'package:archoera_mvsync/theme/cover_color.dart';
 
 class _PrefsNotifier extends AppPrefsNotifier {
   _PrefsNotifier(this.mode);

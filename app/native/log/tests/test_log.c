@@ -1,4 +1,4 @@
-// ArchoeraMvsumc 统一日志核心 —— 单元测试
+// ArchoeraMvsync 统一日志核心 —— 单元测试
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //

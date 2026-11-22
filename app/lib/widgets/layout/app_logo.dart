@@ -1,9 +1,9 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:material_ui/material_ui.dart';
-import 'package:archoera_mvsumc/eta/mark/eta_mark.dart';
+import 'package:archoera_mvsync/eta/mark/eta_mark.dart';
 
 /// 应用 Logo（白标）：圆角方块底 + 品牌标识（均衡器频谱）。
 ///

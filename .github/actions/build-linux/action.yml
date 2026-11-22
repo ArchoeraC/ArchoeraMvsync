@@ -1,4 +1,4 @@
-name: Build ArchoeraMvsumc (Linux)
+name: Build ArchoeraMvsync (Linux)
 description: >-
   各发行版共用的 Linux 构建：安装工具链（Rust/Go/.NET/Flutter/Zig）→
   编译全部原生模块 → dart analyze → flutter build linux。

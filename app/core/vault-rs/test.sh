@@ -614,16 +614,16 @@ pass "init-m2b（仅设备槽，0600）→ status mode=m2b；3 字段 set/get；
 # ════════════════════════════════════════════════════════════════════
 # 6. 独立运行拒绝（父进程 exe 绑定）+ dev 布局放行
 # ════════════════════════════════════════════════════════════════════
-# 打包布局：<dir>/native/<vault> + <dir>/archoera_mvsumc（预期主程序占位）。
+# 打包布局：<dir>/native/<vault> + <dir>/archoera_mvsync（预期主程序占位）。
 # vault 由自身位置推导「预期主程序」路径，并经 OS 读取父进程可执行文件路径比对——
 # 父进程非预期主程序（脚本/独立调用）即拒绝。dev 布局（build/）不作路径绑定，
 # 故上文各 serve 用例（build/ 下运行）不受影响（dev 布局放行）。
 mkdir -p "$DATA_PKG/native"
 cp "$VAULT" "$DATA_PKG/native/archoera-vault-test"
-cp "$VAULT" "$DATA_PKG/archoera_mvsumc"   # 预期主程序占位（仅路径比对，不执行）
+cp "$VAULT" "$DATA_PKG/archoera_mvsync"   # 预期主程序占位（仅路径比对，不执行）
 PKGVAULT="$DATA_PKG/native/archoera-vault-test"
 
-# 从 python3 启动（父进程 exe=python3 ≠ $DATA_PKG/archoera_mvsumc）→ 拒绝
+# 从 python3 启动（父进程 exe=python3 ≠ $DATA_PKG/archoera_mvsync）→ 拒绝
 OUT=$(python3 - "$PKGVAULT" "$DATA_M2B" <<'PY'
 import subprocess, sys
 vault, data = sys.argv[1:3]

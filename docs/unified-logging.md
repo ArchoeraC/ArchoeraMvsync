@@ -36,8 +36,8 @@
 
 - **控制台**：stderr，带色、即时 flush。
 - **落盘**：`<dataDir>/logs/archoera.log`（`dataDir` 见 `stores/data_dir.dart`：
-  Linux `~/.local/share/ArchoeraMvsumc`、macOS `~/Library/Application Support/ArchoeraMvsumc`、
-  Windows `%LOCALAPPDATA%\ArchoeraMvsumc`；可用 `ARCHOERA_DATA_DIR` 覆盖）。
+  Linux `~/.local/share/ArchoeraMvsync`、macOS `~/Library/Application Support/ArchoeraMvsync`、
+  Windows `%LOCALAPPDATA%\ArchoeraMvsync`；可用 `ARCHOERA_DATA_DIR` 覆盖）。
 - **大小上限**：**单文件、硬上限 4 MiB**（`archoera_log_set_max_bytes` 可调）。
   达到上限时**原地截断重写**（写入一条截断标记），**不生成 `.1/.2/.3` 等兄弟文件**，
   磁盘占用恒为「一个文件」。可用 `archoera_log_set_file_enabled(0)` / Dart

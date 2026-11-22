@@ -1,4 +1,4 @@
-// ArchoeraMvsumc UI
+// ArchoeraMvsync UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,9 +14,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:archoera_mvsumc/app/player_route_controller.dart';
-import 'package:archoera_mvsumc/app/router.dart';
-import 'package:archoera_mvsumc/app/player_route_curves.dart';
+import 'package:archoera_mvsync/app/player_route_controller.dart';
+import 'package:archoera_mvsync/app/router.dart';
+import 'package:archoera_mvsync/app/player_route_curves.dart';
 
 void main() {
   // 开关状态是模块级全局量：用例之间必须复位（上一个用例可能停在播放页）。
