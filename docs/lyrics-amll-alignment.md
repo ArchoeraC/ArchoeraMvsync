@@ -1,13 +1,25 @@
 # 歌词表现层：AMLL 效果对齐（Lyrics AMLL Alignment）
 
-> 状态：**已实现（2026-09-20）**。
+> 状态：**已实现（2026-09-20 起，持续迭代；最近更新 2026-11-22）**。
+> AMLL 仅作**观感参考**：新版重构会替换算法、数据结构与接口，不再沿用 AMLL
+> 的实现。
 > 范围：AMLL 引擎（`lyrics.engine = 'amll'`）的**表现层**——时钟、扫亮、景深、
-> 逐词动画、间奏识别、背景人声行。布局/弹簧/缓存的既有设计不变。
+> 逐词动画、间奏识别、背景人声行；另含隐藏已唱行、水平对齐、边缘渐隐与稳态烘焙。
+> 布局/弹簧/缓存的既有设计不变。
 > （间奏三点等待动画已移除：间奏期间保持不点亮任何行、锚点停在间奏前一行。）
 > 上游参考：`amll-dev/applemusic-like-lyrics`（`packages/core/src/lyric-player`，AGPL-3.0-only；
 > 本项目为 Dart 衍生实现，随本项目以 AGPL-3.0 分发，保留上游版权声明与修改说明）。
 > 关联：[player-render-optimization.md](player-render-optimization.md) §4.2 / §4.2b、
 > [architecture.md](architecture.md) §10.2。
+
+> **维护原则（2026-11-22，同日修订）**：AMLL 只作为**观感参考**，不是实现或
+> 接口基线。底层算法、数据结构、缓存策略、时钟/调度实现以及对外接口都可以
+> 整体替换；重构后应保留本文记录的、我们已经确认的增强（逐字提前换行、高速
+> 换行刚性滚动、滚动预滚、视口窗口与 `park()`、失焦档位/自动降级、边缘渐隐、
+> 隐藏已唱行、水平对齐、悬停与手动浏览、`lite` 轻量档、稳态烘焙等），并以
+> 「观感不倒退」为验收标准：对照 §2 的观感目标与 §4 的差异清单，跑 §6 回归
+> 测试与 `docs/player-render-optimization.md` §4.2 的基准；有意改变观感/常量时
+> 同步更新本文对应条目和理由，不允许只改代码、文档漂移。
 
 ---
 
@@ -28,6 +40,9 @@ Flutter 的 `ui.Paragraph` 做不到逐 run 变换、也不能给文字直接加
 
 ## 2. 对齐清单
 
+> 本节是 2026-09-20 的对齐记录，用于说明**观感目标**；新版重构不要求沿用
+> AMLL 的实现方式或接口。
+
 | AMLL | 我们 | 文件 |
 |---|---|---|
 | rAF 每帧驱动 `currentTime` | `LyricClock`：事件位置 + vsync 外推（上限 150ms） | `lyric_clock.dart` |
@@ -42,15 +57,18 @@ Flutter 的 `ui.Paragraph` 做不到逐 run 变换、也不能给文字直接加
 | `.lyricLineWrapper` 排版度量（`line-height:1.2` + `padding:.4em`；主行/子行为块级堆叠、无 flex gap） | `kLyricLineHeightEm=1.2` / `kLyricLineGapEm=1.0` / `kLyricTranslationGapEm=0` | `lyrics_layout.dart` |
 | `LayoutReason` 策略（只有 PlaybackTick 带级联；`snapPosY` 仅连续拖拽） | `_maybeRetarget(stagger:/snapNow:)` + 触摸拖拽跟手 | `lyrics_physics_wall_state.dart` |
 | RebuildView 时 `resetPosition`（整墙从下方飞入，不瞬移） | `_flyIn`：新歌/首帧把各行放到视口下方再由弹簧归位 | `lyrics_physics_wall_state.dart` |
-| 音译（罗马音）小字 + `showRomanization`（main 已实现） | 与本轮的逐字/间距/弹簧改动合并保留（音译在译文**之上**） | `lyric_line.dart` / `lyrics_layout.dart` / painter |
+| 音译（罗马音）小字 + `showRomanization`（main 已实现） | 与本轮的逐字/间距/弹簧改动合并保留（**译文在上、音译在下**，对齐 AMLL 子节点顺序） | `lyric_line.dart` / `lyrics_layout.dart` / painter |
+| 隐藏已唱行（上游 hide passed lines） | `amll.hidePassed`：激活行之前的行整行不绘制；无激活行（前奏/间奏/末尾）时边界取「锚点 + 1」 | `lyrics_physics_wall_painter.dart` |
+| 水平对齐（居中/靠左/靠右） | `textAlign` 由布局注册表声明（默认居中；poster/vutron 靠左），段落与逐字盒同源 | `lyrics_physics_wall.dart` / `pages/player/layouts` |
 
 ### 2.1 关键常量（与上游一致）
 
 - 未唱 / 已唱透明度：**0.4 / 1.0**（`--dark-mask-alpha` / `--bright-mask-alpha`）。
 - 羽化宽度：`wordFadeWidth(默认 0.5) × 字号`。
 - 时钟外推上限：**150ms**（上游 `MAX_FRAME_DELTA` 100ms 的同量级取值）。
-- 间奏最小空隙：**7000ms**；进场淡入 180ms / 退场总长 1000ms（前 750ms 胀到
-  1.25、后 250ms 缩到 0.4）/ 每点错峰 80ms / 呼吸周期基准 4000ms。
+- 间奏最小空隙：**7000ms**；间奏期间不点亮任何行、锚点停在间奏前一行
+  （三点等待动画已移除，见 §3.5 与 `interlude_dots.dart`，不再有淡入/退场/
+  错峰/呼吸等参数）。
 - 长音强调门槛：时长 ≥1000ms（CJK 不限字数；拉丁词 2~7 字符）；末词
   `amount×1.6 / blur×1.5 / du×1.2`。
 - 级联：`kCascadeStepMs = 50`、`baseDelay /= 1.05`（原有，未变）。
@@ -69,6 +87,10 @@ Flutter 的 `ui.Paragraph` 做不到逐 run 变换、也不能给文字直接加
 2. 每个字/词另排一个**左对齐**小段落，绘制时放到对应盒的原点，因此可以单独
    平移/缩放/加辉光。
 
+「居中」只是默认值：布局段落、逐字盒、译文/音译都按 `AmllPhysicsWall.textAlign`
+生成（`poster` / `vutron` 布局声明为靠左，其余居中），缓存键包含对齐值；对齐只
+影响水平排布，行高与纵向锚定不重算。
+
 按行缓存（键含文本/字体/字号/字重/宽度/颜色），只保留「激活行 + 淡出中的上一
 激活行」（`LyricsFragmentCache.pruneTo`）。
 
@@ -83,8 +105,10 @@ Flutter 的 `ui.Paragraph` 做不到逐 run 变换、也不能给文字直接加
 - `blur`：**除高亮行外每一行都失焦**（对齐 AMLL `resolveBlurLevel`），两种画法
   （`LyricsBlurMode`）：
   - **`panel`（默认）**：所有非激活行画进**同一个** `saveLayer`，一次高斯，且在
-    1/4 尺寸上做（`ImageFilter.compose` + `matrix` 降采样→模糊→放大，**无纹理缓存、
-    不占显存**）。层数与可见行数无关，半径统一 σ=3。
+    1/4 尺寸上做（`ImageFilter.compose` + `matrix` 降采样→模糊→放大）；运动/过渡
+    帧不走纹理缓存，稳态则由逐行烘焙接管（见 §3.10，常驻约全视口 1/16）。层数与
+    可见行数无关，半径统一 σ=4（`kPanelBlurSigma`，取上游 2~5 的中值偏上，理由
+    见 §4）。
   - **`perLine`**：逐行 `saveLayer + ImageFilter.blur`，σ = `min(5, 1 + 距离)`
     ——最贴上游的半径梯度，但每帧离屏层数 ≈ 可见行数。
   - **`lite`（轻量/近似）**：**不跑高斯**，把非激活行「放大 4% + 低透明」重绘一次
@@ -248,10 +272,11 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
 | **行窗口** | 维持 `[_winStart, _winEnd)`：只有视口 ± 自适应余量（`max(视口高 × 0.6, 180px)`）内的行参与弹簧/过渡；边界按**行本体**（中心 ± 半高）判定，半可见的行也留在窗口内；窗口外 `Spring1D.park()`（**不重建求解器**，不参与每帧） | 换行时不再为全量行重建闭式解（原来每行 3 个闭包）；每帧循环从 O(歌长) 降到 O(视口) |
 | **按需测量行高** | 视口外用 `estimateLineHeight()` 估算，进视口才 `computeLineHeight()` 实测；中心用 O(N) 纯算术重算 | 拖字号/改窗口宽度不再为整首逐行 `TextPainter.layout()` |
 | **重绘抑制** | `_tick` 只在「弹簧在动 / 过渡在动 / 激活行有逐字片段（扫亮在推）」时才 `notify()` | 整行级歌词（无逐字）不再按 60fps 重绘整墙，只在位置事件（~20Hz）重绘 |
-| **失焦（对齐上游）** | 除高亮行外**每一行**都失焦，两档：默认「整层一次 + 1/4 重采样」（1 个离屏层、像素量 1/4，半径统一 σ=4）；可切「逐行 σ=`min(5,1+距离)`」（最贴上游梯度）；悬停时全部取消 | 逐行档是本机基准里最贵的一项（900×600 场景：无失焦 6.3ms → 逐行 28.5ms）；整层 1/4 重采样降到 16.2ms 且层数恒定。见 `docs/player-render-optimization.md` §4.2 |
+| **失焦（对齐上游）** | 除高亮行外**每一行**都失焦，两档：默认「整层一次 + 1/4 重采样」（运动/过渡帧 1 个离屏层、像素量 1/4，半径统一 σ=4；稳态转逐行烘焙，见下表）；可切「逐行 σ=`min(5,1+距离)`」（最贴上游梯度）；悬停时全部取消 | 逐行档是本机基准里最贵的一项（900×600 场景：无失焦 6.3ms → 逐行 28.5ms）；整层 1/4 重采样降到 16.2ms 且层数恒定。见 `docs/player-render-optimization.md` §4.2 |
 | **失焦档位可选（用户决定）** | `amll.blurQuality`：自动 / 流畅（整层）/ 轻量（零高斯伪散焦）/ 画质（逐行）/ 关闭；**显式档位不吃自动降级** | 机器差异太大（独显/核显/无 GPU），把权衡交给用户；自动档才带兜底 |
 | **失焦自动降级** | 帧预算守卫（`LyricsBlurBudget`）：歌词墙在动时若连续多帧「光栅超 14ms 且 UI 线程正常」，就 latch 成关闭失焦（只降不升） | 不同机器（独显/核显/软件光栅/Windows Impeller）差一个数量级，编译期猜不出来；宁可不糊也不要卡 |
 | **字体上限** | 字号可调范围 14–**60px**（原 38px 上限偏小） | — |
+| **整层档稳态烘焙**（D2a，2026-11-03） | 稳态时把每个非激活行烘焙成 1/4 逻辑分辨率小图（含 σ=4 失焦），每帧只贴图 + 画激活行；绘制路径**只查不烘**，缺行当帧回退逐行高斯、后续稳态帧每帧预取 1 张 | 稳态帧的整层 `saveLayer` 与全部非激活行段落重放一并消失；缓存与位置无关，换行只烘新进入视口的行。像素等价验收见 `docs/player-render-optimization.md` §4.2c |
 
 > 前置条件是 `Spring1D.park()`：视口外的行停在目标位置但**不重建求解器**
 > （`_settled = true`，`update()/arrived()` 直接返回），等它进视口时再由
@@ -283,6 +308,14 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
   由于拖动位置是连续大跳变，会走 seek 路径（慢速弹簧、无级联）——
   高亮立刻跟上、整墙平滑滑过去，而不是瞬移。
 
+### 3.12 隐藏已唱行（`amll.hidePassed`）
+
+设置页「歌词 → 歌词墙 → 隐藏已唱行」（默认关）。开启后 painter 收集可见行时
+直接跳过「激活行之前」的行：不绘制，也不参与失焦、烘焙与边缘渐隐。边界取
+`active >= 0 ? active : anchor + 1`——前奏 / 间奏 / 已播完没有激活行时，当前
+锚点行仍保留，不会把整墙清空。高亮与滚动锚点逻辑不变，关掉后画面与未开启时
+完全一致。
+
 ---
 
 ## 4. 与上游的刻意差异 / 简化
@@ -294,12 +327,13 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
 | 逐字变换粒度 | 以 `LyricFragment` 为单位（CJK 多为单字）；上游对强调词再拆 grapheme | 片段已经是字/词级，收益有限、复杂度显著 |
 | 强调的作用范围 | 激活行内满足门槛的字符 | 与上游 `enable()` 只作用于高亮行一致 |
 | 背景人声位置 | 恒在主行**下方**（上游按时间可上可下、带 80px 滑入） | 简化；滑入动画后续可加 |
-| 上下边缘渐隐 | **未实现**（旧文档曾声称有） | AMLL 无此效果；景深已提供层次 |
+| 上下边缘渐隐 | **已实现（2026-11-03）**：默认 `wall` 逐行 alpha（零离屏层），可切 `shader` / `off`（见 §5） | AMLL 无此效果，属我们的阅读增强；不改变主体观感 |
+| 翻译显示 | 全屏播放器恒显示译文；设置项只作用于播放条迷你歌词 | 产品决策：避免全屏下误关后读不到译文 |
 | 手动浏览回归 | 除「下一行开始时 ≥500ms 未滚动」外，另保留 5s 无操作兜底 | 长间奏里不会把用户永久留在浏览态 |
 | 弹簧预设 | 保留 `smooth/responsive/jello/heavy` 固定手感供覆盖 | 上游没有预设概念；`default` 已与上游一致 |
 | 轻量档（`lite`） | 用「放大 4% + 低透明重绘」近似散焦，不是高斯模糊 | 零离屏层、成本几乎为零；给连 1 层高斯都吃不住的核显留一个「有景深但不卡」的选项，观感差异在文档与设置文案里写明 |
 | 失焦半径分布（整层档） | `auto`/`fast` 档用**统一** σ=4，而不是上游的逐行梯度（σ 2→5） | 整层一次 = 层数恒定、成本可预测；半径梯度是次要成分（「除高亮行外都糊」才是主要成分）。σ 取中值偏上让悬停「模糊↔清晰」对比更明显。要梯度可在设置里选 `quality`（或 `ARCHOERA_LYRICS_BLUR=perline`） |
-| 换行平衡 / ruby / 对唱 | 未实现 | 属数据模型/排版层，另立专项 |
+| 换行平衡 / ruby / 对唱 | AMLL 墙未实现（simple 引擎已有平衡换行，见 `lyrics_view/lyrics_balance.dart`） | 属数据模型/排版层，另立专项 |
 
 ---
 
@@ -309,6 +343,8 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
 |---|---|---|
 | `lyrics.engine` | `simple` | `amll` 才启用本引擎（本轮未改默认） |
 | `lyrics.fontSize` | `18`（14–**60**） | 字号上限提到 60px |
+| `lyrics.adaptiveFontSize` | `true` | 字号随窗口高度缩放（simple / AMLL 共用；关闭后严格用 `lyrics.fontSize`） |
+| `lyrics.fontWeight` | `600` | 激活行字重（非激活固定 w400，对齐上游层次） |
 | `amll.blurQuality` | `auto` | 失焦档位：`auto` 自动（整层档起步 + 帧预算兜底）/ `fast` 流畅（固定整层档，1 层 + 1/4 重采样）/ `lite` 轻量（零高斯伪散焦，弱核显可用）/ `quality` 画质（固定逐行 σ=`min(5,1+距离)`，最贴上游、最吃 GPU）/ `off` 关闭。**显式档位不吃自动降级**（决定权交给用户）。旧键 `amll.enableBlur=false` 自动迁移为 `off` |
 | `ARCHOERA_LYRICS_BLUR` | 未设 | 诊断/AB 用环境变量：`perline` / `panel` / `off`。显式指定时会**禁用自动降级**（便于对比真机手感） |
 | `render.lyricsEdgeFade` | `wall` | 歌词区上下渐隐实现（设置页「性能 / 渲染 → 歌词边缘渐隐」）：`wall` 逐行 alpha（零离屏层）/ `shader` 遮罩层 / `off` |
@@ -316,6 +352,7 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
 | `amll.enableScale` | `true` | 关掉非激活行缩放 |
 | `amll.inactiveAlpha` | `0.45` | 非激活行透明度下限 |
 | `amll.wordSweep` | `true` | 关掉后激活行走整行模式（无逐字） |
+| `amll.hidePassed` | `false` | 隐藏已唱行：激活行之前的行不绘制（无激活行时边界取锚点 +1），见 §3.12 |
 | `amll.alignFraction` | `0.5` | 激活行锚定位置 |
 | `amll.springPreset` | `default` | 滚动弹簧手感 |
 | `preset.performanceMode` | `false` | 吸附所有过渡、不推开时钟 |
@@ -337,11 +374,18 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
   **排版度量**（间距常量、中心距、音译＋译文计入行高）、
   **罗马音与背景人声共存**（解析挂载、重建保留 `romaji`+`isBG`）、
   以及墙体行为（插值推进、淡入、缩放、按距离失焦、间奏期高亮清空、缓存有界、
-  羽化扫亮像素级验证、音译行渲染、背景行不占槽位、
+  羽化扫亮像素级验证、音译行渲染、背景行只占 0.4× 行距（不占独立整行槽位）、
   **高速换行降级为整墙刚性滚动**（行距恒定 / 低速不降级 / 迟滞退出））。
 - `test/lyrics_blur_budget_test.dart`：失焦档位解析（auto/fast/lite/quality/off 映射、
   显式档位不吃降级、环境变量覆盖优先级、`LyricsBlurQuality.parse`）与帧预算守卫
   （窗口未满不下结论、达阈值才降、UI 线程卡顿不计入）。
+- `test/lyrics_bake_test.dart`：整层档稳态烘焙（稳态走贴图、换行/seek/浏览回退、
+  换行只烘新进入视口的行、与逐行高斯路径的像素等价）。
+- `test/amll_physics_wall_test.dart`：锚点/高亮分离、seek 与高速换行、左右对齐渲染。
+- `test/lyrics_edge_fade_test.dart`：逐行渐隐曲线的停点/夹紧/单调性、`wall` 与
+  `shader` 的差异只在上下边缘带、环境变量解析。
+- `test/lyrics_track_switch_test.dart`：切歌时新歌词解析期间不得把上一首的结果
+  当作当前曲目。
 - `test/lyrics_prefs_test.dart`：`amll.blurQuality` 默认/写入/非法值回落/
   旧键 `amll.enableBlur=false` 迁移。
 - `lyrics_amll_engine_test.dart` 另含：整层档为默认且强度收敛、悬停归零/恢复、
@@ -361,7 +405,7 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 - `LyricGroup.romaji`、`parseLyricGroups(romaji:)`、`LyricMatchResult.romaji`
   链路（`apis/lyric` → `engine/lyric_decoder`）、`showRomanization` 偏好
   （`prefs_player.dart`）全部保留；
-- 排版/绘制顺序为 **音译在上、译文在下**，两者各自计入行高与离屏层范围；
+- 排版/绘制顺序为 **译文在上、音译在下**，两者各自计入行高与离屏层范围；
 - **新增 `LyricGroup` 字段时**，除了 `parseLyricGroups` 的行结束时间后置计算，
   还必须检查 `engine/lyric_pipeline.dart` 的 `UncensorLyricProcessor`
   （以及任何其它重建 `LyricGroup` 的位置）；
@@ -370,7 +414,7 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 
 ---
 
-## 7. 解析格式补齐 + AMLL DB TTML 覆盖（2026-09-30）
+## 7. 解析格式补齐 + AMLL DB TTML 覆盖（2026-09-30；2026-11-15 补充行内 QRC / 流媒体源）
 
 > 起因：部分歌词（尤其 QM 逐字）显示异常。对照 SPlayer-Next / AMLL 的
 > `parseQRC` / `parseLRC` / `bg.ts` / `parseTTML` 补齐解析层。
@@ -395,6 +439,10 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 - **ESLRC**：`[mm:ss.xx]<mm:ss.xxx>字`（尖括号内为时间；末尾空标签 = 行尾）；
 - **增强 LRC**：行内 `[mm:ss.xx]字[mm:ss.xx]字`（标签之间的文本归属前一个标签）；
   仅当「标签之间确有文本」才视为逐字，`[t1][t2]重复行` 这类纯多标签仍按重复行展开。
+- **行内 QRC（混合行，2026-11-15）**：标准 LRC 行头 + 正文里的 `(起始,时长)`
+  字级标记（服务端富歌词生成时会把 QRC 标记原样带进正文，如
+  `[00:00.000]我只能离开 (3160,632)夏…`）。判定：至少 2 个标记且起始时间
+  非递减、时长 1~60s，或单个标记位于行尾；首个标记前的文字归行首。
 
 ### 7.3 行内尾随和声（对齐 AMLL `splitTrailingBackground`）
 
@@ -426,7 +474,28 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
   `_inflight.remove(key)` 的结果（即该 Future 自身），会让完成回调等待自己而
   永久挂起。该 bug 因功能未接通从未暴露，接通后即触发。
 
-### 7.5 测试
+### 7.5 流媒体逐字歌词归一化（2026-11-15）
+
+`StreamingLyricSource`（Subsonic / Jellyfin / Songloft）只使用服务端自带的
+歌词：`lyric` 整行、`tlyric` 翻译、`lxlyric` 逐字、`rlyric` 罗马音；逐字与
+罗马音服务端没给就不展示，**客户端不主动在线抓取**（`preferRich` 只决定有多份
+候选时是否优先逐字）。仅 ArchoeraMusic 服务端 + 曲库无内嵌歌词时才返回
+`fetchOnline`，由本机按用户来源顺序补全（标准 Subsonic 客户端不受影响）。
+
+服务端逐字有四种形态，`detectStreamingLyricFormat` 按「新版 YRC →
+YRC/KRC/ESLRC → QRC」识别，`normalizeStreamingWordLyric` 再归一化：
+
+| 形态 | 处理 |
+|---|---|
+| 传统 YRC/KRC/ESLRC（`<rel,dur>字`、`<mm:ss>字`） | 原样交给引擎 |
+| 新版 YRC（`[ms,dur](绝对起点,dur,flag)字`） | `convertNeteaseNewYrc` → 传统 YRC |
+| QRC（`[ms,dur]字(start,dur)`） | 原样（引擎按 `qrc` 自行归一化） |
+| 非标准 `[ms,dur]<rel,dur>字` | 只把行头改写成 `[mm:ss.xxx]` |
+
+翻译 / 罗马音的同一套行头也归一到 LRC（新 YRC 走
+`convertNeteaseNewYrcToLrc`，其余改写行头并剥字级标签）。
+
+### 7.6 测试
 
 - `lyrics_amll_engine_test.dart`：QRC（XML/纯文本/裸括号/罗马音）、增强 LRC /
   ESLRC、尾随和声（普通行 / 逐字行 / 日文注音保护）、同时间背景子行不抢高亮、
@@ -434,7 +503,9 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 - `lyrics_ttml_parser_test.dart`：真实 62 行样例 + 角色 / 语言 / 背景 / 时间
   推断 / 容错；
 - `lyrics_engine_test.dart`：TTML 覆盖优先 / 未启用回退 / 非 TTML 平台不请求；
-- `lyrics_prefs_test.dart`：TTML 偏好默认值 / 写入读回 / 非法模板回落。
+- `lyrics_prefs_test.dart`：TTML 偏好默认值 / 写入读回 / 非法模板回落；
+- `streaming_lyrics_test.dart`：新版 YRC 不被误判为 QRC、传统 YRC 原样、
+  新版 YRC 转换、`[ms,dur]` 行头改写、QRC 原样交引擎。
 
 ## 8. 普通逐行歌词不做逐字（2026-09-30 引入，2026-11-08 移除）
 

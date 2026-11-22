@@ -21,7 +21,7 @@ const amllInactiveAlphaKey = 'amll.inactiveAlpha';
 const amllWordSweepKey = 'amll.wordSweep';
 const amllHidePassedKey = 'amll.hidePassed';
 const amllEnableScaleKey = 'amll.enableScale';
-const amllBlurQualityKey = 'amll.blurQuality'; // auto | fast | quality | off
+const amllBlurQualityKey = 'amll.blurQuality'; // auto | fast | lite | quality | off
 const amllEnableBlurKey = 'amll.enableBlur'; // 旧键（仅用于迁移）
 const amllSpringPresetKey = 'amll.springPreset';
 
@@ -197,7 +197,7 @@ extension AmllLyricsPrefs on AppPrefs {
   /// 非激活行缩放（激活 1.0 / 非激活 0.97，弹簧平滑；默认开）。
   bool get amllEnableScale => data[amllEnableScaleKey] as bool? ?? true;
 
-  /// 非激活行失焦档位（`auto`/`fast`/`quality`/`off`，默认 `auto`）。
+  /// 非激活行失焦档位（`auto`/`fast`/`lite`/`quality`/`off`，默认 `auto`）。
   ///
   /// 兼容旧键：`amll.enableBlur == false` 视为 `off`（新键存在时以新键为准）。
   String get amllBlurQuality {
