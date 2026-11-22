@@ -1,12 +1,12 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:io';
 
-import 'package:archoera_music/services/history/history_store.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/scanner/sqlite_preload.dart';
+import 'package:archoera_mvsumc/services/history/history_store.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/services/scanner/sqlite_preload.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 播放历史数据层测试：UI 线程同步直写 + 上限裁剪 / 不限制 / 去重置顶。

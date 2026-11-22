@@ -1,10 +1,10 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/widgets/common/overlay_host.dart';
+import 'package:archoera_mvsumc/widgets/common/overlay_host.dart';
 
 /// 回归（2026-10-14 实录）：`MaterialApp.builder` 的 `child` 是 Navigator，Flutter 的
 /// `Overlay` 在 Navigator **内部**；挂在 builder 里、**位于 Navigator 之上**的门

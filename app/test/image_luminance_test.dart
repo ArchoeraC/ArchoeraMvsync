@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,8 +13,8 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/render/image_luminance.dart';
-import 'package:archoera_music/theme/app_theme.dart';
+import 'package:archoera_mvsumc/services/render/image_luminance.dart';
+import 'package:archoera_mvsumc/theme/app_theme.dart';
 
 /// 写一张纯色 32×32 PNG，让采样结果可预期。
 Future<Uint8List> _solidPng(int argb) async {

@@ -1,4 +1,4 @@
-// ArchoeraMusic 平台能力原生桥接
+// ArchoeraMvsumc 平台能力原生桥接
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -427,7 +427,7 @@ int32_t powerSetSleepInhibit(int32_t on) {
     if (on != 0) {
         if (g_activity != nil) return OK;
         g_activity = [pi beginActivityWithOptions:NSActivityUserInitiated
-                                           reason:@"ArchoeraMusic playback"];
+                                           reason:@"ArchoeraMvsumc playback"];
         return g_activity != nil ? OK : ERR_BACKEND;
     }
     if (g_activity != nil) {
@@ -538,7 +538,7 @@ int32_t appInstanceAcquire() {
     if (fd >= 0) return 1;
     const char* home = std::getenv("HOME");
     std::string dir = home != nullptr ? home : "/tmp";
-    std::string path = dir + "/.archoera_music.lock";
+    std::string path = dir + "/.archoera_mvsumc.lock";
     fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (fd < 0) return ERR_BACKEND;
     if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {

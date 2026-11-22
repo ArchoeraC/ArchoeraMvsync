@@ -1,6 +1,6 @@
 # vault-rs 第三方许可证声明（archoera-vault）
 
-本目录 `app/core/vault-rs` 为 ArchoeraMusic 的凭据保险库（Rust 重实现，
+本目录 `app/core/vault-rs` 为 ArchoeraMvsumc 的凭据保险库（Rust 重实现，
 与历史 C# 版字节兼容）。自研代码随本软件以 **AGPL-3.0** 授权；第三方 crate
 按各自许可使用，均为 **MIT / Apache-2.0 / BSD** 系，与 AGPL-3.0 兼容。
 

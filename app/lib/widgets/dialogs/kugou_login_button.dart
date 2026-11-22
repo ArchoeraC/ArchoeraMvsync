@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -31,7 +31,7 @@ import '../common/toast.dart';
 import '../common/anim.dart';
 import 'login_risk_notice.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 part 'kugou_login_button/kugou_login_button_view.dart';
 

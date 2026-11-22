@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ArchoeraMusic — scanner × 自研内核元数据桥 联动 Benchmark
+# ArchoeraMvsumc — scanner × 自研内核元数据桥 联动 Benchmark
 #
 # 目的：量化 scanner 经 `zk_metadata_*`（probe-only，无 JSON）直桥自研内核 vs
 # 回退 TagLibSharp 的**吞吐/CPU/内存**，并做**正确性对拍**（避免“少做事更快”）。

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -27,7 +27,7 @@ import '../../widgets/streaming/songs_tab.dart';
 import '../../widgets/streaming/status_dot.dart';
 import '../../services/streaming/streaming_provider.dart';
 import '../../stores/shell_page_state.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 part 'streaming_page/streaming_page_actions.dart';
 part 'streaming_page/streaming_page_view.dart';

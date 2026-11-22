@@ -1,10 +1,10 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 /// 本地曲库搜索索引偏好（总开关 / `.lrc` 子开关）默认值与写入。
 void main() {

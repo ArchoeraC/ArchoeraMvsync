@@ -8,16 +8,16 @@ Linux 依赖门禁见 [release-dependency-guard.md](release-dependency-guard.md)
 
 | 平台 | 产物 | 入口脚本 / 配置 | 命名 |
 |---|---|---|---|
-| Linux | `.deb`（Ubuntu 24.04 / Deepin 25） | `packaging/linux/package.sh deb` | `ArchoeraMusic-<ver>-ubuntu24.04-x86_64.deb`、`-deepin25-x86_64.deb` |
-| Linux | `.rpm`（Fedora/openSUSE 系） | `packaging/linux/package.sh rpm` | `ArchoeraMusic-<ver>-fedora-x86_64.rpm` |
-| Linux | `pkg.tar.zst`（Arch/Manjaro） | `packaging/linux/package.sh arch` → `PKGBUILD` | `ArchoeraMusic-<ver>-arch-x86_64.pkg.tar.zst` |
-| Linux | `.AppImage`（通用便携） | `packaging/linux/package.sh appimage` | `ArchoeraMusic-<ver>-x86_64.AppImage` |
-| Linux | `.flatpak` | `packaging/linux/package-flatpak.sh` | `ArchoeraMusic-v<ver>-flatpak-x86_64.flatpak` |
-| Linux | NixOS flake 源构建产物 | `packaging/linux/nix/package.nix` | `ArchoeraMusic-<ver>-nixos-x86_64.tar.gz` |
-| macOS | **`.dmg`（拖拽安装）** | `packaging/macos/build-release.sh` | `ArchoeraMusic-<ver>-macos-<arm64\|x64>.dmg` |
-| macOS | `.zip`（便携） | 同上 | `ArchoeraMusic-<ver>-macos-<arm64\|x64>.zip` |
-| Windows | **Inno Setup 安装器** | `packaging/windows/build-release.ps1` + `archoera_music.iss` | `ArchoeraMusic-<ver>-windows-x64-setup.exe` |
-| Windows | 便携 zip | 同上 | `ArchoeraMusic-<ver>-windows-x64-portable.zip` |
+| Linux | `.deb`（Ubuntu 24.04 / Deepin 25） | `packaging/linux/package.sh deb` | `ArchoeraMvsumc-<ver>-ubuntu24.04-x86_64.deb`、`-deepin25-x86_64.deb` |
+| Linux | `.rpm`（Fedora/openSUSE 系） | `packaging/linux/package.sh rpm` | `ArchoeraMvsumc-<ver>-fedora-x86_64.rpm` |
+| Linux | `pkg.tar.zst`（Arch/Manjaro） | `packaging/linux/package.sh arch` → `PKGBUILD` | `ArchoeraMvsumc-<ver>-arch-x86_64.pkg.tar.zst` |
+| Linux | `.AppImage`（通用便携） | `packaging/linux/package.sh appimage` | `ArchoeraMvsumc-<ver>-x86_64.AppImage` |
+| Linux | `.flatpak` | `packaging/linux/package-flatpak.sh` | `ArchoeraMvsumc-v<ver>-flatpak-x86_64.flatpak` |
+| Linux | NixOS flake 源构建产物 | `packaging/linux/nix/package.nix` | `ArchoeraMvsumc-<ver>-nixos-x86_64.tar.gz` |
+| macOS | **`.dmg`（拖拽安装）** | `packaging/macos/build-release.sh` | `ArchoeraMvsumc-<ver>-macos-<arm64\|x64>.dmg` |
+| macOS | `.zip`（便携） | 同上 | `ArchoeraMvsumc-<ver>-macos-<arm64\|x64>.zip` |
+| Windows | **Inno Setup 安装器** | `packaging/windows/build-release.ps1` + `archoera_mvsumc.iss` | `ArchoeraMvsumc-<ver>-windows-x64-setup.exe` |
+| Windows | 便携 zip | 同上 | `ArchoeraMvsumc-<ver>-windows-x64-portable.zip` |
 
 所有资产在 release 作业里由 `app/tool/sign_release.sh` 逐个生成 `<asset>.sig1`
 （ECDSA P-256 / SHA-256），并汇总为 `SHA256SUMS`；另有 `ARCHOERA-SBOM.cdx.json`
@@ -42,7 +42,7 @@ bash packaging/linux/build-release.sh all
 
 各格式要点：
 
-- **deb / rpm**：`/opt/archoera-music` 整目录安装 + `/usr/bin` 符号链接；
+- **deb / rpm**：`/opt/archoera-mvsumc` 整目录安装 + `/usr/bin` 符号链接；
   `Depends`/`Requires` 只列 ABI 稳定的系统库（GTK3、DBus、SQLite、X11 等）。
   包内 `BUILD-INFO.txt` 写明构建目标、基线、最低 glibc 与提交。
 - **arch**：`package.sh` 只预置工作目录，`makepkg` 在 archlinux 容器里执行。
@@ -50,7 +50,7 @@ bash packaging/linux/build-release.sh all
   `dlopen` 的 Flutter 插件（`libcnativeapi.so` 等）也会显式 `--library`
   传入，否则打包后启动报 `cannot open shared object file`。
 - **AppStream 元数据**：AppDir 里 `.desktop` 文件名必须等于组件 ID
-  （`awa.archoera.betastudio2.archoera_music.desktop`，与 deb/rpm/arch/nix/flatpak
+  （`awa.archoera.betastudio2.archoera_mvsumc.desktop`，与 deb/rpm/arch/nix/flatpak
   一致），metainfo 以 `<id>.metainfo.xml` 安装，并额外提供同名
   `<id>.appdata.xml` 别名——appimagetool 只按桌面文件名去找 appdata，缺了会打印
   "AppStream upstream metadata is missing"。`appstreamcli validate` 应为
@@ -58,7 +58,7 @@ bash packaging/linux/build-release.sh all
 - **flatpak**：包装预构建 bundle（不源码构建），bundle 整体放 `/app`。
 - **nix**：`package.sh nix` 预置 flake 工作目录，由 NixOS 环境 `nix build`。
 
-`archoera_music` 自带 `archoerashell` 子命令（纯二进制 tar 与各包一致）。
+`archoera_mvsumc` 自带 `archoerashell` 子命令（纯二进制 tar 与各包一致）。
 
 ## 3. macOS
 
@@ -83,9 +83,9 @@ bash packaging/macos/build-release.sh all --arch arm64
 > 的数组（用标量或先判长度）。改完在 Mac 上实跑一次。
 
 - **`.dmg`**：`hdiutil -format UDZO -fs HFS+` 打包一个临时舞台目录，内容为
-  `ArchoeraMusic.app` + `应用程序` → `/Applications` 的符号链接 +
+  `ArchoeraMvsumc.app` + `应用程序` → `/Applications` 的符号链接 +
   `首次打开说明.txt`。生成后会**挂载回读**校验
-  `ArchoeraMusic.app/Contents/MacOS/archoera_music` 可执行；失败即删包报错。
+  `ArchoeraMvsumc.app/Contents/MacOS/archoera_mvsumc` 可执行；失败即删包报错。
 - **`.zip`**：`ditto -c -k --sequesterRsrc --keepParent`，保留
   `Frameworks/FlutterMacOS.framework` 等符号链接与可执行位（普通 `zip`/`tar`
   会破坏链接结构）。
@@ -120,7 +120,7 @@ bash packaging/macos/build-release.sh all --arch arm64
 因此首次打开会触发 Gatekeeper 拦截。注意 macOS 14+ 对「带隔离属性的
 ad-hoc 签名应用」常直接报**「已损坏，无法打开」**——这不是文件损坏，而是
 隔离属性（quarantine）；用户执行
-`xattr -dr com.apple.quarantine /Applications/ArchoeraMusic.app` 即可。
+`xattr -dr com.apple.quarantine /Applications/ArchoeraMvsumc.app` 即可。
 DMG 与 zip 内都已附《首次打开说明》，其中这条排在前面。
 
 从 QQ / 微信 / 网盘接收的 zip 常常被第三方解压器破坏（丢符号链接、写入
@@ -148,7 +148,7 @@ pwsh -File packaging/windows/build-release.ps1 all
 #   package : 便携 zip + Inno Setup 安装器
 ```
 
-- **安装器**（`archoera_music.iss`）：`PrivilegesRequired=lowest`，默认
+- **安装器**（`archoera_mvsumc.iss`）：`PrivilegesRequired=lowest`，默认
   **per-user 免 UAC**；用户可在向导里主动选 per-machine（唯一允许提权的例外）。
   `Compression=lzma2/max`，`ArchitecturesAllowed=x64compatible`。
 - **便携 zip**：runner `Release` 目录整体（含 `native/`、`data/`、插件 dll）。
@@ -172,7 +172,7 @@ bash packaging/linux/build-release.sh smoke-appimage --appimage dist/linux/*.App
 bash app/core/build-macos.sh osx-arm64
 cd app && flutter build macos --release && cd ..
 bash packaging/macos/build-release.sh all --arch arm64
-hdiutil attach -nobrowse -readonly "dist/macos/ArchoeraMusic-1.0.6-macos-arm64.dmg"
+hdiutil attach -nobrowse -readonly "dist/macos/ArchoeraMvsumc-1.0.6-macos-arm64.dmg"
 ```
 
 CI 中 macOS 打包后会保留 DMG 与 zip 两个文件，`release` 作业直接作为独立资产

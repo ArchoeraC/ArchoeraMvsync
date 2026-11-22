@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -86,7 +86,7 @@ class DailyShelfStore {
   /// 测试用路径覆盖（非空时替代默认数据目录文件）。
   static String? overridePath;
 
-  /// 书架文件路径（数据目录 `~/.local/share/ArchoeraMusic`）。
+  /// 书架文件路径（数据目录 `~/.local/share/ArchoeraMvsumc`）。
   static String get filePath =>
       overridePath ?? '${resolveDataDir()}/daily_shelf.json';
 

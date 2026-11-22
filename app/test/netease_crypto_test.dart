@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,7 +9,7 @@
 /// （app/lib/core/apis/netease/，纯 Dart 直连）。
 library;
 
-import 'package:archoera_music/apis/netease/core/crypto.dart';
+import 'package:archoera_mvsumc/apis/netease/core/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

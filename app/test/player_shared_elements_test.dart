@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,7 +15,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/widgets/player/player_shared_elements.dart';
+import 'package:archoera_mvsumc/widgets/player/player_shared_elements.dart';
 
 /// 矩阵是「位移 → 缩放」，直接对点做 `origin + scale * p`。
 ///

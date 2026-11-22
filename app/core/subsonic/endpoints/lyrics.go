@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsumc
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -20,7 +20,7 @@ import (
 // （Subsonic 客户端）自行决定是否做在线歌词查询。服务端不回调宿主、
 // 不做在线抓取，避免阻塞请求与跨进程同步等待。
 
-// wantsArchExt 是否为 ArchoeraMusic 客户端（带扩展参数）。
+// wantsArchExt 是否为 ArchoeraMvsumc 客户端（带扩展参数）。
 // 仅在此时才在响应中附带非标准扩展字段，保证对标准 Subsonic 客户端零影响。
 func wantsArchExt(r *http.Request) bool {
 	return r.URL.Query().Get("archoeraExt") == "1"

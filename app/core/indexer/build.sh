@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMusic 本地曲库搜索索引器构建脚本（幂等）。
+# ArchoeraMvsumc 本地曲库搜索索引器构建脚本（幂等）。
 #
 # 产物：indexer/build/{indexer-ffi.{so,dll,dylib}, libe_sqlite3.{so,dylib}, e_sqlite3.dll}
 #   - indexer-ffi  ：.NET 10 NativeAOT 共享库（导出 indexer_run/cancel/free/analyze/set_log_sink）

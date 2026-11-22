@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -18,7 +18,7 @@ library;
 
 import 'dart:async';
 
-import 'package:archoera_music/services/playback/audio_engine_process.dart';
+import 'package:archoera_mvsumc/services/playback/audio_engine_process.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 与 C 侧 mediaengine_lib.c ready 事件同构的仿真行（曲长 180s）。

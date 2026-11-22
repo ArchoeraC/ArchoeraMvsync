@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,7 +9,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/utils/app_version.dart';
+import 'package:archoera_mvsumc/utils/app_version.dart';
 
 void main() {
   test('未注入构建时间：getter 为 null、展示文本为空串', () {

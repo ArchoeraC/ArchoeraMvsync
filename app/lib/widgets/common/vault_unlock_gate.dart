@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import '../../services/streaming/streaming_store.dart';
 import '../../stores/vault_session_store.dart';
 import '../../stores/vault_unlock_refresh.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 part 'vault_unlock_gate/vault_unlock_gate_view.dart';
 

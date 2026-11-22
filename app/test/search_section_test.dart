@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,10 +11,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/search/search_service.dart';
-import 'package:archoera_music/settings/search_section.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/search/search_service.dart';
+import 'package:archoera_mvsumc/settings/search_section.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 class _Prefs extends AppPrefsNotifier {
   _Prefs(this._initial);

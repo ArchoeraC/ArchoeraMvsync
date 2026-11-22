@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 pub const scalefactor_code = [121]u32{
     262120, 262118, 262119, 262117, 524277, 524273, 524269, 524278, 524270, 524271, 524272, 524284, 524285, 524287, 524286, 524279,

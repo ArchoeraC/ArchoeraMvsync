@@ -483,7 +483,7 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 `StreamingLyricSource`（Subsonic / Jellyfin / Songloft）只使用服务端自带的
 歌词：`lyric` 整行、`tlyric` 翻译、`lxlyric` 逐字、`rlyric` 罗马音；逐字与
 罗马音服务端没给就不展示，**客户端不主动在线抓取**（`preferRich` 只决定有多份
-候选时是否优先逐字）。仅 ArchoeraMusic 服务端 + 曲库无内嵌歌词时才返回
+候选时是否优先逐字）。仅 ArchoeraMvsumc 服务端 + 曲库无内嵌歌词时才返回
 `fetchOnline`，由本机按用户来源顺序补全（标准 Subsonic 客户端不受影响）。
 
 服务端逐字有四种形态，`detectStreamingLyricFormat` 按「新版 YRC →

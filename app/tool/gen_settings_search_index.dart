@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsumc
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -387,7 +387,7 @@ String _basename(String path) => path.split(Platform.pathSeparator).last;
 
 String _render(List<_Entry> entries) {
   final b = StringBuffer()
-    ..writeln('// ArchoeraMusic')
+    ..writeln('// ArchoeraMvsumc')
     ..writeln('// Copyright (C) 2026 Archoera && BetaStudio2')
     ..writeln('// SPDX-License-Identifier: AGPL-3.0-or-later')
     ..writeln()

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,7 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/l10n.dart';
 import '../player/s_controls.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 /// 空库状态：无目录 → 引导添加；有目录未扫描 → 引导扫描。
 class LibraryEmptyState extends StatelessWidget {

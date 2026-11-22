@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -25,7 +25,7 @@ import 'playlist_picker_dialog.dart';
 import 's_context_menu.dart';
 import 'track_context_menu.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 part 'track_list_dialog/track_list_dialog_actions.dart';
 part 'track_list_dialog/track_list_dialog_view.dart';

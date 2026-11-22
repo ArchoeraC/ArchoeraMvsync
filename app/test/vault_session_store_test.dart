@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,10 +6,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/security/vault_process.dart';
-import 'package:archoera_music/services/streaming/streaming_store.dart';
-import 'package:archoera_music/services/streaming/streaming_types.dart';
-import 'package:archoera_music/stores/vault_session_store.dart';
+import 'package:archoera_mvsumc/services/security/vault_process.dart';
+import 'package:archoera_mvsumc/services/streaming/streaming_store.dart';
+import 'package:archoera_mvsumc/services/streaming/streaming_types.dart';
+import 'package:archoera_mvsumc/stores/vault_session_store.dart';
 
 /// vault 会话存储端到端冒烟测试（对真实 `archoera-vault` NativeAOT 二进制）：
 ///   1. save → 落盘 → 重建 store 回读一致（写穿缓存 + 串行持久化）

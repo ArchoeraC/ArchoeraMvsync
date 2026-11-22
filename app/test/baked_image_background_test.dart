@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,9 +11,9 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/app/appearance_styles/image_appearance_style.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/widgets/common/baked_image_background.dart';
+import 'package:archoera_mvsumc/app/appearance_styles/image_appearance_style.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/widgets/common/baked_image_background.dart';
 
 /// 1x1 透明 PNG（避免引入额外测试依赖）。
 final Uint8List _transparentPng = Uint8List.fromList(<int>[

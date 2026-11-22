@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,9 +8,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/lyrics/sources/streaming_lyric_source.dart';
-import 'package:archoera_music/services/streaming/songloft/songloft_client.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/services/lyrics/sources/streaming_lyric_source.dart';
+import 'package:archoera_mvsumc/services/streaming/songloft/songloft_client.dart';
 
 void main() {
   test('逐字格式识别：新版 YRC 不能被误判为 QRC', () {

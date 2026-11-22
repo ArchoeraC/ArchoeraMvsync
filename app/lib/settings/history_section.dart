@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,7 +15,7 @@ import '../../widgets/common/toast.dart';
 import '../../widgets/dialogs/s_dialog.dart';
 import '../../widgets/player/s_controls.dart';
 import 'settings_widgets.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 /// 播放历史条数上限滑块的取值范围与步长（100 ~ 5000，每档 100）。
 const int historyLimitMin = 100;

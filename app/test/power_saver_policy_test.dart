@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/platform/system_window.dart';
-import 'package:archoera_music/services/power/power_saver.dart';
+import 'package:archoera_mvsumc/services/platform/system_window.dart';
+import 'package:archoera_mvsumc/services/power/power_saver.dart';
 
 void main() {
   test('最小化 / 托盘 → 直接停止渲染', () {

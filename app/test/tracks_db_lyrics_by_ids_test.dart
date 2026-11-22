@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:archoera_music/services/scanner/sqlite_preload.dart';
-import 'package:archoera_music/services/scanner/tracks_db.dart';
+import 'package:archoera_mvsumc/services/scanner/sqlite_preload.dart';
+import 'package:archoera_mvsumc/services/scanner/tracks_db.dart';
 
 /// [TracksDb.lyricsByIds] 单测：批量懒查歌词，仅返回**非空**歌词的 id，跳过缺失 /
 /// 无歌词 / 空串 id（供搜索结果歌词命中片段在页加载时一次取回整页歌词）。

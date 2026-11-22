@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,7 +12,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/background/fluid_shader.dart';
+import 'package:archoera_mvsumc/widgets/player/background/fluid_shader.dart';
 
 const Map<String, int> _typeFloats = {
   'float': 1,

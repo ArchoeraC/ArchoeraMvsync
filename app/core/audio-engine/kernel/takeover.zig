@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 //! 接管门控（方向③ F5，docs/audio-kernel-expansion-plan.md §4.2）。
 //!

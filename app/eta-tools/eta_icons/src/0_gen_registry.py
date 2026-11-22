@@ -17,7 +17,7 @@ from collections import defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..', '..'))  # src → eta_icons → eta-tools → app → 仓库根
-MAPPING_CSV = os.path.join(ROOT, 'Icon化', 'ArchoeraMusic-mingcute-icons', 'icons-mingcute', 'mapping.csv')
+MAPPING_CSV = os.path.join(ROOT, 'Icon化', 'ArchoeraMvsumc-mingcute-icons', 'icons-mingcute', 'mapping.csv')
 LIB = os.path.join(ROOT, 'app', 'lib')
 
 # ---------- material → (kind, glyph) 映射 ----------

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,8 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/search/query_log.dart';
-import 'package:archoera_music/services/search/query_log_file.dart';
+import 'package:archoera_mvsumc/services/search/query_log.dart';
+import 'package:archoera_mvsumc/services/search/query_log_file.dart';
 
 /// 查询日志（T2-7 助词容错矩阵的数据前提）纯策略层测试。
 ///

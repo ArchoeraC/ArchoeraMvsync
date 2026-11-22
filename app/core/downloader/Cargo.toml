@@ -3,7 +3,7 @@ name    = "archoera-downloader"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "ArchoeraMusic 下载引擎（cdylib）：Kugou/Netease 自研签名 + HTTP 流式下载 + FFI 回调"
+description = "ArchoeraMvsumc 下载引擎（cdylib）：Kugou/Netease 自研签名 + HTTP 流式下载 + FFI 回调"
 publish = false
 
 [lib]

@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsumc
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -798,7 +798,7 @@ pub async fn download_cover(
 // （CAA 同域同限），两处共用全局节流。
 // ============================================================
 
-const MB_UA: &str = "ArchoeraMusicDownloader/1.0 (https://github.com/ArchoeraMusic)";
+const MB_UA: &str = "ArchoeraMvsumcDownloader/1.0 (https://github.com/ArchoeraMvsumc)";
 const MB_SEARCH: &str = "https://musicbrainz.org/ws/2/recording/";
 const CAA_FRONT: &str = "https://coverartarchive.org/release/";
 const LRCLIB_GET: &str = "https://lrclib.net/api/get";

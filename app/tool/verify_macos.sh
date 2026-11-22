@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 平台桥接 —— macOS 端本地交叉编译验证（Linux 主机）
+#  ArchoeraMvsumc 平台桥接 —— macOS 端本地交叉编译验证（Linux 主机）
 #
 #  在 Linux 上用系统 clang + macOS SDK 交叉编译并链接
 #  libarchoera_platform.dylib（arm64 与 x86_64），确认 macOS 后端

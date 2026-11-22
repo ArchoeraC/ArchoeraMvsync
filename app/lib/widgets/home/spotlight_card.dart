@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,7 +15,7 @@ import '../../stores/spotlight_provider.dart';
 import '../common/toast.dart';
 import '../list/cover_image.dart';
 import '../player/s_controls.dart';
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 /// 首页「随机聚光」卡片：随机来源 + 随机起始曲 + 预览，可播放 / 换一批。
 ///

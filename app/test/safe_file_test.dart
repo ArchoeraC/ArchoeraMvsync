@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/security/data_destroyer.dart';
-import 'package:archoera_music/utils/safe_file.dart';
+import 'package:archoera_mvsumc/services/security/data_destroyer.dart';
+import 'package:archoera_mvsumc/utils/safe_file.dart';
 
 /// 注入 [SafeFile.backend] 的假实现（记录调用参数）。
 class _FakeBackend implements SafeFileBackend {

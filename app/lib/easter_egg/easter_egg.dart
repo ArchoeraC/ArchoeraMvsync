@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -61,4 +61,4 @@ part 'effects/media_effects.dart';
 ///
 /// 界面上**没有任何提示**：入口不会出现在搜索索引里，只有完整输入该串时
 /// 搜索结果才浮现「千万别点」。比较时统一按小写处理，用户大小写随意。
-const String kEasterEggUnlockQuery = 'archoeramusic.powerfull.settings';
+const String kEasterEggUnlockQuery = 'archoeramvsumc.powerfull.settings';

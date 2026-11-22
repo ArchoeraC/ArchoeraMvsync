@@ -47,7 +47,7 @@ std::wstring QuoteArg(const std::wstring& arg) {
   return quoted;
 }
 
-// 把 `archoera_music archoerashell …` 转到同目录的控制台伴生程序
+// 把 `archoera_mvsumc archoerashell …` 转到同目录的控制台伴生程序
 // `archoerashell.exe`，保留标准输入/输出（含管道/重定向）并返回其退出码。
 //
 // **不**在主 GUI 进程里静态链接 Rust CLI：Rust std 会带入
@@ -143,7 +143,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // 显式 AppUserModelID：Win11 媒体浮出/任务栏分组/媒体键（含蓝牙 AVRCP）
   // 路由更稳。须在创建任何窗口前设置。
-  ::SetCurrentProcessExplicitAppUserModelID(L"Archoera.ArchoeraMusic");
+  ::SetCurrentProcessExplicitAppUserModelID(L"Archoera.ArchoeraMvsumc");
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
@@ -158,7 +158,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"archoera_music", origin, size)) {
+  if (!window.Create(L"archoera_mvsumc", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

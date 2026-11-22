@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,8 +7,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/spotlight/spotlight.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/services/spotlight/spotlight.dart';
 
 Track _t(String id, [String source = 'netease']) =>
     Track(id: id, title: 'T$id', source: source, artists: const []);

@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsumc
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -200,20 +200,20 @@ fn verify_parent_identity(ppid: i32) -> Result<()> {
         }
     };
     // 预期主程序候选（按打包布局）：
-    //   - 通用：<parent-of-native>/archoera_music[.exe]（Linux/Windows，及 macOS
+    //   - 通用：<parent-of-native>/archoera_mvsumc[.exe]（Linux/Windows，及 macOS
     //     `Contents/MacOS/native` 布局）；
     //   - macOS `.app`：本可执行文件位于 `Contents/native`（Xcode 与 CI 统一下载
-    //     目录），预期主程序在 `Contents/MacOS/archoera_music`。
+    //     目录），预期主程序在 `Contents/MacOS/archoera_mvsumc`。
     let main_name = if cfg!(windows) {
-        "archoera_music.exe"
+        "archoera_mvsumc.exe"
     } else {
-        "archoera_music"
+        "archoera_mvsumc"
     };
     #[allow(unused_mut)]
     let mut candidates = vec![expected_dir.join(main_name)];
     #[cfg(target_os = "macos")]
     {
-        candidates.push(expected_dir.join("MacOS").join("archoera_music"));
+        candidates.push(expected_dir.join("MacOS").join("archoera_mvsumc"));
     }
     let expected = candidates.iter().find(|c| c.exists()).cloned();
     let expected = match expected {

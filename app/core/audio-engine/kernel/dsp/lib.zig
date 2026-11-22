@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 //! DSP 地基（docs/audio-kernel-zig.md §14；`audio-kernel-expansion-plan.md`
 //! 方向①「可听频段 DSP」地基：DSP 下沉 Zig）

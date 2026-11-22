@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,12 +11,12 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_session.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/services/playback/shuffle_bag.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsumc/services/playback/playback_session.dart';
+import 'package:archoera_mvsumc/services/playback/playback_state.dart';
+import 'package:archoera_mvsumc/services/playback/shuffle_bag.dart';
 
 /// 无引擎的假控制器：只验证播放模式状态机。
 class _FakePlaybackNotifier extends PlaybackNotifier {

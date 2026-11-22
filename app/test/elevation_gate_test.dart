@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,10 +8,10 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/app/elevation_gate.dart';
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/platform/process_elevation.dart';
-import 'package:archoera_music/theme/app_theme.dart';
+import 'package:archoera_mvsumc/app/elevation_gate.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/platform/process_elevation.dart';
+import 'package:archoera_mvsumc/theme/app_theme.dart';
 
 const _locale = Locale('zh', 'CN');
 

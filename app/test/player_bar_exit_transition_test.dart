@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/app/player_bar_exit_transition.dart';
-import 'package:archoera_music/app/player_route_curves.dart';
+import 'package:archoera_mvsumc/app/player_bar_exit_transition.dart';
+import 'package:archoera_mvsumc/app/player_route_curves.dart';
 
 Widget _host(double value, {bool disableAnimations = false}) => Directionality(
   textDirection: TextDirection.ltr,

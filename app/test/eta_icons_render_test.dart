@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:ui' as ui;
@@ -7,8 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
-import 'package:archoera_music/eta/mark/eta_mark.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/mark/eta_mark.dart';
 
 void main() {
   testWidgets('EtaIcons glyphs render non-blank (filled + outline)', (

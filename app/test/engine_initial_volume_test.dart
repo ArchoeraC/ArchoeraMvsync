@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,7 +10,7 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/playback/engine_bindings.dart';
+import 'package:archoera_mvsumc/services/playback/engine_bindings.dart';
 
 void main() {
   test('初始音量：默认 1.0、按参数透传、越界夹取到 0~1', () {

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,8 +15,8 @@ library;
 
 import 'dart:io';
 
-import 'package:archoera_music/services/scraper/scraper_bindings.dart';
-import 'package:archoera_music/services/scraper/scrape_controller.dart';
+import 'package:archoera_mvsumc/services/scraper/scraper_bindings.dart';
+import 'package:archoera_mvsumc/services/scraper/scrape_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

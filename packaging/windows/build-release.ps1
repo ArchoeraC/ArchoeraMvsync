@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  ArchoeraMusic Windows 发布脚本（**Windows 专用，自包含**）。
+  ArchoeraMvsumc Windows 发布脚本（**Windows 专用，自包含**）。
 
 .DESCRIPTION
   规则（AGENTS.md「禁止脚本混合」）：
@@ -70,7 +70,7 @@ function Invoke-Verify {
     # 名称与 app/windows/CMakeLists.txt 的 install 目标一一对应：
     # archoera_kernel.dll 在 exe 根（Windows 加载器按 exe 目录解析），其余在 native/。
     $required = @(
-        'archoera_music.exe',
+        'archoera_mvsumc.exe',
         'archoera_kernel.dll',
         'native\archoera_mediaengine.dll',
         'native\archoera_scraper.dll',
@@ -138,7 +138,7 @@ function Invoke-Package {
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
     # 便携 zip：Release 目录整体（含 native/、data/、插件 dll）
-    $zip = Join-Path $OutDir "ArchoeraMusic-$Version-windows-x64-portable.zip"
+    $zip = Join-Path $OutDir "ArchoeraMvsumc-$Version-windows-x64-portable.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
     Compress-Archive -Path (Join-Path $Release '*') -DestinationPath $zip -Force
     Write-Log "portable zip: $zip"
@@ -158,7 +158,7 @@ function Invoke-Package {
 
     & $iscc "/DVersion=$Version" "/DVersionNumeric=$verNum" `
         "/DAppDir=$PWD\$Release" "/DOutputDir=$PWD\$OutDir" `
-        'packaging\windows\archoera_music.iss'
+        'packaging\windows\archoera_mvsumc.iss'
     if ($LASTEXITCODE -ne 0) { Stop-WithError "Inno Setup 失败（rc=$LASTEXITCODE）" }
     Write-Log 'Inno Setup 安装器完成'
 }

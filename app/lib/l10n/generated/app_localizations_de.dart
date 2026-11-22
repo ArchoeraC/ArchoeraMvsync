@@ -417,7 +417,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Meine Auswahl merken und nicht erneut fragen';
 
   @override
-  String get appName => 'ArchoeraMusic';
+  String get appName => 'ArchoeraMvsumc';
 
   @override
   String get brandNetease => 'NT';
@@ -3483,7 +3483,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      'Diese Software（ArchoeraMusic）ist ein kostenloser Open-Source-Desktop-Musikplayer für persönliche Lern- und Forschungszwecke.\n\n';
+      'Diese Software（ArchoeraMvsumc）ist ein kostenloser Open-Source-Desktop-Musikplayer für persönliche Lern- und Forschungszwecke.\n\n';
 
   @override
   String get settingsDecline1Title => '1. Art der Software\n';
@@ -3573,7 +3573,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsPrivacyIntro =>
-      'Willkommen bei ArchoeraMusic (nachfolgend „die Software\" oder „wir\"). Wir wissen um die Bedeutung Ihrer personenbezogenen Daten und setzen uns stets für den Schutz Ihrer Privatsphäre und Datensicherheit ein. Diese Richtlinie erläutert, wie wir Ihre Informationen während der Nutzung der Software verarbeiten, speichern und schützen und welche Rechte Ihnen zustehen.\n\nBitte lesen und verstehen Sie diese Richtlinie sorgfältig. Mit der Nutzung der Software bestätigen Sie, dass Sie alle ihre Inhalte gelesen, verstanden und ihnen zugestimmt haben.\n\n';
+      'Willkommen bei ArchoeraMvsumc (nachfolgend „die Software\" oder „wir\"). Wir wissen um die Bedeutung Ihrer personenbezogenen Daten und setzen uns stets für den Schutz Ihrer Privatsphäre und Datensicherheit ein. Diese Richtlinie erläutert, wie wir Ihre Informationen während der Nutzung der Software verarbeiten, speichern und schützen und welche Rechte Ihnen zustehen.\n\nBitte lesen und verstehen Sie diese Richtlinie sorgfältig. Mit der Nutzung der Software bestätigen Sie, dass Sie alle ihre Inhalte gelesen, verstanden und ihnen zugestimmt haben.\n\n';
 
   @override
   String get settingsPrivacy1Title => '1. Grundprinzipien\n';
@@ -3609,7 +3609,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsPrivacy5Body =>
-      'Der überwiegende Teil Ihrer Daten wird im lokalen Datenverzeichnis gespeichert (Linux: ~/.local/share/ArchoeraMusic; macOS: ~/Library/Application Support/ArchoeraMusic; Windows: %LOCALAPPDATA%\\ArchoeraMusic, überschreibbar über die Umgebungsvariable ARCHOERA_DATA_DIR), bis Sie sie selbst löschen. Sensible Zugangsdaten werden nach Möglichkeit mit dem nativen sicheren Speicher des Betriebssystems verschlüsselt und im Tresor isoliert; die Netzwerkübertragung nutzt HTTPS / TLS, sofern das Ziel dies unterstützt.\nObwohl wir angemessene Sicherheitsmaßnahmen ergreifen, kann aufgrund inhärenter Grenzen der Rechen- und Speichertechnik kein System absolute 100%ige Sicherheit garantieren; bewahren Sie Ihr Gerät und Ihre Zugangsdaten zu Konten Dritter sicher auf.\n\n';
+      'Der überwiegende Teil Ihrer Daten wird im lokalen Datenverzeichnis gespeichert (Linux: ~/.local/share/ArchoeraMvsumc; macOS: ~/Library/Application Support/ArchoeraMvsumc; Windows: %LOCALAPPDATA%\\ArchoeraMvsumc, überschreibbar über die Umgebungsvariable ARCHOERA_DATA_DIR), bis Sie sie selbst löschen. Sensible Zugangsdaten werden nach Möglichkeit mit dem nativen sicheren Speicher des Betriebssystems verschlüsselt und im Tresor isoliert; die Netzwerkübertragung nutzt HTTPS / TLS, sofern das Ziel dies unterstützt.\nObwohl wir angemessene Sicherheitsmaßnahmen ergreifen, kann aufgrund inhärenter Grenzen der Rechen- und Speichertechnik kein System absolute 100%ige Sicherheit garantieren; bewahren Sie Ihr Gerät und Ihre Zugangsdaten zu Konten Dritter sicher auf.\n\n';
 
   @override
   String get settingsPrivacy6Title => '6. Ihre Rechte & Datenverwaltung\n';
@@ -3637,7 +3637,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsPrivacy9Body =>
-      'Bei Fragen, Anmerkungen oder Beschwerden zu dieser Richtlinie, Ihrer Informationssicherheit oder damit zusammenhängenden Angelegenheiten können Sie den Entwickler wie folgt kontaktieren:\n· GitHub-Repository & Issues: https://github.com/ArchoeraC/ArchoeraMusic\nWir antworten schnellstmöglich nach Eingang Ihres Feedbacks.\n\n';
+      'Bei Fragen, Anmerkungen oder Beschwerden zu dieser Richtlinie, Ihrer Informationssicherheit oder damit zusammenhängenden Angelegenheiten können Sie den Entwickler wie folgt kontaktieren:\n· GitHub-Repository & Issues: https://github.com/ArchoeraC/ArchoeraMvsumc\nWir antworten schnellstmöglich nach Eingang Ihres Feedbacks.\n\n';
 
   @override
   String get settingsPrivacyFooter =>
@@ -4021,7 +4021,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsSearchDownloadDirSubtitle =>
-      'Download-Speicherort (Standard ~/Music/ArchoeraMusic)';
+      'Download-Speicherort (Standard ~/Music/ArchoeraMvsumc)';
 
   @override
   String get settingsSearchFilenameSubtitle =>
@@ -4884,7 +4884,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get instanceAlreadyRunningTitle =>
-      'ArchoeraMusic wird bereits ausgeführt';
+      'ArchoeraMvsumc wird bereits ausgeführt';
 
   @override
   String get settingsCatShortcuts => 'Tastenkürzel';
@@ -5904,7 +5904,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get mcpShellUsage =>
-      'archoerashell — ArchoeraMusic Kommandozeilen-Steuerung (Unix-artig)\n\nVerwendung:\n  archoera_music archoerashell [globale Optionen] <Befehl> [Argumente...]\n\nHinweis:\n  <Befehl> --help oder help <Befehl> für die Nutzung eines Befehls.\n\nGlobale Optionen:\n  -h, --help            Diese Hilfe anzeigen\n  -V, --version         Version anzeigen\n  -j, --json            JSON-Ausgabe (für Skripte)\n  -q, --quiet           Nur Fehler ausgeben\n      --host <host>     Serveradresse (Standard 127.0.0.1)\n  -p, --port <port>     Serverport (Standard aus den Einstellungen)\n  -k, --key  <key>      Zugriffsschlüssel (Standard aus den Einstellungen)\n\nWiedergabe:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nWarteschlange:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nSuche / Bibliothek:\n  search <source> <Begriff> [-n n] [-p page]\n  search-all <Begriff> [-n n]\n  library [Begriff] [-n n] [--offset n] / library-random / library-stats\n\nFavoriten / Verlauf / Songtext:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDownloads:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nSonstiges:\n  theme <light|dark|system> / sleep <Minuten>|--end / sleep-cancel\n  prefs [Schlüssel...] / tools / info / call <Werkzeug> [--json <json>]\n\nBeispiele:\n  archoera_music archoerashell status\n  archoera_music archoerashell search netease Jay -n 10\n  archoera_music archoerashell play-track netease:186016\n  archoera_music archoerashell --json library Jay';
+      'archoerashell — ArchoeraMvsumc Kommandozeilen-Steuerung (Unix-artig)\n\nVerwendung:\n  archoera_mvsumc archoerashell [globale Optionen] <Befehl> [Argumente...]\n\nHinweis:\n  <Befehl> --help oder help <Befehl> für die Nutzung eines Befehls.\n\nGlobale Optionen:\n  -h, --help            Diese Hilfe anzeigen\n  -V, --version         Version anzeigen\n  -j, --json            JSON-Ausgabe (für Skripte)\n  -q, --quiet           Nur Fehler ausgeben\n      --host <host>     Serveradresse (Standard 127.0.0.1)\n  -p, --port <port>     Serverport (Standard aus den Einstellungen)\n  -k, --key  <key>      Zugriffsschlüssel (Standard aus den Einstellungen)\n\nWiedergabe:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\nWarteschlange:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\nSuche / Bibliothek:\n  search <source> <Begriff> [-n n] [-p page]\n  search-all <Begriff> [-n n]\n  library [Begriff] [-n n] [--offset n] / library-random / library-stats\n\nFavoriten / Verlauf / Songtext:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\nDownloads:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\nSonstiges:\n  theme <light|dark|system> / sleep <Minuten>|--end / sleep-cancel\n  prefs [Schlüssel...] / tools / info / call <Werkzeug> [--json <json>]\n\nBeispiele:\n  archoera_mvsumc archoerashell status\n  archoera_mvsumc archoerashell search netease Jay -n 10\n  archoera_mvsumc archoerashell play-track netease:186016\n  archoera_mvsumc archoerashell --json library Jay';
 
   @override
   String get mcpShellHint =>
@@ -6529,7 +6529,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String elevationGateBody({required String kind}) {
-    return 'ArchoeraMusic läuft als $kind. Wiedergabe, Downloads und der Anmeldedaten-Tresor benötigen niemals erhöhte Rechte. Wer erhöht weiterläuft, überlässt dem gesamten System jede Schwachstelle dieser App: Eine einzige Remote-Code-Execution- oder Supply-Chain-Lücke kann den ganzen Rechner betreffen, und Einstellungen, Caches und Protokolle werden mit $kind-Rechten geschrieben, sodass ein normaler Benutzer sie womöglich nicht lesen oder löschen kann.\n\nBeenden und ArchoeraMusic als normaler Benutzer neu starten.';
+    return 'ArchoeraMvsumc läuft als $kind. Wiedergabe, Downloads und der Anmeldedaten-Tresor benötigen niemals erhöhte Rechte. Wer erhöht weiterläuft, überlässt dem gesamten System jede Schwachstelle dieser App: Eine einzige Remote-Code-Execution- oder Supply-Chain-Lücke kann den ganzen Rechner betreffen, und Einstellungen, Caches und Protokolle werden mit $kind-Rechten geschrieben, sodass ein normaler Benutzer sie womöglich nicht lesen oder löschen kann.\n\nBeenden und ArchoeraMvsumc als normaler Benutzer neu starten.';
   }
 
   @override

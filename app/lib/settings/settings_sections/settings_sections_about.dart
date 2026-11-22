@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -305,7 +305,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
   }
 
   /// 项目 GitHub 仓库地址（仅展示 / 复制，不打开链接）。
-  static const String _kRepoUrl = 'https://github.com/ArchoeraC/ArchoeraMusic';
+  static const String _kRepoUrl = 'https://github.com/ArchoeraC/ArchoeraMvsumc';
 
   /// 与 [_envRow] 相同布局，但值为任意控件（版本号 + 通道徽标）。
   Widget _envRowWidget(String label, Widget value) {

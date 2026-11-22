@@ -36,11 +36,11 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# === ArchoeraMusic archoerashell：独立控制台伴生程序 ===
+# === ArchoeraMvsumc archoerashell：独立控制台伴生程序 ===
 # **不**把 Rust staticlib 链入 GUI runner：Rust std 会带入
 # `IsDebuggerPresent` / `RtlCaptureContext` / `dbghelp` / `WS2_32` 等导入，
 # 让一个未签名的 GUI 程序在 AV 眼里像「内置网络命令行 + 调试符号」的 loader。
-# GUI 侧只保留 `archoera_music archoerashell …` 的分派（转到同目录的
+# GUI 侧只保留 `archoera_mvsumc archoerashell …` 的分派（转到同目录的
 # archoerashell.exe），CLI 本体在控制台伴生程序里（见 main.cpp）。
 find_program(CARGO cargo REQUIRED)
 set(SHELL_CRATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../core/shell")

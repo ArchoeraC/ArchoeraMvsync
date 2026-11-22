@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 //! EraAudio 原生网络传输（HTTP/1.1，docs/audio-kernel-zig.md §6.1/§7）
 //!
@@ -68,7 +68,7 @@ const watchdog_poll_ms: u32 = 50;
 /// 默认 User-Agent：**不带版本号**（版本由宿主经请求头注入，见宿主 pipeline/
 /// Dart `engineHeadersForTrack`，避免在原生内核里硬编码应用版本）。仅当调用方
 /// 未在额外请求头里提供 `User-Agent` 时使用。
-const user_agent = "ArchoeraMusic (EraAudio)";
+const user_agent = "ArchoeraMvsumc (EraAudio)";
 
 /// 读取宿主环境变量（内核经宿主 CRT getenv；缺失返回 null）。
 fn envStr(name: [*:0]const u8) ?[]const u8 {
@@ -1709,7 +1709,7 @@ test "HttpStream: 自定义请求头随请求发送（X-Test-Client）" {
     const url = try std.fmt.allocPrint(testing.allocator, "http://127.0.0.1:{d}/echoheader", .{ts.port});
     defer testing.allocator.free(url);
 
-    // 测试夹具仅需一个可辨识的值（真实版本由宿主按 ArchoeraMusic 版本注入）。
+    // 测试夹具仅需一个可辨识的值（真实版本由宿主按 ArchoeraMvsumc 版本注入）。
     const hs = try HttpStream.openWith(testing.allocator, url, .{
         .headers = "X-Test-Client: test-client\r\nUser-Agent: test-agent",
     });

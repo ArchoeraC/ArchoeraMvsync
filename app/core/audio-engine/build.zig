@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 //! archoera_kernel 构建脚本（Zig 0.17.0 build API）
 //!
@@ -260,14 +260,14 @@ pub fn build(b: *std.Build) void {
             \\        BLOCK "040904e4"
             \\        BEGIN
             \\            VALUE "CompanyName", "io.awa.archoera.betastudio2"
-            \\            VALUE "FileDescription", "ArchoeraMusic audio kernel"
+            \\            VALUE "FileDescription", "ArchoeraMvsumc audio kernel"
             \\            VALUE "FileVersion", "{s}"
             \\            VALUE "InternalName", "archoera_kernel"
             \\            VALUE "LegalCopyright", "Copyright (C) 2026 io.awa.archoera.betastudio2"
             \\            VALUE "OriginalFilename", "archoera_kernel.dll"
-            \\            VALUE "ProductName", "ArchoeraMusic"
+            \\            VALUE "ProductName", "ArchoeraMvsumc"
             \\            VALUE "ProductVersion", "{s}"
-            \\            VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMusic"
+            \\            VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMvsumc"
             \\        END
             \\    END
             \\    BLOCK "VarFileInfo"

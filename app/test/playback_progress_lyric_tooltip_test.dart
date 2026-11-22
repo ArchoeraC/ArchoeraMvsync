@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,16 +10,16 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/stores/lyrics_provider.dart';
-import 'package:archoera_music/theme/app_theme.dart';
-import 'package:archoera_music/widgets/layout/player_bar.dart';
-import 'package:archoera_music/widgets/player/playback_progress_slider.dart';
-import 'package:archoera_music/widgets/player/playback_slider.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsumc/services/playback/playback_state.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/stores/lyrics_provider.dart';
+import 'package:archoera_mvsumc/theme/app_theme.dart';
+import 'package:archoera_mvsumc/widgets/layout/player_bar.dart';
+import 'package:archoera_mvsumc/widgets/player/playback_progress_slider.dart';
+import 'package:archoera_mvsumc/widgets/player/playback_slider.dart';
 
 /// 固定播放态：20s 时长、位于开头（不启动引擎）。
 class _FakePlayback extends PlaybackNotifier {

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,9 +8,9 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:archoera_music/services/log/log.dart';
-import 'package:archoera_music/services/native_lib_paths.dart';
-import 'package:archoera_music/services/playback/engine_bindings.dart';
+import 'package:archoera_mvsumc/services/log/log.dart';
+import 'package:archoera_mvsumc/services/native_lib_paths.dart';
+import 'package:archoera_mvsumc/services/playback/engine_bindings.dart';
 
 /// 回归：引擎在 `Isolate.run(...)` 的子 isolate 中加载（AudioEngineProcess.start
 /// 的真实场景），`Log` 的静态状态不跨 isolate，必须仍能注入进程级 sink，

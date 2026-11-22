@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -11,9 +11,9 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/deeplink/deep_link_router.dart';
-import 'package:archoera_music/services/platform/platform_failure.dart';
-import 'package:archoera_music/services/platform/system_deep_link.dart';
+import 'package:archoera_mvsumc/services/deeplink/deep_link_router.dart';
+import 'package:archoera_mvsumc/services/platform/platform_failure.dart';
+import 'package:archoera_mvsumc/services/platform/system_deep_link.dart';
 
 class _FakeDeepLink implements SystemDeepLink {
   final _uris = StreamController<Uri>.broadcast();

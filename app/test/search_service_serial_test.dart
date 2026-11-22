@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -17,8 +17,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/search/search_service.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/services/search/search_service.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 /// 让已排队的微任务跑完（**不是** sleep 轮询）：显式让出事件循环，
 /// 使任何（错误地）并发的关键段有机会执行，从而暴露重叠。

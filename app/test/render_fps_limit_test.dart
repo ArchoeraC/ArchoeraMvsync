@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,9 +8,9 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/power/frame_governor.dart';
-import 'package:archoera_music/settings/settings_widgets.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/services/power/frame_governor.dart';
+import 'package:archoera_mvsumc/settings/settings_widgets.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 void main() {
   group('渲染帧数偏好', () {

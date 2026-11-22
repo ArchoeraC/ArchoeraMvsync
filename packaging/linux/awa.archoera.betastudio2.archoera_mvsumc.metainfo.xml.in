@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>awa.archoera.betastudio2.archoera_mvsumc</id>
+  <name>ArchoeraMvsumc</name>
+  <summary>An open-source music player</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <description>
+    <p>ArchoeraMvsumc is an open-source music player that connects to alternative music services, supports offline playback, local library scanning and a built-in subsonic-compatible server.</p>
+  </description>
+  <launchable type="desktop-id">awa.archoera.betastudio2.archoera_mvsumc.desktop</launchable>
+  <provides>
+    <binary>archoera_mvsumc</binary>
+  </provides>
+  <url type="homepage">https://github.com/ArchoeraC/ArchoeraMvsumc</url>
+  <url type="bugtracker">https://github.com/ArchoeraC/ArchoeraMvsumc/issues</url>
+  <releases>
+    <release version="@VERSION@" date="2026-10-16"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

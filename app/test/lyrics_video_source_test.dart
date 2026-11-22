@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,9 +7,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/apis/lyric/types.dart';
-import 'package:archoera_music/apis/lyric/utils.dart';
-import 'package:archoera_music/services/netease/track.dart';
+import 'package:archoera_mvsumc/apis/lyric/types.dart';
+import 'package:archoera_mvsumc/apis/lyric/utils.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
 
 Track _bili(String title, {String artist = '某UP主', int duration = 0}) => Track(
   id: 'BV1Cjxy68EKv',

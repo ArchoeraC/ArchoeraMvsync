@@ -1,4 +1,4 @@
-// ArchoeraMusic
+// ArchoeraMvsumc
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
@@ -40,14 +40,14 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "io.awa.archoera.betastudio2"
-            VALUE "FileDescription", "ArchoeraMusic command-line client"
+            VALUE "FileDescription", "ArchoeraMvsumc command-line client"
             VALUE "FileVersion", VERSION_AS_STRING
             VALUE "InternalName", "archoerashell"
             VALUE "LegalCopyright", "Copyright (C) 2026 io.awa.archoera.betastudio2"
             VALUE "OriginalFilename", "archoerashell.exe"
-            VALUE "ProductName", "ArchoeraMusic"
+            VALUE "ProductName", "ArchoeraMvsumc"
             VALUE "ProductVersion", VERSION_AS_STRING
-            VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMusic"
+            VALUE "Comments", "https://github.com/ArchoeraC/ArchoeraMvsumc"
         END
     END
     BLOCK "VarFileInfo"

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -6,8 +6,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/source/source_platform.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/services/source/source_platform.dart';
 
 void main() {
   group('音质选择注册表', () {

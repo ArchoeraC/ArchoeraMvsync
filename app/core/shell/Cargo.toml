@@ -3,7 +3,7 @@ name        = "archoera-shell"
 version     = "0.1.0"
 edition     = "2021"
 license     = "AGPL-3.0-or-later"
-description = "ArchoeraMusic 内嵌原生命令行客户端（archoerashell）：不经 Flutter/Dart 直连 MCP REST"
+description = "ArchoeraMvsumc 内嵌原生命令行客户端（archoerashell）：不经 Flutter/Dart 直连 MCP REST"
 publish     = false
 build       = "build.rs"
 

@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 //! 离线 EBU R128 / ITU-R BS.1770-4 集成响度 + 采样峰值**测量**
 //! （docs/audio-kernel-zig.md §14；方向① D3/D6 扩张）。

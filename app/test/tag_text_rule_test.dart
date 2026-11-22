@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,9 +10,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/scraper/tag_editor_service.dart';
-import 'package:archoera_music/services/scraper/tag_text_rule.dart';
-import 'package:archoera_music/widgets/common/tag_text_rule_editor.dart';
+import 'package:archoera_mvsumc/services/scraper/tag_editor_service.dart';
+import 'package:archoera_mvsumc/services/scraper/tag_text_rule.dart';
+import 'package:archoera_mvsumc/widgets/common/tag_text_rule_editor.dart';
 
 void main() {
   group('applyTagTextOp - none/prefix/suffix', () {

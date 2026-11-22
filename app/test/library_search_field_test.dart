@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -18,8 +18,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/widgets/library/library_search_field.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/widgets/library/library_search_field.dart';
 
 /// 以「store」为外部真值搭建最小宿主柱：`show=false` 表示壳内容被卸载
 /// （等价播放页完全展开后的 placeholder），`query` 表示 store 里存的搜索条件。

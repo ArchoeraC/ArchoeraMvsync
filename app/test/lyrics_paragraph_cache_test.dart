@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,7 +9,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_paragraph_cache.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_paragraph_cache.dart';
 
 ui.Paragraph _build(String text, double width) {
   final b = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 14))

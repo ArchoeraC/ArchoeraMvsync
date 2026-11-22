@@ -1,4 +1,4 @@
-# ArchoeraMusic 架构规划
+# ArchoeraMvsumc 架构规划
 
 > 状态：规划稿 v3 · 2026-08-05（2026-09-06 修订）
 >
@@ -35,7 +35,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 名称 | ArchoeraMusic |
+| 名称 | ArchoeraMvsumc |
 | 形态 | Flutter 桌面音乐播放器（Windows / macOS / Linux），**桌面为主** |
 | 架构 | 混合架构：Flutter UI + **纯 Dart 业务层（平台 API 纯 Dart 直连）** + 多语言原生工具链（**FFI 直连**）；原 Node 侧车方案已废弃（§4 简注） |
 | 代码归属 | 全部自行编写（含所引用的服务端代码），不在任何上游主仓库内 |
@@ -56,7 +56,7 @@
 > **音频架构要点**：桌面端与 Web 端共用**同一条 C 引擎管线**（`archoera-audio-engine`），
 > 全部 DSP（EQ/响度/FFT/变速变调）在 C 引擎内完成；桌面端经 **FFI 直连**
 > `libarchoera_mediaengine`（库内线程转码 PCM 落盘 + miniaudio 自播，2026-08-07）。
-> Rust `native/audio-engine`（napi 直出）**不在 ArchoeraMusic 引入**，仅留在上游桌面端使用。
+> Rust `native/audio-engine`（napi 直出）**不在 ArchoeraMvsumc 引入**，仅留在上游桌面端使用。
 
 **核心处理逻辑技术选型原则**
 - **原生优先**：平台协议 / 数据层由纯 Dart 承接；重型处理由原生工具链 FFI 直连（C 音频引擎、C# 扫描、C++ 刮削）。
@@ -66,7 +66,7 @@
 
 ---
 
-## 2. 链路落地形态（原「server 方案 → ArchoeraMusic 复用映射」简记）
+## 2. 链路落地形态（原「server 方案 → ArchoeraMvsumc 复用映射」简记）
 
 早期曾规划 Node 侧车后端（Hono + better-sqlite3 + 子进程调度，
 SQLite 写入经 `/api/db/*` 代理串行化），2026-09-06 随去侧车化整体废弃，未保留代码。
@@ -117,7 +117,7 @@ Web 兼容 OGG 流播放服务），Phase 0/1 短暂实施（spawn + `/api/healt
 > EQ/响度/限幅/FFT/变速变调全部在 C 引擎内完成。桌面端 Flutter **FFI 直连**引擎库
 > （`libarchoera_mediaengine`，库内线程转码 PCM 落盘 + miniaudio 自播，2026-08-07 起，
 > §5.1）。（原 Web 兼容 OGG 流播放路径已随侧车方案移除。）
-> Rust `native/audio-engine`（napi 直出）**不引入** ArchoeraMusic（仍留在上游桌面端维护）。
+> Rust `native/audio-engine`（napi 直出）**不引入** ArchoeraMvsumc（仍留在上游桌面端维护）。
 > **引擎路线（2026-08-16 决策）**：主引擎采用 **FFmpeg 默认主 + Zig 内核渐进替换 + C 壳（FFI/CLI
 > 保留）**（详见 `docs/audio-kernel-zig.md`）；本节描述为 C 引擎现状，迁移过程中默认仍 FFmpeg
 > （零回归），Zig 逐格式验收后接管（Dart/FFI 契约不变）。
@@ -361,7 +361,7 @@ WAL + busy_timeout 并发访问（scanner 直写媒体库、subsonic FFI 直读�
 > **默认仅绑定回环 `127.0.0.1`** 的本地控制服务（MCP / REST / WebSocket，
 > 默认关闭、默认要求访问密钥；`dart:io` 事件循环驱动、无轮询），供 MCP 客户端
 > 查询与控制播放。可手动开启「**允许局域网访问**」（绑定 `0.0.0.0`，默认关、
-> 需确认且仍要求密钥）。另内置命令行客户端 `archoera_music archoerashell ...`
+> 需确认且仍要求密钥）。另内置命令行客户端 `archoera_mvsumc archoerashell ...`
 > （类 Unix 语法，不启动 GUI，经 REST 与运行实例通信）。它不参与播放链路
 > （播放仍为进程内 FFI），是对本节「零 TCP 端口」原则的**显式可选例外**；
 > 详见 [mcp.md](mcp.md)。
@@ -599,10 +599,10 @@ WAL + busy_timeout 并发访问（scanner 直写媒体库、subsonic FFI 直读�
 
 ---
 
-## 11. ArchoeraMusic 目录结构
+## 11. ArchoeraMvsumc 目录结构
 
 ```
-ArchoeraMusic/
+ArchoeraMvsumc/
 ├── app/                        # Flutter 应用
 │   ├── lib/
 │   │   ├── main.dart
@@ -648,7 +648,7 @@ ArchoeraMusic/
 |---|---|
 | 原生二进制 | 各模块 CMake / cargo / dotnet / go 构建（[docs/user-build-from-source.md](user-build-from-source.md) 与 CI workflows；Windows 一站式 `app/core/build_windows.bat`） |
 | Flutter 构建 | `flutter build linux/windows/macos`；平台壳负责 FFI 库定位与资源路径 |
-| 产物结构 | `ArchoeraMusic + resources/{bin/*, lib/*}`（原生依赖按平台裁剪；无 Node 运行时） |
+| 产物结构 | `ArchoeraMvsumc + resources/{bin/*, lib/*}`（原生依赖按平台裁剪；无 Node 运行时） |
 | 分发 | Linux AppImage/tar；Windows zip（无签名 → SmartScreen 提示，自用接受）；macOS 未签名（Gatekeeper 右键打开；必要时 ad-hoc 签名） |
 
 ### 12.2 测试策略
@@ -702,7 +702,7 @@ ArchoeraMusic/
 19. **桌面端 FFI 直连引擎（2026-08-07，取代 08-06 spawn+UDS 与更早侧车播放链路）**：Dart 加载 `libarchoera_mediaengine`，库内线程**全速完整转码 PCM 落盘 `stream.wav` → miniaudio 自播**（player 模式 `skip_encoder=true`，不再 Opus 编码）——「完整时长 + 任意 seek」语义；seek 走 miniaudio 即时 seek（不重启引擎、不重转码）；事件 FIFO 50ms 轮询 `pollEvent`（position 只留最新，`set_event_interval` 降频协商）；FFT v1 为拉模式，2026-11-04 v2 起改为引擎 50ms 事件推送（2026-11-05 起 v1 拉模式与 libfft 全部删除）
 20. ~~sidecar 播放路径收窄~~（已随 2026-09-06 去侧车化整体废弃）
 21. **内存播放（不落盘）模式（2026-09-08 决策；S1 引擎 C / S2 Dart 接线与设置已实现，S3 基准收尾待办）**：桌面播放**默认内存模式**（独立开关，与 Stable/EraAudio、SongCache 均独立）；解码 PCM 驻留进程内「全量块列表」（与 `stream.pcm` 文件块同构，达 cap 才滚动淘汰），频谱由引擎频谱线程直接读块列表并 50ms 事件推送（v2 破坏性更新；App 不再使用 `pcm_window` FFI 拉窗），不写 `stream.wav/.pcm`；无设备 + 内存模式 → error（不文件回退）；`cap`：auto（按可用内存均衡，**32 MiB 硬上限**，查询故障回落、append 后记账强制淘汰、绝不越过用户设限；驻留仅供频谱取帧，另配 8 MiB 块缓冲复用池，`destroy` 时 `malloc_trim` 归还 OS）/ 自定义 / 无上限（须显式警告内存过载后果）。文件模式（设置关 / `ARCHOERA_ENGINE_FILE_MODE=1`）保留现状字节级行为。规格与验收：`docs/audio-memory-playback.md`。
-22. **MCP 控制服务（2026-10-07，可选）**：默认关闭；开启后默认仅绑定回环 `127.0.0.1`（非特权端口），可手动开启「允许局域网访问」绑定 `0.0.0.0`（默认关、需用户确认 + 仍要求密钥）。以标准协议（MCP Streamable HTTP / REST / WebSocket，均 JSON-RPC 2.0 / HTTP+JSON）暴露播放/队列/搜索/曲库/偏好只读/外观/收藏/历史/歌词能力；默认要求访问密钥、能力组默认全关。纯 Dart 实现（`dart:io`，事件循环驱动、无轮询），不参与播放链路（仍为进程内 FFI），是对「桌面端零 TCP 端口」的显式可选例外。另随二进制内置命令行客户端 `archoera_music archoerashell ...`（类 Unix 语法，经 REST 与运行实例通信，不启动 GUI）。详见 `docs/mcp.md`。
+22. **MCP 控制服务（2026-10-07，可选）**：默认关闭；开启后默认仅绑定回环 `127.0.0.1`（非特权端口），可手动开启「允许局域网访问」绑定 `0.0.0.0`（默认关、需用户确认 + 仍要求密钥）。以标准协议（MCP Streamable HTTP / REST / WebSocket，均 JSON-RPC 2.0 / HTTP+JSON）暴露播放/队列/搜索/曲库/偏好只读/外观/收藏/历史/歌词能力；默认要求访问密钥、能力组默认全关。纯 Dart 实现（`dart:io`，事件循环驱动、无轮询），不参与播放链路（仍为进程内 FFI），是对「桌面端零 TCP 端口」的显式可选例外。另随二进制内置命令行客户端 `archoera_mvsumc archoerashell ...`（类 Unix 语法，经 REST 与运行实例通信，不启动 GUI）。详见 `docs/mcp.md`。
 23. **图片背景可读性下限（2026-11-09，移植自 ArchoeraCX）**：图片外观（`appearanceStyle=image`）强制暗色主题后正文恒为 `#ECECEC`，仅靠用户设置的遮罩（0.3~0.9）在亮图上可能仍不可读。选图/启动时把图片解码成 32×32、取不透明像素相对亮度的 **90 分位**（避免亮天空/灯被暗部平均掉），反解出让正文达到 4.5:1 的最小黑色遮罩，作为遮罩滑块的**下限**（封顶 0.75）。生效值 = max(用户值, 下限)，存盘 `appearance.backgroundDim` 仍是用户意图（换成暗图会自动回落）；下限采样值缓存为 `appearance.backgroundLuminance` 保证重启首帧正确，并在后台重采样。采样在 widget 测试环境跳过（避免临时图被后台读句柄锁住）。
 24. **渲染帧数上限（2026-11-09）**：设置「性能 / 渲染」新增 30~165 FPS 的全局帧率上限（默认 60；>60 滑块转黄、>100 转红）。经既有 `PowerSavingFrameBinding.scheduleFrame` 合并帧请求实现（Flutter 无公开帧率 API）：目标帧率不低于显示器刷新率时不节流，否则按 `1/fps` 提前 4% 合并（避免定时器与 vsync 同刻偶发丢帧）；与节能档位取更严格者（失焦/熄屏仍 1 FPS，最小化仍停帧）。它只是上限，实际帧率仍受 vsync 与 GPU 负载约束。
 25. **UI 设计基准单一来源（2026-11-21）**：新页面 / 改版 / 视觉评审的唯一设计原型改为 [`ArchoeraC/ArchoeraMusic-UI`](https://github.com/ArchoeraC/ArchoeraMusic-UI)（Agent Skill `archoera-music-ui`），**禁止**以本仓库整套应用代码、现有 UI 源码 / 截图或 §10.7 的历史 Web/Vue 版本反推规格；现有实现只保留行为与数据契约。落地用 Flutter 原生实现；复制 skill 的文本 / 代码 / 资源时按 MIT 保留声明即可。许可：skill 现行 MIT、早期版本 AGPL-3.0-or-later，可与本仓库 AGPL-3.0-or-later 自由组合；反向把本仓库 AGPL 源码放进 MIT 仓库不会改变其许可，含 AGPL 代码的分发须整体满足 AGPL。细则与自查清单：`docs/ui-design-baseline.md`。

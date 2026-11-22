@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -71,7 +71,7 @@ class AppPrefs {
   /// 偏好原始数据（各域扩展通过 [data] 读写对应键）。
   final Map<String, dynamic> data;
 
-  /// 偏好文件路径：数据目录（`~/.local/share/ArchoeraMusic`）。
+  /// 偏好文件路径：数据目录（`~/.local/share/ArchoeraMvsumc`）。
   static String get filePath => '${resolveDataDir()}/prefs.json';
 
   static AppPrefs load() {
@@ -103,7 +103,7 @@ class AppPrefs {
   }
 }
 
-/// 当前偏好实时快照（由根组件 [ArchoeraMusicApp] 在偏好变化时刷新）。
+/// 当前偏好实时快照（由根组件 [ArchoeraMvsumcApp] 在偏好变化时刷新）。
 ///
 /// 供 apis 层经 [readAppPref]（宿主运行时 `getSetting`）读取设置，避免
 /// 启动期注入的偏好快照导致设置开关不生效。

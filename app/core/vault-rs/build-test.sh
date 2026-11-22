@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ArchoeraMusic vault Rust 测试构建（vault_testing feature，幂等）。
+# ArchoeraMvsumc vault Rust 测试构建（vault_testing feature，幂等）。
 #
 # 产物：vault-rs/build/archoera-vault-test
 #   与生产 build.sh 唯一区别：启用 `vault_testing` feature → 构建标记输出 TEST

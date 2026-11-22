@@ -1,15 +1,15 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // MCP 控制协议层单测：配置值语义、恒定时间比较、曲目缓存，以及 MCP
 // JSON-RPC 握手 / 会话 / 工具列举与调用（不依赖网络与引擎）。
-import 'package:archoera_music/services/mcp/mcp_tools.dart';
-import 'package:archoera_music/services/mcp/mcp_protocol.dart';
-import 'package:archoera_music/services/mcp/mcp_models.dart';
-import 'package:archoera_music/services/mcp/mcp_service.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/services/mcp/mcp_tools.dart';
+import 'package:archoera_mvsumc/services/mcp/mcp_protocol.dart';
+import 'package:archoera_mvsumc/services/mcp/mcp_models.dart';
+import 'package:archoera_mvsumc/services/mcp/mcp_service.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -194,7 +194,7 @@ void main() {
       final res = Map<String, dynamic>.from(body['result'] as Map);
       expect(res['protocolVersion'], kMcpPreferredVersion);
       final info = Map<String, dynamic>.from(res['serverInfo'] as Map);
-      expect(info['name'], 'archoera-music');
+      expect(info['name'], 'archoera-mvsumc');
       return sessionId!;
     }
 

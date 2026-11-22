@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic Linux 全模块一站式构建脚本（对齐 build_windows.bat 模式）
+#  ArchoeraMvsumc Linux 全模块一站式构建脚本（对齐 build_windows.bat 模式）
 #
 #  在单个 bash 会话内完成全部原生模块编译：
 #    1. audio-engine : CMake（FFmpeg 解码/EQ/FFT + Rust tempo）

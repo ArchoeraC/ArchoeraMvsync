@@ -1,6 +1,6 @@
 # 音频引擎第三方许可证声明（audio-engine / C 引擎 + Zig 内核）
 
-本目录 `app/core/audio-engine` 为 ArchoeraMusic 的音频引擎（FFmpeg 解码 +
+本目录 `app/core/audio-engine` 为 ArchoeraMvsumc 的音频引擎（FFmpeg 解码 +
 miniaudio 播放 + Rust tempo + Zig 解码内核）。**本项目独立编写的代码**随本软件以
 AGPL-3.0 授权；由第三方源码移植 / 转录而来的文件按**各自原许可**分发，文件头
 `SPDX-License-Identifier` 为逐文件权威标注（见下文「文件级许可标注」），逐项登记见下。

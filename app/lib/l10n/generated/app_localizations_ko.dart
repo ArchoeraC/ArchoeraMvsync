@@ -404,7 +404,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get commonCloseConfirmRemember => '선택을 기억하고 다시 묻지 않기';
 
   @override
-  String get appName => 'ArchoeraMusic';
+  String get appName => 'ArchoeraMvsumc';
 
   @override
   String get brandNetease => 'NT';
@@ -3340,7 +3340,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      '이 소프트웨어（ArchoeraMusic）는 개인 학습 및 연구 목적의 무료 오픈소스 데스크톱 음악 플레이어입니다.\n\n';
+      '이 소프트웨어（ArchoeraMvsumc）는 개인 학습 및 연구 목적의 무료 오픈소스 데스크톱 음악 플레이어입니다.\n\n';
 
   @override
   String get settingsDecline1Title => '1. 소프트웨어 성격\n';
@@ -3426,7 +3426,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsPrivacyIntro =>
-      'ArchoeraMusic(이하 「본 소프트웨어」 또는 「당사」)을 이용해 주셔서 감사합니다. 당사는 귀하의 개인정보가 지니는 중요성을 잘 알고 있으며, 귀하의 개인정보와 데이터 보안을 보호하기 위해 항상 노력하고 있습니다. 본 방침은 귀하가 본 소프트웨어를 사용하는 과정에서 당사가 귀하의 정보를 어떻게 처리, 저장 및 보호하는지와 귀하가 누리는 관련 권리를 설명합니다.\n\n본 방침을 반드시 주의 깊게 읽고 충분히 이해하십시오. 본 소프트웨어를 사용하기 시작하면 귀하는 본 방침의 모든 내용을 읽고 이해하였으며 이에 동의한 것으로 간주됩니다.\n\n';
+      'ArchoeraMvsumc(이하 「본 소프트웨어」 또는 「당사」)을 이용해 주셔서 감사합니다. 당사는 귀하의 개인정보가 지니는 중요성을 잘 알고 있으며, 귀하의 개인정보와 데이터 보안을 보호하기 위해 항상 노력하고 있습니다. 본 방침은 귀하가 본 소프트웨어를 사용하는 과정에서 당사가 귀하의 정보를 어떻게 처리, 저장 및 보호하는지와 귀하가 누리는 관련 권리를 설명합니다.\n\n본 방침을 반드시 주의 깊게 읽고 충분히 이해하십시오. 본 소프트웨어를 사용하기 시작하면 귀하는 본 방침의 모든 내용을 읽고 이해하였으며 이에 동의한 것으로 간주됩니다.\n\n';
 
   @override
   String get settingsPrivacy1Title => '1. 기본 원칙\n';
@@ -3461,7 +3461,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsPrivacy5Body =>
-      '귀하의 데이터 대부분은 귀하가 직접 삭제할 때까지 로컬 데이터 디렉터리(Linux: ~/.local/share/ArchoeraMusic; macOS: ~/Library/Application Support/ArchoeraMusic; Windows: %LOCALAPPDATA%\\ArchoeraMusic, 환경 변수 ARCHOERA_DATA_DIR로 재정의 가능)에 저장됩니다. 민감한 자격 증명은 운영체제 기본 보안 저장소를 우선 사용해 암호화하고 자격 증명 금고 내에 격리 보관합니다; 네트워크 전송이 관련된 부분은 대상이 지원하는 경우 HTTPS / TLS를 우선 사용합니다.\n당사는 합리적인 보안 조치를 취하고 있으나, 컴퓨터 및 저장 기술의 고유한 한계로 인해 100% 절대적 보안을 보장할 수 있는 시스템은 없습니다. 귀하의 기기와 제3자 계정 자격 증명을 잘 보관하십시오.\n\n';
+      '귀하의 데이터 대부분은 귀하가 직접 삭제할 때까지 로컬 데이터 디렉터리(Linux: ~/.local/share/ArchoeraMvsumc; macOS: ~/Library/Application Support/ArchoeraMvsumc; Windows: %LOCALAPPDATA%\\ArchoeraMvsumc, 환경 변수 ARCHOERA_DATA_DIR로 재정의 가능)에 저장됩니다. 민감한 자격 증명은 운영체제 기본 보안 저장소를 우선 사용해 암호화하고 자격 증명 금고 내에 격리 보관합니다; 네트워크 전송이 관련된 부분은 대상이 지원하는 경우 HTTPS / TLS를 우선 사용합니다.\n당사는 합리적인 보안 조치를 취하고 있으나, 컴퓨터 및 저장 기술의 고유한 한계로 인해 100% 절대적 보안을 보장할 수 있는 시스템은 없습니다. 귀하의 기기와 제3자 계정 자격 증명을 잘 보관하십시오.\n\n';
 
   @override
   String get settingsPrivacy6Title => '6. 귀하의 권리와 데이터 관리\n';
@@ -3489,7 +3489,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsPrivacy9Body =>
-      '본 방침의 내용, 귀하의 정보 보안 또는 관련 사항에 대해 문의, 의견 또는 이의가 있는 경우 다음 방법으로 개발자에게 연락해 주십시오:\n· GitHub 저장소 및 Issue: https://github.com/ArchoeraC/ArchoeraMusic\n피드백을 받은 후 최대한 빠르게 답변드리겠습니다.\n\n';
+      '본 방침의 내용, 귀하의 정보 보안 또는 관련 사항에 대해 문의, 의견 또는 이의가 있는 경우 다음 방법으로 개발자에게 연락해 주십시오:\n· GitHub 저장소 및 Issue: https://github.com/ArchoeraC/ArchoeraMvsumc\n피드백을 받은 후 최대한 빠르게 답변드리겠습니다.\n\n';
 
   @override
   String get settingsPrivacyFooter => '본 방침 최종 업데이트: 2026년 9월 29일.';
@@ -3840,7 +3840,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsSearchDownloadDirSubtitle =>
-      '다운로드 파일 위치（기본 ~/Music/ArchoeraMusic）';
+      '다운로드 파일 위치（기본 ~/Music/ArchoeraMvsumc）';
 
   @override
   String get settingsSearchFilenameSubtitle =>
@@ -4673,7 +4673,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get instanceAlreadyRunning => '시스템 트레이 또는 작업 표시줄에서 실행 중인 창을 찾아주세요.';
 
   @override
-  String get instanceAlreadyRunningTitle => 'ArchoeraMusic이(가) 이미 실행 중입니다';
+  String get instanceAlreadyRunningTitle => 'ArchoeraMvsumc이(가) 이미 실행 중입니다';
 
   @override
   String get settingsCatShortcuts => '단축키';
@@ -5669,7 +5669,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mcpShellUsage =>
-      'archoerashell — ArchoeraMusic 명령줄 제어(Unix 스타일)\n\n사용법:\n  archoera_music archoerashell [전역 옵션] <명령> [인수...]\n\n안내:\n  <명령> --help 또는 help <명령> 으로 개별 사용법을 봅니다.\n\n전역 옵션:\n  -h, --help            이 도움말 표시\n  -V, --version         버전 표시\n  -j, --json            JSON 출력(스크립트용)\n  -q, --quiet           오류만 출력\n      --host <host>     서버 주소(기본 127.0.0.1)\n  -p, --port <port>     서버 포트(기본: 앱 설정)\n  -k, --key  <key>      접근 키(기본: 앱 설정)\n\n재생:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\n대기열:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\n검색 / 라이브러리:\n  search <source> <검색어> [-n n] [-p page]\n  search-all <검색어> [-n n]\n  library [검색어] [-n n] [--offset n] / library-random / library-stats\n\n즐겨찾기 / 기록 / 가사:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\n다운로드:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\n기타:\n  theme <light|dark|system> / sleep <분>|--end / sleep-cancel\n  prefs [키...] / tools / info / call <도구> [--json <json>]\n\n예:\n  archoera_music archoerashell status\n  archoera_music archoerashell search netease 아이유 -n 10\n  archoera_music archoerashell play-track netease:186016\n  archoera_music archoerashell --json library 아이유';
+      'archoerashell — ArchoeraMvsumc 명령줄 제어(Unix 스타일)\n\n사용법:\n  archoera_mvsumc archoerashell [전역 옵션] <명령> [인수...]\n\n안내:\n  <명령> --help 또는 help <명령> 으로 개별 사용법을 봅니다.\n\n전역 옵션:\n  -h, --help            이 도움말 표시\n  -V, --version         버전 표시\n  -j, --json            JSON 출력(스크립트용)\n  -q, --quiet           오류만 출력\n      --host <host>     서버 주소(기본 127.0.0.1)\n  -p, --port <port>     서버 포트(기본: 앱 설정)\n  -k, --key  <key>      접근 키(기본: 앱 설정)\n\n재생:\n  status / now-playing / play|pause|toggle|stop|next|prev\n  seek <ms> / volume <0..1> / repeat <off|list|one> / shuffle <on|off>\n  quality <lq|sq|hq|lossless|hi-res> / play-track <ref>\n\n대기열:\n  queue [list|play <index>|add <ref>...|rm <index>|move <from> <to>|clear]\n\n검색 / 라이브러리:\n  search <source> <검색어> [-n n] [-p page]\n  search-all <검색어> [-n n]\n  library [검색어] [-n n] [--offset n] / library-random / library-stats\n\n즐겨찾기 / 기록 / 가사:\n  like|unlike|like-status <ref> / list-liked <source> [-n n]\n  history [-n n] / history-clear / lyrics\n\n다운로드:\n  download [list|add <ref>... [--quality <q>]|cancel <id>|remove <id>]\n\n기타:\n  theme <light|dark|system> / sleep <분>|--end / sleep-cancel\n  prefs [키...] / tools / info / call <도구> [--json <json>]\n\n예:\n  archoera_mvsumc archoerashell status\n  archoera_mvsumc archoerashell search netease 아이유 -n 10\n  archoera_mvsumc archoerashell play-track netease:186016\n  archoera_mvsumc archoerashell --json library 아이유';
 
   @override
   String get mcpShellHint =>
@@ -6274,7 +6274,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String elevationGateBody({required String kind}) {
-    return 'ArchoeraMusic이(가) $kind(으)로 실행 중입니다. 재생, 다운로드, 자격 증명 보관소에는 관리자 권한이 필요하지 않습니다. 권한을 유지한 채 계속하면 이 앱의 원격 코드 실행이나 공급망 문제가 시스템 전체에 영향을 줄 수 있고, 설정·캐시·로그가 $kind 권한으로 기록되어 일반 사용자가 읽거나 정리하지 못할 수 있습니다.\n\n종료한 뒤 일반 사용자로 다시 실행하세요.';
+    return 'ArchoeraMvsumc이(가) $kind(으)로 실행 중입니다. 재생, 다운로드, 자격 증명 보관소에는 관리자 권한이 필요하지 않습니다. 권한을 유지한 채 계속하면 이 앱의 원격 코드 실행이나 공급망 문제가 시스템 전체에 영향을 줄 수 있고, 설정·캐시·로그가 $kind 권한으로 기록되어 일반 사용자가 읽거나 정리하지 못할 수 있습니다.\n\n종료한 뒤 일반 사용자로 다시 실행하세요.';
   }
 
   @override

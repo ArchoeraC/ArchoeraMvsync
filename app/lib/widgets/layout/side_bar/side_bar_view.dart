@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -70,7 +70,7 @@ extension _SideBarView on _SideBarState {
                             Padding(
                               padding: const EdgeInsets.only(left: 10),
                               child: Text(
-                                'Archoera',
+                                'Mvsumc',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

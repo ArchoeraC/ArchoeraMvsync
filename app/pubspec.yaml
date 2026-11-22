@@ -1,4 +1,4 @@
-name: archoera_music
+name: archoera_mvsumc
 description: "An open-source music player, connect to alternative music service, support offline playback."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -148,7 +148,7 @@ flutter:
       fonts:
         - asset: assets/fonts/EtaMark.ttf
     # 启动页品牌字标专用显示字体（Manrope，OFL-1.1，可变字重）：
-    # 现代几何、内敛不浮夸，仅用于 Splash 的「ArchoeraMusic」字标，
+    # 现代几何、内敛不浮夸，仅用于 Splash 的「ArchoeraMvsumc」字标，
     # 不参与全局界面字体（界面字体固定为内置 MiSans）。
     - family: Manrope
       fonts:

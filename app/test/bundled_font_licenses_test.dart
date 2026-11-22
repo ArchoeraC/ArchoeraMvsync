@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,7 +8,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/licenses/bundled_font_licenses.dart';
+import 'package:archoera_mvsumc/licenses/bundled_font_licenses.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

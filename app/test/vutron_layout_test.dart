@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,24 +13,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/pages/player/layouts/player_layout.dart';
-import 'package:archoera_music/pages/player/layouts/vutron_layout.dart';
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/services/playback/playback_notifier.dart';
-import 'package:archoera_music/services/playback/playback_state.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
-import 'package:archoera_music/stores/lyrics_provider.dart';
-import 'package:archoera_music/widgets/player/lyrics_edge_fade.dart';
-import 'package:archoera_music/widgets/player/lyrics_view.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
-import 'package:archoera_music/widgets/player/lyrics_wall_next/lyrics_wall_next.dart';
-import 'package:archoera_music/widgets/player/playback_progress_slider.dart';
-import 'package:archoera_music/widgets/player/playback_slider.dart';
-import 'package:archoera_music/widgets/player/player_lyrics_block.dart';
-import 'package:archoera_music/widgets/player/player_shared_elements.dart';
-import 'package:archoera_music/widgets/player/play_pause_button.dart';
-import 'package:archoera_music/widgets/player/spectrum_view.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/pages/player/layouts/player_layout.dart';
+import 'package:archoera_mvsumc/pages/player/layouts/vutron_layout.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/services/playback/playback_notifier.dart';
+import 'package:archoera_mvsumc/services/playback/playback_state.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/stores/lyrics_provider.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_edge_fade.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_view.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_wall_next/lyrics_wall_next.dart';
+import 'package:archoera_mvsumc/widgets/player/playback_progress_slider.dart';
+import 'package:archoera_mvsumc/widgets/player/playback_slider.dart';
+import 'package:archoera_mvsumc/widgets/player/player_lyrics_block.dart';
+import 'package:archoera_mvsumc/widgets/player/player_shared_elements.dart';
+import 'package:archoera_mvsumc/widgets/player/play_pause_button.dart';
+import 'package:archoera_mvsumc/widgets/player/spectrum_view.dart';
 
 class _StubPrefs extends AppPrefsNotifier {
   _StubPrefs([this.data = const <String, dynamic>{}]);

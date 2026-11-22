@@ -1,6 +1,6 @@
 # 第三方运行库许可声明（随发布产物分发）
 
-本文件随 ArchoeraMusic 发布产物（`licenses/` 目录）一并分发，列出**随包内嵌**的
+本文件随 ArchoeraMvsumc 发布产物（`licenses/` 目录）一并分发，列出**随包内嵌**的
 第三方运行库、其许可、源码获取方式与 LGPL 赋予的替换权。各原生模块自身的第三方
 登记见 `app/core/*/THIRD-PARTY-LICENSES.md`。
 

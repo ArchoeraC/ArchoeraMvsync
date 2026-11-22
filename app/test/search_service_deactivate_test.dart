@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,9 +15,9 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/search/search_models.dart';
-import 'package:archoera_music/services/search/search_service.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/services/search/search_models.dart';
+import 'package:archoera_mvsumc/services/search/search_service.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 /// 可控构建执行器：阻塞在 [release] 上，记录进入次数 / 峰值并发。
 class _ControlledExecutor {

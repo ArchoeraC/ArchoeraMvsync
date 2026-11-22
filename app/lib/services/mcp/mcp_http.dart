@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -471,7 +471,7 @@ class McpHttpHandler {
   };
 
   Map<String, Object?> _rootPayload() => {
-    'name': 'ArchoeraMusic MCP control',
+    'name': 'ArchoeraMvsumc MCP control',
     'version': kMcpPreferredVersion,
     'endpoints': const {
       'mcp': '/mcp',

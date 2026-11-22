@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,7 +8,7 @@
 /// 差异还会变成假红或长时间等待。
 library;
 
-import 'package:archoera_music/apis/qqmusic/core/qrc.dart';
+import 'package:archoera_mvsumc/apis/qqmusic/core/qrc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-# 运行时内存治理与剪裁路径规划（Memory & Trimming for ArchoeraMusic）
+# 运行时内存治理与剪裁路径规划（Memory & Trimming for ArchoeraMvsumc）
 
 > 状态：**规划稿 v1 · 2026-08-18**
 > 定位：把 某桌面播放器「四层作战面」的内存框架，按本项目（Flutter/Dart + FFI 直连 C/Zig
@@ -52,7 +52,7 @@
 
 ## 2. 整体分层：四层「管理与剪裁」映射
 
-| 参考层 | ArchoeraMusic 等价层 | 对象 | 手段 | 关键文件 |
+| 参考层 | ArchoeraMvsumc 等价层 | 对象 | 手段 | 关键文件 |
 |--------------|----------------------|------|------|----------|
 | L1 进程工作集压缩 | L1 Dart/UI 堆 | 曲库、队列、liked、API/歌词缓存 | 分页 + 懒加载 + 去冗余 + 字节预算 | `library_store.dart`、`playback_notifier.dart`、`runtime.dart` |
 | L2 系统级内存 purge | L2 原生引擎常驻缓冲 | 引擎线程解码缓冲、FIFO、会话文件 | 输出有界化 + 生命周期显式释放 + 平台级 trim | `player.c`、`mediaengine_lib.c` |

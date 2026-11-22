@@ -22,7 +22,7 @@
 > 为什么：现有界面本身是多次迭代的产物，拿它当原型会把历史偏差固化成"规范"，
 > 也会让视觉评审失去可比对的基准。规格与实现分离后，改版才有唯一裁判。
 
-> **适用范围**：本文只约束本仓库（ArchoeraMusic）的界面工作，**不构成**对任何第三方产品、
+> **适用范围**：本文只约束本仓库（ArchoeraMvsumc）的界面工作，**不构成**对任何第三方产品、
 > fork 或已分离仓库的授权、背书或合规认定；其他项目不得援引本文主张与本项目的关系。
 
 ## 2. 使用方式
@@ -43,7 +43,7 @@
 |---|---|---|
 | ArchoeraMusic-UI（现行版本） | **MIT**（© 2026 Archoera && BetaStudio2） | 可复制 / 修改 / 合并，保留声明；与本仓库 AGPL 兼容 |
 | ArchoeraMusic-UI（早期版本） | **AGPL-3.0-or-later**（见其 `NOTICE.md` 的 license history） | 钉住旧 commit 时按该 commit 的 `LICENSE` 执行 |
-| 本仓库 ArchoeraMusic | **AGPL-3.0-or-later** | 整体分发义务不变 |
+| 本仓库 ArchoeraMvsumc | **AGPL-3.0-or-later** | 整体分发义务不变 |
 
 执行规则：
 
@@ -61,7 +61,7 @@
    MIT；含 AGPL 代码的分发整体仍须满足 AGPL（提供对应源码等）。要保持该仓库纯 MIT，
    就不要混入本仓库源码。版权持有者对自己拥有的代码可以另行授权，但贡献者代码按
    [贡献者授权](licensing.md#21-贡献者授权contributor-license-grant)仅授予 AGPL 再许可。
-5. **不扩权**：skill 的 MIT 只覆盖该仓库自身的内容，不改变 ArchoeraMusic 应用源码、
+5. **不扩权**：skill 的 MIT 只覆盖该仓库自身的内容，不改变 ArchoeraMvsumc 应用源码、
    项目名与 logo、EtaMark、封面美术、字体文件的许可状态——这些仍按各自条款。
 6. **资源按各自许可**：MiSans 不得单独再分发字体文件；图标继续走本仓库 `EtaIcons` 流程；
    封面 / logo / 品牌标识不在 skill 授权范围。`assets/preview-*.png` 是 skill 自身 HTML 的

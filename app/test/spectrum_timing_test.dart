@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/spectrum_view/spectrum_timing.dart';
+import 'package:archoera_mvsumc/widgets/player/spectrum_view/spectrum_timing.dart';
 
 void main() {
   group('spectrumInterpolationProgress', () {

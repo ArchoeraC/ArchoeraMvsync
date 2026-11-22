@@ -1,6 +1,6 @@
 # 刮削器原生后端第三方许可证声明（scraper-crypto / Rust）
 
-本目录 `app/core/scraper-crypto` 是 ArchoeraMusic 刮削器的原生后端，提供两块能力：
+本目录 `app/core/scraper-crypto` 是 ArchoeraMvsumc 刮削器的原生后端，提供两块能力：
 
 1. **加密**（`src/lib.rs`）：AES / RSA 模幂 / MD5 / SHA1 / 随机数，替代原先动态链接的
    系统 `OpenSSL::Crypto`；

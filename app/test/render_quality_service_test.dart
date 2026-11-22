@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,9 +8,9 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/render/quality_governor.dart';
-import 'package:archoera_music/services/render/render_quality_service.dart';
-import 'package:archoera_music/stores/app_prefs.dart';
+import 'package:archoera_mvsumc/services/render/quality_governor.dart';
+import 'package:archoera_mvsumc/services/render/render_quality_service.dart';
+import 'package:archoera_mvsumc/stores/app_prefs.dart';
 
 /// 内存偏好 Notifier（不落盘）：仅覆盖自适应画质 setter 以免测试写盘。
 class _TestPrefsNotifier extends AppPrefsNotifier {

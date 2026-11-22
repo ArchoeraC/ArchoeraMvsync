@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 pub const window_256 = [256]f32{
     @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F21D32440000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F2FF7F380000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F3804E440000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F40A35AA0000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F45F4AE60000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F4C079DE0000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F517660C0000000))))), @as(f32, @floatCast(@as(f64, @bitCast(@as(u64, 0x3F555A6300000000))))),

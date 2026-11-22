@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -17,9 +17,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/downloader/download_controller.dart';
-import 'package:archoera_music/widgets/download/download_task_tile.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/downloader/download_controller.dart';
+import 'package:archoera_mvsumc/widgets/download/download_task_tile.dart';
 
 DownloadTask _runningTask({int received = 0, int? total, int speed = 0}) {
   return DownloadTask(

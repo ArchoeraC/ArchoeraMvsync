@@ -3,7 +3,7 @@ name = "archoera-scraper-crypto"
 version = "0.2.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "ArchoeraMusic 刮削器原生后端：加密（AES / RSA 模幂 / 摘要 / 随机数）+ HTTP（rustls）"
+description = "ArchoeraMvsumc 刮削器原生后端：加密（AES / RSA 模幂 / 摘要 / 随机数）+ HTTP（rustls）"
 publish = false
 
 [lib]

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,8 +9,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/background/fluid_background.dart';
-import 'package:archoera_music/widgets/player/background/fluid_cover.dart';
+import 'package:archoera_mvsumc/widgets/player/background/fluid_background.dart';
+import 'package:archoera_mvsumc/widgets/player/background/fluid_cover.dart';
 
 /// 生成 [w]×[h] 的灰度 RGBA 图（alpha 255）。
 Uint8List _gray(int w, int h, int value) {

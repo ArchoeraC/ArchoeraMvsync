@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,7 +10,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/widgets/player/player_lyrics_slot.dart';
+import 'package:archoera_mvsumc/widgets/player/player_lyrics_slot.dart';
 
 void main() {
   const key = ValueKey<String>('lyrics-child');

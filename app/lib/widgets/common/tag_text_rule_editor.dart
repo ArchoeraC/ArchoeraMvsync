@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -24,7 +24,7 @@ import '../dialogs/s_dialog.dart';
 import '../player/s_controls.dart';
 import 'toast.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 /// 常用规则预设（内置或用户自定义）。
 class TagTextRulePreset {

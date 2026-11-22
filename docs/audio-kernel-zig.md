@@ -104,12 +104,12 @@
 ### 2.1 FFmpeg 参考实现（已克隆，2026-08-16）
 
 > **为"尽可能还原 FFmpeg 行为"克隆官方源码库作对照参考**（用户决策，2026-08-16）：
-> 位于 **`ArchoeraMusic/reference/FFmpeg/`**（浅克隆 `n9.0.1` tag，与系统 FFmpeg 9 同源，
+> 位于 **`ArchoeraMvsumc/reference/FFmpeg/`**（浅克隆 `n9.0.1` tag，与系统 FFmpeg 9 同源，
 > 含全部 `libav*/libsw*` 的 **C 源码与头文件**；系统已装同版本 FFmpeg 运行库 + dev 头，可随时
 > 编译对照）。用途：
 > - **解码器参考**：`libavcodec/apedec.c` / `alac.c` / `wavpack.c` / `flacdec.c` /
 >   `mpegaudiodec*.c` 等——Zig 自研无损解码器的逐位对照基准（§9、§17.2）；
->   MP3 另以 **minimp3**（CC0，`ArchoeraMusic/reference/mp3refs/minimp3/`）作标量路径逐位参考
+>   MP3 另以 **minimp3**（CC0，`ArchoeraMvsumc/reference/mp3refs/minimp3/`）作标量路径逐位参考
 >   （Layer I/II/III 全链 PCM 精确对照，§17.2；minimp3 仅参考、非编译依赖）；
 > - **容器/帧格式**：`libavformat/*` 的封装细节（如 Ogg CRC、MP4 box、WavPack 块头）；
 > - **行为还原**：`probe`、时长、seek、错误处理等与 FFmpeg 对齐（P5 行为兼容）；
@@ -617,7 +617,7 @@ pub const Reader = struct {
 
 > **落地（2026-10-07）：在线源请求头透传 + FFmpeg 在线 TLS**
 > - 背景：部分在线源的 `/api/*` 防爬要求客户端标识；内核原生 HTTP 固定发
->   `ArchoeraMusic/0.9 (EraAudio)` 会被判爬虫 → 302 到 SEO HTML → 探测失败
+>   `ArchoeraMvsumc/0.9 (EraAudio)` 会被判爬虫 → 302 到 SEO HTML → 探测失败
 >   `status=1`；而 FFmpeg 回退因最小构建无 TLS 直接 `Protocol not found`。
 > - 内核：`HttpStream` 新增自有 `headers`（`Options.headers`）；`writeRequest` 规范化追加、
 >   自带 `User-Agent` 时不追加默认 UA（避免双头）、**重定向原样保留**；新增导出

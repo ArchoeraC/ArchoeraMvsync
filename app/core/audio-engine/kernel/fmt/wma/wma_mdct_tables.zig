@@ -1,7 +1,7 @@
-// ArchoeraMusic Audio Framework
+// ArchoeraMvsumc Audio Framework
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// EraSync — ArchoeraMusic 自研音频内核
+// EraSync — ArchoeraMvsumc 自研音频内核
 
 pub const mdct_map_2048 = [_]u16{
     0, 1024, 1536, 512, 1792, 768, 256, 1280, 1920, 896, 1408, 384, 128, 1152, 1664, 640,

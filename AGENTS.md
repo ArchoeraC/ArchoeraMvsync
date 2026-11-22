@@ -1,4 +1,4 @@
-# AGENTS.md — ArchoeraMusic 维护与发布指引
+# AGENTS.md — ArchoeraMvsumc 维护与发布指引
 
 面向在本仓库工作的 AI 助手与维护者，只保留**构建门禁、发布/签名**等实操要点。
 通用贡献规范见 `CONTRIBUTING.md`，架构决策见 `docs/architecture.md`。
@@ -66,7 +66,7 @@ cd app/core/vault-rs && ./build-test.sh && ./test.sh
 - Windows 自检：`zig build -Dtarget=x86_64-windows-gnu -Doptimize=ReleaseFast`；严格 MSVC 以 Windows CI 为准。新增 C/ABI 代码不得引入 `unistd.h`/POSIX-only API，线程原语走 `include/compat/pthread.h`。
 
 ### 禁止脚本混合（硬性）
-- **一个平台的构建/打包只用它自己的脚本**：macOS 一律走 `packaging/macos/build-release.sh`（`bundle` / `verify` / `package` / `all`），Windows 走 `packaging/windows/build-release.ps1`（`bundle`/`verify`/`package`/`all`；底层构建仍由 `build_windows.bat` 负责）+ `archoera_music.iss`，Linux 走 `packaging/linux/build-release.sh`（`build`/`prepare`/`verify`/`all`；内部调用 `app/core/build-linux.sh`）+ `packaging/linux/package.sh`（打 deb/rpm/AppImage/flatpak/arch/nix）。禁止在某个平台的脚本里调用另一个平台的脚本，也禁止把 macOS 步骤写回通用脚本或 workflow 内联 bash 片段。
+- **一个平台的构建/打包只用它自己的脚本**：macOS 一律走 `packaging/macos/build-release.sh`（`bundle` / `verify` / `package` / `all`），Windows 走 `packaging/windows/build-release.ps1`（`bundle`/`verify`/`package`/`all`；底层构建仍由 `build_windows.bat` 负责）+ `archoera_mvsumc.iss`，Linux 走 `packaging/linux/build-release.sh`（`build`/`prepare`/`verify`/`all`；内部调用 `app/core/build-linux.sh`）+ `packaging/linux/package.sh`（打 deb/rpm/AppImage/flatpak/arch/nix）。禁止在某个平台的脚本里调用另一个平台的脚本，也禁止把 macOS 步骤写回通用脚本或 workflow 内联 bash 片段。
 - **不要靠 `if [ "$(uname)" ]` 在共享脚本里分叉**：平台分支意味着改 A 伤 B。需要共享的只有纯数据工具（如 `gen_native_manifest.sh`）；平台特有的工具链调用（`otool`/`codesign`/`hdiutil`/`dylibbundler`、`dumpbin`、`patchelf`/`readelf`）必须各自成文件。
 - **校验逻辑写进对应平台的发布脚本，不单独建检查脚本**：ELF 守卫与启动冒烟在 `packaging/linux/build-release.sh`（`guard`/`verify`/`smoke-appimage`），Mach-O 守卫与 install_name 归一化在 `packaging/macos/build-release.sh`（`verify`/`bundle`），PE 校验在 `packaging/windows/build-release.ps1`（`verify`）。不要在 `app/tool/` 下新增 `check_*.sh` 之类的检查脚本。
 - **workflow 只负责编排**：`build-all.yml` 里 macOS/Windows/Linux 的步骤各调用一个平台脚本，不在 YAML 里写多行 shell 逻辑。

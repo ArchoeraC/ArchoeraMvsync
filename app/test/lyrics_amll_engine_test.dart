@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,16 +15,16 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/engine/lyric_pipeline.dart';
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/curves.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/interlude_dots.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyric_clock.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_fragment_render.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_layout.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_word_anim.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/spring_policy.dart';
+import 'package:archoera_mvsumc/services/lyrics/engine/lyric_pipeline.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/curves.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/interlude_dots.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyric_clock.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_fragment_render.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_layout.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_word_anim.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/spring_policy.dart';
 
 List<LyricGroup> buildGroups(int count) => [
   for (var i = 0; i < count; i++)

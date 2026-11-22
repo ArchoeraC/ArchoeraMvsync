@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -8,8 +8,8 @@ import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:archoera_music/services/scanner/sqlite_preload.dart';
-import 'package:archoera_music/services/scanner/tracks_db.dart';
+import 'package:archoera_mvsumc/services/scanner/sqlite_preload.dart';
+import 'package:archoera_mvsumc/services/scanner/tracks_db.dart';
 
 /// [TracksDb.listTracksByIds] / [TracksDb.existingTrackIds] 单测：
 /// 索引排行分页按排名切片取行，必须**保持输入顺序**且跳过缺失 id。

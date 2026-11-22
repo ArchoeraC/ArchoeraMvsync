@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -19,9 +19,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archoera_music/apis/netease/core/config.dart';
-import 'package:archoera_music/apis/netease/core/crypto.dart' as nm;
-import 'package:archoera_music/services/kugou/kugou_crypto.dart' as kg;
+import 'package:archoera_mvsumc/apis/netease/core/config.dart';
+import 'package:archoera_mvsumc/apis/netease/core/crypto.dart' as nm;
+import 'package:archoera_mvsumc/services/kugou/kugou_crypto.dart' as kg;
 
 // ─────────────────────────────────────────────────────────────
 // Kugou 向量输入（固定，确定性）

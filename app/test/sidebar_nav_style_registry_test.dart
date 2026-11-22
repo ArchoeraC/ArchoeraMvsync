@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/stores/prefs_appearance.dart' as prefs;
-import 'package:archoera_music/widgets/layout/side_bar/nav_styles/sidebar_nav_style_registry.dart';
+import 'package:archoera_mvsumc/stores/prefs_appearance.dart' as prefs;
+import 'package:archoera_mvsumc/widgets/layout/side_bar/nav_styles/sidebar_nav_style_registry.dart';
 
 void main() {
   test('注册表 id 与偏好白名单一致', () {

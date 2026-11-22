@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -569,7 +569,7 @@ impl Renderer {
 
     fn styled_info(&mut self, map: &serde_json::Map<String, Value>) {
         const PAD: usize = 2;
-        let name = map.get("name").map(str_value).unwrap_or_else(|| "ArchoeraMusic".into());
+        let name = map.get("name").map(str_value).unwrap_or_else(|| "ArchoeraMvsumc".into());
         let labels = [
             self.lbl("mcpShellLblVersion"),
             self.lbl("mcpShellLblPlatform"),
@@ -1639,7 +1639,7 @@ mod tests {
     fn info_panel_wraps_caps() {
         let out = render_styled(
             json!({
-                "name": "ArchoeraMusic",
+                "name": "ArchoeraMvsumc",
                 "version": "0.9.20+7",
                 "platform": "linux",
                 "service": {
@@ -1652,7 +1652,7 @@ mod tests {
             }),
             80,
         );
-        assert!(out.contains("ArchoeraMusic"));
+        assert!(out.contains("ArchoeraMvsumc"));
         assert!(out.contains("loopback"));
         assert!(out.contains("caps"));
         assert!(out.contains("download"));

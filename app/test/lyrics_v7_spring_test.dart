@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,9 +12,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_layout.dart';
-import 'package:archoera_music/utils/spring.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_layout.dart';
+import 'package:archoera_mvsumc/utils/spring.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

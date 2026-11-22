@@ -1,8 +1,8 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! ArchoeraMusic 内嵌原生命令行客户端（`archoerashell`）。
+//! ArchoeraMvsumc 内嵌原生命令行客户端（`archoerashell`）。
 //!
 //! 以 `staticlib` 形式链入各平台 runner 的主可执行文件：runner 在初始化
 //! Flutter/Dart **之前**检测到 `archoerashell` 子命令即调用 [`archoera_shell_main`]，

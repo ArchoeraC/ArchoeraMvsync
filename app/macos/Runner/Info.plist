@@ -32,7 +32,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.archoera.archoeraMusic</string>
+			<string>com.archoera.archoeraMvsumc</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>archoera</string>

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -27,12 +27,13 @@ import 'stores/data_dir.dart';
 import 'stores/vault_session_store.dart';
 import 'app/app.dart';
 import 'app/elevation_gate.dart';
+import 'app/router.dart' show rootNavigatorKey;
 import 'app/watermark.dart';
 import 'utils/app_version.dart';
 import 'widgets/common/tray_integration.dart';
 import 'widgets/list/cover_image.dart';
 
-/// ArchoeraMusic — 应用入口。
+/// ArchoeraMvsumc — 应用入口。
 ///
 /// 职责：ProviderScope 注入 + 宿主运行时注入（账号会话经凭据保险库
 /// vault 加密落盘，登录态跨重启保留；vault 不可用时降级内存并告警）
@@ -40,7 +41,7 @@ import 'widgets/list/cover_image.dart';
 /// （无 libmpv/media_kit 依赖）。
 Future<void> main(List<String> args) async {
   // 说明：CLI（`archoerashell`）由各平台 runner 在 Flutter 初始化前拦截
-  // `archoera_music archoerashell …` 子命令（见 app/core/shell）；Windows 转交
+  // `archoera_mvsumc archoerashell …` 子命令（见 app/core/shell）；Windows 转交
   // 同目录的 `archoerashell.exe`，不经过本 Dart 入口（Dart 版 CLI 已删除）。
   //
   // 全局帧节流 Binding（节能模式渲染层）：必须最先初始化——既是 Flutter
@@ -49,6 +50,10 @@ Future<void> main(List<String> args) async {
   // 防伪锚点：把 'ARCHOERA DESIGNED' 编译进内核/AOT 快照字符串表
   // （见 app/watermark.dart；勿删，反编译识别非官方重新打包）。
   archoeraWatermarkAnchor();
+  // 品牌改名：先把旧 ArchoeraMusic 数据目录迁到 ArchoeraMvsumc。
+  // 必须在 AppPrefs.load / Log.init / vault 之前完成；自动清理失败时
+  // 返回旧目录路径，下面只记日志，不阻塞启动。
+  final legacyDataDir = await migrateLegacyDataDir();
   // 偏好先读一次（后面复用同一实例）：其中 `logToFile` 控制日志是否落盘。
   final prefs = AppPrefs.load();
   // 统一日志：尽早初始化。原生核心（libarchoera_log）写穿 stderr（带色）
@@ -65,10 +70,16 @@ Future<void> main(List<String> args) async {
   // 崩溃线程、调用栈与最近日志写进 `<dataDir>/logs/crash-*.txt`，随后照常
   // 重新抛出（保留 core dump）。见 docs/troubleshooting.md §0。
   Log.installCrashHandler();
+  if (legacyDataDir != null) {
+    Log.w(
+      'migration',
+      '旧数据目录未能自动删除（新目录已可用，请手动检查）：$legacyDataDir',
+    );
+  }
   // 启动标记：与退出标记配对，用于区分「闪退」与「被外部结束 / 正常退出」。
   Log.i(
     'startup',
-    'ArchoeraMusic 启动 pid=$pid platform=${Platform.operatingSystem} '
+    'ArchoeraMvsumc 启动 pid=$pid platform=${Platform.operatingSystem} '
     'logLevel=${Log.minLevel.label}',
   );
   // 查询日志（本机 JSONL，供 T2-7 助词容错矩阵分析）：与「日志落盘」同一开关，
@@ -199,7 +210,7 @@ Future<void> main(List<String> args) async {
     runtime: ApisRuntime(sessionStore: sessionStore, getSetting: readAppPref),
   );
   // 全局图片解码缓存：张数上限固定（防内存碎片）；字节上限由设置
-  // 「封面图片缓存上限」动态控制（默认下限 8 MiB，见 ArchoeraMusicApp，
+  // 「封面图片缓存上限」动态控制（默认下限 8 MiB，见 ArchoeraMvsumcApp，
   // null = 无上限仅按张数约束）。
   PaintingBinding.instance.imageCache.maximumSize = 1000;
   // 窗口管理（后台常驻：关闭到托盘需拦截窗口关闭事件，由 TrayIntegration
@@ -209,13 +220,38 @@ Future<void> main(List<String> args) async {
     unawaited(platformCaps.deepLink.register('archoera'));
   }
   runApp(
-    const ProviderScope(child: TrayIntegration(child: ArchoeraMusicApp())),
+    const ProviderScope(child: TrayIntegration(child: ArchoeraMvsumcApp())),
   );
   // 订阅 deep link 并派发（启动期链接先缓冲，首帧后统一处理）。
   final deepLinkRouter = DeepLinkRouter(platformCaps.deepLink);
   deepLinkRouter.start();
-  WidgetsBinding.instance.addPostFrameCallback(
-    (_) => deepLinkRouter.markReady(),
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    deepLinkRouter.markReady();
+    if (legacyDataDir != null) {
+      final context = rootNavigatorKey.currentContext;
+      if (context != null) _showLegacyDataDirNotice(context, legacyDataDir);
+    }
+  });
+}
+
+/// 旧数据目录迁移后无法自动删除时的兜底提示（正常 rename 不会走到这里）。
+void _showLegacyDataDirNotice(BuildContext context, String path) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('旧数据目录未能自动删除'),
+      content: SelectableText(
+        '新数据目录已就绪，但以下旧文件夹仍然存在：\n\n'
+        '$path\n\n'
+        '请确认数据无误后手动删除该文件夹。',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
   );
 }
 

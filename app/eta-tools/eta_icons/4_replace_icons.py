@@ -12,7 +12,7 @@ APP = os.path.abspath(os.path.join(HERE, '..', '..'))  # eta_icons → eta-tools
 LIB = os.path.join(APP, 'lib')
 registry = json.load(open(os.path.join(HERE, 'src', 'registry.json'), encoding='utf-8'))
 MAT = registry['material']          # material_icon -> const
-IMPORT = "import 'package:archoera_music/eta/icon/eta_icons.dart';"
+IMPORT = "import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';"
 
 dry = '--dry-run' in sys.argv
 

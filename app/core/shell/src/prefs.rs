@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,33 +13,55 @@ pub const DEFAULT_MCP_PORT: u16 = 14559;
 
 /// 应用数据根目录：
 ///   - `ARCHOERA_DATA_DIR` 覆盖；
-///   - Linux：`~/.local/share/ArchoeraMusic`
-///   - macOS：`~/Library/Application Support/ArchoeraMusic`
-///   - Windows：`%LOCALAPPDATA%\ArchoeraMusic`
+///   - Linux：`~/.local/share/ArchoeraMvsumc`
+///   - macOS：`~/Library/Application Support/ArchoeraMvsumc`
+///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsumc`
+///
+/// 旧版目录 `ArchoeraMusic` 由 GUI 启动时迁移；CLI 若早于 GUI 运行，
+/// [load] 会回退读取旧目录里的 `prefs.json`。
 pub fn data_dir() -> PathBuf {
     if let Some(v) = std::env::var_os("ARCHOERA_DATA_DIR") {
         if !v.is_empty() {
             return PathBuf::from(v);
         }
     }
+    data_root().join("ArchoeraMvsumc")
+}
+
+fn legacy_data_dir() -> PathBuf {
+    if let Some(v) = std::env::var_os("ARCHOERA_DATA_DIR") {
+        if !v.is_empty() {
+            return PathBuf::from(v);
+        }
+    }
+    data_root().join("ArchoeraMusic")
+}
+
+fn data_root() -> PathBuf {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
     if cfg!(target_os = "macos") {
-        return home.join("Library/Application Support/ArchoeraMusic");
+        return home.join("Library/Application Support");
     }
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData/Local"));
-        return local.join("ArchoeraMusic");
+        return local;
     }
-    home.join(".local/share/ArchoeraMusic")
+    home.join(".local/share")
 }
 
 fn load() -> Value {
-    let path = data_dir().join("prefs.json");
+    let mut path = data_dir().join("prefs.json");
+    if !path.exists() {
+        let legacy = legacy_data_dir().join("prefs.json");
+        if legacy.exists() {
+            path = legacy;
+        }
+    }
     match std::fs::read_to_string(&path) {
         Ok(text) => serde_json::from_str(&text).unwrap_or(Value::Null),
         Err(_) => Value::Null,

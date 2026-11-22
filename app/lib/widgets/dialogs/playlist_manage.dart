@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -22,7 +22,7 @@ import 'collection_platform.dart';
 import 's_context_menu.dart';
 import 's_dialog.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 /// 歌单详情头部动作（收藏 / 编辑 / 删除）。
 ///

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,11 +9,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/l10n/generated/app_localizations.dart';
-import 'package:archoera_music/services/netease/track.dart';
-import 'package:archoera_music/services/spotlight/spotlight.dart';
-import 'package:archoera_music/stores/spotlight_provider.dart';
-import 'package:archoera_music/widgets/home/spotlight_card.dart';
+import 'package:archoera_mvsumc/l10n/generated/app_localizations.dart';
+import 'package:archoera_mvsumc/services/netease/track.dart';
+import 'package:archoera_mvsumc/services/spotlight/spotlight.dart';
+import 'package:archoera_mvsumc/stores/spotlight_provider.dart';
+import 'package:archoera_mvsumc/widgets/home/spotlight_card.dart';
 
 /// 注入固定 pick 的聚光控制器（不触发真实来源汇总，专注渲染）。
 class _FixedSpotlight extends SpotlightNotifier {

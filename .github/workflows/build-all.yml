@@ -17,7 +17,7 @@
 #  ├─ build         (matrix macos/windows): macOS DMG+zip / Inno Setup installer+portable zip
 #  └─ release       (needs 全部；tag v* 触发)
 #
-#  产物文件名带发行版标识（如 ArchoeraMusic-v<ver>-ubuntu24.04-x86_64.deb、
+#  产物文件名带发行版标识（如 ArchoeraMvsumc-v<ver>-ubuntu24.04-x86_64.deb、
 #  -fedora-x86_64.rpm、-arch-x86_64.pkg.tar.zst），且包内 BUILD-INFO.txt 写明
 #  构建目标 / 基线 / 最低 glibc / 提交，用户无需靠后缀猜适用性。
 #
@@ -705,7 +705,7 @@ jobs:
         if: matrix.os == 'macos'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-${{ matrix.artifact }}
+          name: ArchoeraMvsumc-${{ matrix.artifact }}
           path: dist/macos/*
           if-no-files-found: error
 
@@ -713,7 +713,7 @@ jobs:
         if: matrix.os == 'windows'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-windows-x64
+          name: ArchoeraMvsumc-windows-x64
           path: app/build/windows/x64/runner/Release
           if-no-files-found: error
 
@@ -721,7 +721,7 @@ jobs:
         if: matrix.os == 'windows'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-windows-extra
+          name: ArchoeraMvsumc-windows-extra
           path: build/windows-extra/*
           if-no-files-found: error
 
@@ -774,13 +774,13 @@ jobs:
       - name: Upload bundle artifact (原始 bundle)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-x64
+          name: ArchoeraMvsumc-linux-x64
           path: app/build/linux/x64/release/bundle
           if-no-files-found: error
       - name: Upload packages artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-deb
+          name: ArchoeraMvsumc-linux-deb
           path: dist/linux/*
           if-no-files-found: error
 
@@ -835,7 +835,7 @@ jobs:
       - name: Upload packages artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-deepin
+          name: ArchoeraMvsumc-linux-deepin
           path: dist/linux/*
           if-no-files-found: error
 
@@ -883,7 +883,7 @@ jobs:
       - name: Upload packages artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-rpm
+          name: ArchoeraMvsumc-linux-rpm
           path: dist/linux/*
           if-no-files-found: error
 
@@ -933,12 +933,12 @@ jobs:
             'cd packaging/linux/work/arch && HOME=/tmp makepkg -f --skipinteg --nocheck --nodeps'
           # 统一命名为显著标识发行版的文件名（pkg 内部元数据不变）
           cp packaging/linux/work/arch/*.pkg.tar.zst \
-            "dist/linux/ArchoeraMusic-v${{ steps.version.outputs.version }}-arch-x86_64.pkg.tar.zst"
+            "dist/linux/ArchoeraMvsumc-v${{ steps.version.outputs.version }}-arch-x86_64.pkg.tar.zst"
           echo "→ dist/linux/"*.pkg.tar.zst
       - name: Upload packages artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-arch
+          name: ArchoeraMvsumc-linux-arch
           path: dist/linux/*
           if-no-files-found: error
 
@@ -961,7 +961,7 @@ jobs:
       - name: Download bundle artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: ArchoeraMusic-linux-x64
+          name: ArchoeraMvsumc-linux-x64
           path: bundle
       - name: Install AppImage tooling
         run: |
@@ -1003,7 +1003,7 @@ jobs:
           chmod +x /tmp/linuxdeploy.AppImage
       - name: Restore executable bits (artifact 上传丢失权限)
         # upload-artifact@v4 不保留权限（文件统一 644）：解包后按 ELF 可执行文件
-        # 恢复 +x，否则产物内主程序 archoera_music 与引擎/保险库子进程无法执行。
+        # 恢复 +x，否则产物内主程序 archoera_mvsumc 与引擎/保险库子进程无法执行。
         run: |
           find bundle -type f -exec file {} + \
             | grep -i 'ELF.*executable' | cut -d: -f1 | xargs -r chmod +x
@@ -1026,7 +1026,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-appimage
+          name: ArchoeraMvsumc-linux-appimage
           path: dist/linux/*.AppImage
           if-no-files-found: error
 
@@ -1047,7 +1047,7 @@ jobs:
       - name: Download bundle artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: ArchoeraMusic-linux-x64
+          name: ArchoeraMvsumc-linux-x64
           path: bundle
       - name: Install flatpak
         run: |
@@ -1066,7 +1066,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-flatpak
+          name: ArchoeraMvsumc-linux-flatpak
           path: dist/linux/*.flatpak
           if-no-files-found: error
 
@@ -1097,12 +1097,12 @@ jobs:
       - name: Package result
         run: |
           mkdir -p dist/linux
-          tar -czf "dist/linux/ArchoeraMusic-v${{ steps.version.outputs.version }}-nixos-x86_64.tar.gz" -C result .
+          tar -czf "dist/linux/ArchoeraMvsumc-v${{ steps.version.outputs.version }}-nixos-x86_64.tar.gz" -C result .
           ls -la dist/linux/*nixos*.tar.gz
       - name: Upload artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ArchoeraMusic-linux-nix
+          name: ArchoeraMvsumc-linux-nix
           path: dist/linux/*nixos*.tar.gz
           if-no-files-found: error
 
@@ -1189,12 +1189,12 @@ jobs:
             fi
           }
           for a in arm64 x64; do
-            sign_dir "artifacts/ArchoeraMusic-macos-$a/archoera_music.app/Contents/native"
+            sign_dir "artifacts/ArchoeraMvsumc-macos-$a/archoera_mvsumc.app/Contents/native"
           done
-          sign_dir artifacts/ArchoeraMusic-windows-x64/native
-          sign_dir artifacts/ArchoeraMusic-linux-x64/native
+          sign_dir artifacts/ArchoeraMvsumc-windows-x64/native
+          sign_dir artifacts/ArchoeraMvsumc-linux-x64/native
           # Windows 便携 zip：解压 → 签名其中清单 → 原地同文件名重压。
-          for z in artifacts/ArchoeraMusic-windows-extra/*.zip; do
+          for z in artifacts/ArchoeraMvsumc-windows-extra/*.zip; do
             [ -f "$z" ] || continue
             tmp="$(mktemp -d)"
             unzip -q "$z" -d "$tmp"
@@ -1217,30 +1217,30 @@ jobs:
         run: |
           set -euo pipefail
           VER="${GITHUB_REF_NAME#v}"
-          test -d artifacts/ArchoeraMusic-linux-x64       # Linux 原始 bundle (Ubuntu)
-          test -d artifacts/ArchoeraMusic-linux-deb       # Linux deb 包集 (Ubuntu)
-          test -d artifacts/ArchoeraMusic-linux-deepin    # Linux deb 包集 (Deepin)
-          test -d artifacts/ArchoeraMusic-linux-rpm       # Linux rpm 包集
-          test -d artifacts/ArchoeraMusic-linux-arch      # Linux pkg.tar.zst
-          test -d artifacts/ArchoeraMusic-linux-appimage  # Linux AppImage
-          test -d artifacts/ArchoeraMusic-linux-flatpak   # Linux .flatpak
-          test -d artifacts/ArchoeraMusic-linux-nix       # Linux NixOS tar.gz
-          test -d artifacts/ArchoeraMusic-macos-arm64     # macOS arm64 DMG + zip
-          test -d artifacts/ArchoeraMusic-macos-x64       # macOS x86_64 DMG + zip
-          test -d artifacts/ArchoeraMusic-windows-x64     # Windows runner Release
-          test -d artifacts/ArchoeraMusic-windows-extra   # Windows installer + portable
+          test -d artifacts/ArchoeraMvsumc-linux-x64       # Linux 原始 bundle (Ubuntu)
+          test -d artifacts/ArchoeraMvsumc-linux-deb       # Linux deb 包集 (Ubuntu)
+          test -d artifacts/ArchoeraMvsumc-linux-deepin    # Linux deb 包集 (Deepin)
+          test -d artifacts/ArchoeraMvsumc-linux-rpm       # Linux rpm 包集
+          test -d artifacts/ArchoeraMvsumc-linux-arch      # Linux pkg.tar.zst
+          test -d artifacts/ArchoeraMvsumc-linux-appimage  # Linux AppImage
+          test -d artifacts/ArchoeraMvsumc-linux-flatpak   # Linux .flatpak
+          test -d artifacts/ArchoeraMvsumc-linux-nix       # Linux NixOS tar.gz
+          test -d artifacts/ArchoeraMvsumc-macos-arm64     # macOS arm64 DMG + zip
+          test -d artifacts/ArchoeraMvsumc-macos-x64       # macOS x86_64 DMG + zip
+          test -d artifacts/ArchoeraMvsumc-windows-x64     # Windows runner Release
+          test -d artifacts/ArchoeraMvsumc-windows-extra   # Windows installer + portable
           mkdir -p assets
           # Linux：各发行版安装包直接作为独立 asset（tar.gz/deb/AppImage/flatpak/
           # nixos/rpm/pkg.tar.zst 均已带版本号，名称不冲突）
-          cp artifacts/ArchoeraMusic-linux-deb/* assets/
-          cp artifacts/ArchoeraMusic-linux-deepin/* assets/
-          cp artifacts/ArchoeraMusic-linux-rpm/* assets/
-          cp artifacts/ArchoeraMusic-linux-arch/* assets/
-          cp artifacts/ArchoeraMusic-linux-appimage/* assets/
-          cp artifacts/ArchoeraMusic-linux-flatpak/* assets/
-          cp artifacts/ArchoeraMusic-linux-nix/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-deb/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-deepin/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-rpm/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-arch/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-appimage/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-flatpak/* assets/
+          cp artifacts/ArchoeraMvsumc-linux-nix/* assets/
           # Windows：Inno Setup 安装器与便携 zip 直接作为独立 asset
-          cp artifacts/ArchoeraMusic-windows-extra/* assets/
+          cp artifacts/ArchoeraMvsumc-windows-extra/* assets/
           # upload-artifact@v4 打包会丢失可执行位：下载后按 Mach-O/ELF magic
           # 恢复 +x（否则 .app/Contents/MacOS 主二进制与 native/ 子进程解包后无法运行）
           while IFS=: read -r fp _; do
@@ -1248,11 +1248,11 @@ jobs:
           done < <(find artifacts -type f -exec file {} + | grep -i 'ELF\|Mach-O')
           # macOS：DMG + zip 已由 packaging/macos/build-release.sh 产出（DMG 可直接
           # 拖入「应用程序」，zip 便于不支持挂载的环境），直接作为独立 asset。
-          cp artifacts/ArchoeraMusic-macos-arm64/* assets/
-          cp artifacts/ArchoeraMusic-macos-x64/* assets/
+          cp artifacts/ArchoeraMvsumc-macos-arm64/* assets/
+          cp artifacts/ArchoeraMvsumc-macos-x64/* assets/
           # Windows 目录型产物压成单文件归档（tar 三端可解）
-          tar -czf "assets/ArchoeraMusic-${VER}-windows-x64.tar.gz" \
-            -C artifacts/ArchoeraMusic-windows-x64 .
+          tar -czf "assets/ArchoeraMvsumc-${VER}-windows-x64.tar.gz" \
+            -C artifacts/ArchoeraMvsumc-windows-x64 .
           # Linux 原始 bundle 与 package.sh tar 纯二进制内容一致，不再重复出包
           echo "── release assets ──"
           ls -la assets
@@ -1348,7 +1348,7 @@ jobs:
           else
             gh release create "$TAG" assets/* \
               --repo "$GITHUB_REPOSITORY" \
-              --title "ArchoeraMusic ${VER}" \
+              --title "ArchoeraMvsumc ${VER}" \
               --notes-file "$NOTES"
           fi
 

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -13,9 +13,9 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/services/lyrics/lyric_line.dart';
-import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
-import 'package:archoera_music/utils/spring.dart';
+import 'package:archoera_mvsumc/services/lyrics/lyric_line.dart';
+import 'package:archoera_mvsumc/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_mvsumc/utils/spring.dart';
 
 /// 100 行、每行 1000ms 的规整歌词。
 List<LyricGroup> buildGroups(int count) => [

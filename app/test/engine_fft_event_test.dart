@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -10,8 +10,8 @@ library;
 
 import 'dart:convert';
 
-import 'package:archoera_music/services/playback/audio_engine_process.dart';
-import 'package:archoera_music/services/playback/fft_frame.dart';
+import 'package:archoera_mvsumc/services/playback/audio_engine_process.dart';
+import 'package:archoera_mvsumc/services/playback/fft_frame.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

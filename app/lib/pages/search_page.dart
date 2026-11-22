@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -27,7 +27,7 @@ import '../widgets/search/search_empty_state.dart';
 import '../widgets/search/search_error_state.dart';
 import '../widgets/search/search_source_state.dart';
 
-import 'package:archoera_music/eta/icon/eta_icons.dart';
+import 'package:archoera_mvsumc/eta/icon/eta_icons.dart';
 
 part 'search/search_page_actions.dart';
 part 'search/search_page_fetch.dart';

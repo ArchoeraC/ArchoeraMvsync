@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  ArchoeraMusic 发布产物签名 —— ECDSA/SHA-256 分离签名（<asset>.sig1）。
+#  ArchoeraMvsumc 发布产物签名 —— ECDSA/SHA-256 分离签名（<asset>.sig1）。
 #
 #  对产物目录下**全部**发布资产签 `.sig1`（含 SBOM、`SHA256SUMS`；仅排除既有
 #  `.sig1` 与分发公钥 `ARCHOERA_PUBKEY.pem`），并把全部资产写入 `SHA256SUMS`。

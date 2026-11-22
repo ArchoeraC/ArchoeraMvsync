@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -15,11 +15,11 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archoera_music/apis/qqmusic/api.dart';
-import 'package:archoera_music/apis/qqmusic/core/pacing.dart';
-import 'package:archoera_music/apis/qqmusic/core/request.dart';
-import 'package:archoera_music/apis/qqmusic/core/sign.dart';
-import 'package:archoera_music/services/qqmusic/qqmusic_api.dart';
+import 'package:archoera_mvsumc/apis/qqmusic/api.dart';
+import 'package:archoera_mvsumc/apis/qqmusic/core/pacing.dart';
+import 'package:archoera_mvsumc/apis/qqmusic/core/request.dart';
+import 'package:archoera_mvsumc/apis/qqmusic/core/sign.dart';
+import 'package:archoera_mvsumc/services/qqmusic/qqmusic_api.dart';
 
 /// 桌面成功响应包装（node-key 与移动端 `request` 不同）。
 Map<String, dynamic> _nodeOk(Map<String, dynamic> data) => {

@@ -1,4 +1,4 @@
-// ArchoeraMusic UI
+// ArchoeraMvsumc UI
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,9 +9,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:archoera_music/services/kugou/kugou_crypto.dart';
-import 'package:archoera_music/services/kugou/kugou_request.dart';
-import 'package:archoera_music/services/kugou/kugou_risk.dart';
+import 'package:archoera_mvsumc/services/kugou/kugou_crypto.dart';
+import 'package:archoera_mvsumc/services/kugou/kugou_request.dart';
+import 'package:archoera_mvsumc/services/kugou/kugou_risk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
