@@ -18,17 +18,18 @@ import '../../../stores/app_prefs.dart';
 import '../../../stores/lyrics_provider.dart';
 import '../../../theme/cover_color.dart';
 import 'lyrics_v7/lyrics_physics_wall.dart';
+import 'lyrics_wall_next/lyrics_wall_next.dart';
 import 'lyrics_edge_fade.dart';
 import 'lyrics_view.dart';
 
 /// 歌词呈现预设。
 enum PlayerLyricsPresentation {
-  /// 跟随偏好：`simple` 滚动列表或 `amll` 物理歌词墙。
+  /// 跟随偏好：`simple` 默认列表 / `wall` 四层重写歌词墙 / `amll` 旧墙。
   standard,
 
   /// Vutron 经典布局：字号按 720p=28px 起算；引擎仍跟随偏好——`simple`
   /// 左对齐（原文/译文同为左对齐）、当前行不放大、非当前行 0.95 缩放；
-  /// `amll` 物理墙同样按 [PlayerLyricsBlock.textAlign] 对齐。颜色统一走
+  /// 两种歌词墙同样按 [PlayerLyricsBlock.textAlign] 对齐。颜色统一走
   /// 偏好/跟随逻辑（已唱色、未唱色、跟随主题/封面）。
   vutron,
 }
@@ -118,55 +119,85 @@ class PlayerLyricsBlock extends ConsumerWidget {
     const showTranslation = true;
     // 上下渐隐实现（设置页「性能 / 渲染」，环境变量可覆盖，见
     // `LyricsEdgeFadeMode`）：
-    // - wall（默认）：物理墙自己按行透明度渐隐（零离屏层），仅 amll 引擎支持；
+    // - wall（默认）：歌词墙自己按行透明度渐隐（零离屏层），`wall`/`amll` 支持；
     // - shader：外层 `ShaderMask`，任意子树都正确，但每帧一次**面积级离屏层**
     //   （全屏时成本随面积线性增长）；
     // - off：不渐隐。
     final fadeMode = resolveLyricsEdgeFadeMode(prefs.lyricsEdgeFade);
     final wallEdgeFade =
-        fadeEdges && engine == 'amll' && fadeMode == LyricsEdgeFadeMode.wall;
-    final wall = engine == 'amll'
-        ? AmllPhysicsWall(
-            groups: groups,
-            positionMs: effPos,
-            playing: effPlaying, // 播放中时内部时钟按 vsync 插值
-            // 字号与 simple 引擎一致：受「自适应字号」开关控制
-            // （开启则随窗口高度缩放）。
-            fontSize: fontSize,
-            fontFamily: prefs.fontFamily,
-            fontWeight: fontWeight,
-            playedColor: playedColor,
-            unplayedColor: unplayedColor,
-            showTranslation: showTranslation,
-            showRomanization: prefs.showRomanization,
-            alignFraction: prefs.amllAlignFraction,
-            inactiveAlpha: prefs.amllInactiveAlpha,
-            wordSweep: prefs.amllWordSweep,
-            hidePassed: prefs.amllHidePassed,
-            enableScale: prefs.amllEnableScale,
-            blurQuality: LyricsBlurQuality.parse(prefs.amllBlurQuality),
-            springPreset: prefs.amllSpringPreset,
-            textAlign: textAlign,
-            animate: !ref.read(appPrefsProvider).performanceMode,
-            edgeFade: wallEdgeFade,
-            onSeek: onSeek ?? (_) {},
-          )
-        : LyricsView(
-            groups: groups,
-            positionMs: effPos,
-            fontSize: fontSize,
-            lineHeight: lineHeight,
-            fontWeight: fontWeight,
-            playedColor: playedColor,
-            unplayedColor: unplayedColor,
-            showTranslation: showTranslation,
-            showRomanization: prefs.showRomanization,
-            currentFontSize: vutron ? fontSize : null,
-            inactiveFontWeight: vutron ? FontWeight.w600 : FontWeight.w400,
-            inactiveScale: vutron ? 0.95 : 1.0,
-            textAlign: textAlign,
-            onSeek: onSeek,
-          );
+        fadeEdges &&
+        (engine == 'wall' || engine == 'amll') &&
+        fadeMode == LyricsEdgeFadeMode.wall;
+    final animate = !prefs.performanceMode;
+    final Widget wall;
+    if (engine == 'wall') {
+      wall = LyricsWallNext(
+        groups: groups,
+        positionMs: effPos,
+        playing: effPlaying,
+        fontSize: fontSize,
+        fontFamily: prefs.fontFamily,
+        fontWeight: fontWeight,
+        playedColor: playedColor,
+        unplayedColor: unplayedColor,
+        showTranslation: showTranslation,
+        showRomanization: prefs.showRomanization,
+        alignFraction: prefs.amllAlignFraction,
+        inactiveAlpha: prefs.amllInactiveAlpha,
+        wordSweep: prefs.amllWordSweep,
+        hidePassed: prefs.amllHidePassed,
+        enableScale: prefs.amllEnableScale,
+        blurQuality: WallBlurQuality.parse(prefs.amllBlurQuality),
+        springPreset: prefs.amllSpringPreset,
+        textAlign: textAlign,
+        animate: animate,
+        edgeFade: wallEdgeFade,
+        onSeek: onSeek ?? (_) {},
+      );
+    } else if (engine == 'amll') {
+      wall = AmllPhysicsWall(
+        groups: groups,
+        positionMs: effPos,
+        playing: effPlaying, // 播放中时内部时钟按 vsync 插值
+        // 字号与 simple 引擎一致：受「自适应字号」开关控制
+        // （开启则随窗口高度缩放）。
+        fontSize: fontSize,
+        fontFamily: prefs.fontFamily,
+        fontWeight: fontWeight,
+        playedColor: playedColor,
+        unplayedColor: unplayedColor,
+        showTranslation: showTranslation,
+        showRomanization: prefs.showRomanization,
+        alignFraction: prefs.amllAlignFraction,
+        inactiveAlpha: prefs.amllInactiveAlpha,
+        wordSweep: prefs.amllWordSweep,
+        hidePassed: prefs.amllHidePassed,
+        enableScale: prefs.amllEnableScale,
+        blurQuality: LyricsBlurQuality.parse(prefs.amllBlurQuality),
+        springPreset: prefs.amllSpringPreset,
+        textAlign: textAlign,
+        animate: animate,
+        edgeFade: wallEdgeFade,
+        onSeek: onSeek ?? (_) {},
+      );
+    } else {
+      wall = LyricsView(
+        groups: groups,
+        positionMs: effPos,
+        fontSize: fontSize,
+        lineHeight: lineHeight,
+        fontWeight: fontWeight,
+        playedColor: playedColor,
+        unplayedColor: unplayedColor,
+        showTranslation: showTranslation,
+        showRomanization: prefs.showRomanization,
+        currentFontSize: vutron ? fontSize : null,
+        inactiveFontWeight: vutron ? FontWeight.w600 : FontWeight.w400,
+        inactiveScale: vutron ? 0.95 : 1.0,
+        textAlign: textAlign,
+        onSeek: onSeek,
+      );
+    }
     return ClipRect(
       // 逐行渐隐模式由墙自身完成，不能再套 ShaderMask（会叠两次）。
       child: fadeEdges && !wallEdgeFade && fadeMode != LyricsEdgeFadeMode.off

@@ -4596,23 +4596,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsLyricEngine => 'エンジン';
 
   @override
-  String get settingsLyricEngineSimple => 'クラシック';
+  String get settingsLyricEngineDefault => 'デフォルト';
 
   @override
   String get settingsLyricEngineWall => '歌詞ウォール';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc => 'レンダラーを選択。いつでも切り替え可能';
 
   @override
   String get settingsLyricEngineNote =>
-      '全画面プレーヤーの歌詞エリアにのみ適用。AMLL = Apple Music風のウォールスクロールで、やや負荷が高め。';
+      '全画面プレーヤーの歌詞エリアにのみ適用。歌詞ウォール = 4層の書き直しエンジン、AMLL = 従来の Apple Music 風ウォール（やや高負荷）。';
 
   @override
   String get settingsSectionLyricWall => 'ウォール設定';
 
   @override
-  String get settingsAmllNote => 'Apple Music風ウォール歌詞のパラメータ。AMLLエンジンのみが使用します。';
+  String get settingsAmllNote => '歌詞ウォールと AMLL エンジンで共有するウォール歌詞パラメータ。';
 
   @override
   String get settingsAmllAlign => 'アクティブ行の位置';

@@ -24,6 +24,7 @@ import 'package:archoera_music/stores/lyrics_provider.dart';
 import 'package:archoera_music/widgets/player/lyrics_edge_fade.dart';
 import 'package:archoera_music/widgets/player/lyrics_view.dart';
 import 'package:archoera_music/widgets/player/lyrics_v7/lyrics_physics_wall.dart';
+import 'package:archoera_music/widgets/player/lyrics_wall_next/lyrics_wall_next.dart';
 import 'package:archoera_music/widgets/player/playback_progress_slider.dart';
 import 'package:archoera_music/widgets/player/playback_slider.dart';
 import 'package:archoera_music/widgets/player/player_lyrics_block.dart';
@@ -218,6 +219,18 @@ void main() {
     expect(wall.edgeFade, isTrue);
     expect(find.byType(LyricsEdgeFade), findsNothing);
     expect(find.byType(LyricsView), findsNothing);
+  });
+
+  testWidgets('歌词墙引擎：接入四层重写墙并共享配色', (tester) async {
+    await _pumpVutron(tester, prefs: _prefsData('wall'));
+    final wall = tester.widget<LyricsWallNext>(find.byType(LyricsWallNext));
+    expect(wall.playedColor, const Color(_played));
+    expect(wall.unplayedColor, const Color(_unplayed));
+    expect(wall.textAlign, TextAlign.left);
+    expect(wall.edgeFade, isTrue);
+    expect(find.byType(AmllPhysicsWall), findsNothing);
+    expect(find.byType(LyricsView), findsNothing);
+    expect(find.byType(LyricsEdgeFade), findsNothing);
   });
 
   testWidgets('关闭歌词：经典布局只保留居中的封面/控制区', (tester) async {

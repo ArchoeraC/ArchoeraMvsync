@@ -4844,10 +4844,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsLyricEngine => 'Moteur';
 
   @override
-  String get settingsLyricEngineSimple => 'Classique';
+  String get settingsLyricEngineDefault => 'Par défaut';
 
   @override
   String get settingsLyricEngineWall => 'Mur';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc =>
@@ -4855,14 +4858,14 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsLyricEngineNote =>
-      'S\'applique uniquement à la zone de paroles du lecteur plein écran ; AMLL = défilement en mur style Apple Music, un peu plus lourd.';
+      'S\'applique uniquement à la zone de paroles plein écran ; Mur = moteur réécrit en quatre couches, AMLL = mur hérité style Apple Music (un peu plus lourd).';
 
   @override
   String get settingsSectionLyricWall => 'Options du mur';
 
   @override
   String get settingsAmllNote =>
-      'Paramètres du mur de paroles style Apple Music, utilisés uniquement par le moteur AMLL.';
+      'Paramètres de paroles en mur partagés par les moteurs Mur et AMLL.';
 
   @override
   String get settingsAmllAlign => 'Position de la ligne active';

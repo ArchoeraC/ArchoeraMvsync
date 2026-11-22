@@ -8385,17 +8385,23 @@ abstract class AppLocalizations {
   /// **'引擎'**
   String get settingsLyricEngine;
 
-  /// No description provided for @settingsLyricEngineSimple.
+  /// No description provided for @settingsLyricEngineDefault.
   ///
   /// In zh_CN, this message translates to:
-  /// **'经典'**
-  String get settingsLyricEngineSimple;
+  /// **'默认'**
+  String get settingsLyricEngineDefault;
 
   /// No description provided for @settingsLyricEngineWall.
   ///
   /// In zh_CN, this message translates to:
   /// **'歌词墙'**
   String get settingsLyricEngineWall;
+
+  /// No description provided for @settingsLyricEngineAmll.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'AMLL'**
+  String get settingsLyricEngineAmll;
 
   /// No description provided for @settingsLyricEngineDesc.
   ///
@@ -8406,7 +8412,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLyricEngineNote.
   ///
   /// In zh_CN, this message translates to:
-  /// **'仅作用于全屏播放器歌词区；AMLL 为 Apple Music 风整墙滚动，占用略高。'**
+  /// **'仅作用于全屏播放器歌词区；歌词墙为四层重写引擎，AMLL 为旧版 Apple Music 风实现，占用略高。'**
   String get settingsLyricEngineNote;
 
   /// No description provided for @settingsSectionLyricWall.
@@ -8418,7 +8424,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAmllNote.
   ///
   /// In zh_CN, this message translates to:
-  /// **'Apple Music 风格整墙歌词参数，仅 AMLL 引擎使用。'**
+  /// **'歌词墙 / AMLL 引擎共用的整墙歌词参数。'**
   String get settingsAmllNote;
 
   /// No description provided for @settingsAmllAlign.

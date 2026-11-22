@@ -517,7 +517,7 @@ ARCHOERA_COVER_MASK=off       # 跳过全屏封面右缘渗入遮罩（仅诊断
    - raster 高 → 填充率/模糊（看 P2/P3 是否够）。
 3. **A/B 对照**（设置 → 播放）：
    - 背景 `ripple`（GPU shader）↔ `blur`/`solid`（无 shader）比 raster；
-   - 开关 `performanceMode`；歌词引擎 `amll` ↔ `simple`；频谱开/关。
+   - 开关 `performanceMode`；歌词引擎 `wall` / `amll` / `simple`；频谱开/关。
 4. GPU 占用：Windows 任务管理器（辅以 PresentMon/GPUView）；Linux 用 `intel_gpu_top`/`radeontop`。
 5. 内存：DevTools **Memory**，看歌词段落缓存常驻是否随视口有界、切歌后回落（§3.4）。
 6. 结论分派：

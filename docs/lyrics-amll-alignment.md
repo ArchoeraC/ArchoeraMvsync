@@ -3,9 +3,9 @@
 > 状态：**已实现（2026-09-20 起，持续迭代；最近更新 2026-11-22）**。
 > AMLL 仅作**观感参考**：新版重构会替换算法、数据结构与接口，不再沿用 AMLL
 > 的实现。
-> 范围：AMLL 引擎（`lyrics.engine = 'amll'`）的**表现层**——时钟、扫亮、景深、
+> 范围：歌词墙引擎（`lyrics.engine = 'wall' / 'amll'`）的**表现层**——时钟、扫亮、景深、
 > 逐词动画、间奏识别、背景人声行；另含隐藏已唱行、水平对齐、边缘渐隐与稳态烘焙。
-> 布局/弹簧/缓存的既有设计不变。
+> `amll` 为旧实现（观感参考），`wall` 为四层重写引擎（见 §9）。布局/弹簧/缓存的既有设计不变。
 > （间奏三点等待动画已移除：间奏期间保持不点亮任何行、锚点停在间奏前一行。）
 > 上游参考：`amll-dev/applemusic-like-lyrics`（`packages/core/src/lyric-player`，AGPL-3.0-only；
 > 本项目为 Dart 衍生实现，随本项目以 AGPL-3.0 分发，保留上游版权声明与修改说明）。
@@ -341,9 +341,9 @@ AMLL 正常播放**不用固定弹簧**，而是按当前行与上一行的时�
 
 | 开关 | 默认 | 作用 |
 |---|---|---|
-| `lyrics.engine` | `simple` | `amll` 才启用本引擎（本轮未改默认） |
+| `lyrics.engine` | `simple` | 歌词模式：`simple` 默认列表 / `wall` 四层重写歌词墙 / `amll` 旧 AMLL 实现（设置页「引擎」三段切换） |
 | `lyrics.fontSize` | `18`（14–**60**） | 字号上限提到 60px |
-| `lyrics.adaptiveFontSize` | `true` | 字号随窗口高度缩放（simple / AMLL 共用；关闭后严格用 `lyrics.fontSize`） |
+| `lyrics.adaptiveFontSize` | `true` | 字号随窗口高度缩放（三种模式共用；关闭后严格用 `lyrics.fontSize`） |
 | `lyrics.fontWeight` | `600` | 激活行字重（非激活固定 w400，对齐上游层次） |
 | `amll.blurQuality` | `auto` | 失焦档位：`auto` 自动（整层档起步 + 帧预算兜底）/ `fast` 流畅（固定整层档，1 层 + 1/4 重采样）/ `lite` 轻量（零高斯伪散焦，弱核显可用）/ `quality` 画质（固定逐行 σ=`min(5,1+距离)`，最贴上游、最吃 GPU）/ `off` 关闭。**显式档位不吃自动降级**（决定权交给用户）。旧键 `amll.enableBlur=false` 自动迁移为 `off` |
 | `ARCHOERA_LYRICS_BLUR` | 未设 | 诊断/AB 用环境变量：`perline` / `panel` / `off`。显式指定时会**禁用自动降级**（便于对比真机手感） |
@@ -382,6 +382,10 @@ headless 基准：无失焦 **6.3ms**、逐行失焦 **28.5ms**、整层 1/4 重
 - `test/lyrics_bake_test.dart`：整层档稳态烘焙（稳态走贴图、换行/seek/浏览回退、
   换行只烘新进入视口的行、与逐行高斯路径的像素等价）。
 - `test/amll_physics_wall_test.dart`：锚点/高亮分离、seek 与高速换行、左右对齐渲染。
+- `test/lyrics_wall_next_test.dart`：四层重写引擎的时间轴（预滚/间奏/逐字提前/背景行）、
+  几何（中心累计/可见窗口）、运动（单一滚动弹簧的收敛与刚性行距）、组件行为
+  （seek、高速推进、悬停失焦归零、帧预算降级、拖拽有界、点击 seek）、
+  稳态烘焙（稳态贴图生效、换行/悬停回退与恢复、开关关闭、销毁释放）。
 - `test/lyrics_edge_fade_test.dart`：逐行渐隐曲线的停点/夹紧/单调性、`wall` 与
   `shader` 的差异只在上下边缘带、环境变量解析。
 - `test/lyrics_track_switch_test.dart`：切歌时新歌词解析期间不得把上一首的结果
@@ -522,4 +526,54 @@ YRC/KRC/ESLRC → QRC」识别，`normalizeStreamingWordLyric` 再归一化：
   整段点亮，不再逐字扫亮，也不触发长音强调。
 - 相关代码已删除：`SyntheticSweepProcessor`、`synthesizeSweepFragments`、
   `LyricFragment.synthetic`、偏好键 `amll.syntheticSweep` 与设置开关。
+
+## 9. 四层重写引擎（2026-11-22）
+
+> 依据 §0 的维护原则：AMLL 仍是**观感参考**，不是实现基准。本轮把墙体
+> 算法整体重写为独立模块 `app/lib/widgets/player/lyrics_wall_next/`，与
+> 旧 `lyrics_v7` 并列。用户可在设置里通过歌词模式选择：
+> `simple`（默认）/ `wall`（新四层引擎）/ `amll`（旧实现，保留作对照）。
+
+### 9.1 分层
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 时间轴 | `wall_timeline.dart` | 一次构建只读索引：覆盖行、逐字提前换行、预滚起点、间奏、锚点/未来行 |
+| 几何 | `wall_geometry.dart` | 行高估算 + 窗口内实测、自然中心、可见窗口二分、锚点目标偏移 |
+| 运动 | `wall_motion.dart` | **整墙单一滚动偏移**（一个 `Spring1D`）+ 可见行淡入/失焦过渡 |
+| 渲染 | `lyrics_wall_next_painter.dart` | 逐字扫亮、景深档位、上下渐隐、段落/片段缓存 |
+| 烘焙 | `wall_bake.dart` | 整层档稳态逐行烘焙：1/4 逻辑分辨率贴图，缓存与位置无关 |
+
+状态机 `lyrics_wall_next.dart` 只做三件事：把播放位置喂给时钟、把尺寸/手势
+翻译成滚动目标与用户偏移、把结果写进 `WallFrame` 交给 painter。
+
+### 9.2 与旧实现的关键差异
+
+- **行位置恒为 `centers[i] + offset`**：不再为每行维护弹簧。换行只改一个
+  目标偏移，因此行距天然不会塌陷、不会互相追赶；旧引擎的「级联延迟」与
+  「高速换行切刚性滚动」两套模式随之取消。
+- **刚度自适应**：密集换行（≤350ms）、跨屏跳转、间奏、seek、歌末分别选择
+  弹簧参数（`resolveWallSpring`），速度连续，不做硬切。
+- **预滚只影响锚点**：`scrollAt` 用 `[scrollStart, coverEnd)` 判定，高亮仍按
+  原始覆盖窗口；间奏期间锚点停在空隙前一行。
+- **失焦档位**：`panel` 仍是一个离屏层统一高斯；`perLine` 逐行 σ；`lite`
+  放大重绘；`off` 只留透明度。帧预算自动降级沿用旧 `LyricsBlurBudget`。
+- **稳态烘焙已迁移**：`wall_bake.dart` 把每个非激活行按物理分辨率栅格、
+  降采样到 1/4 逻辑网格后做 blur(σ·k)，缓存为 `ui.Image`。稳态帧只贴图 +
+  重绘激活行；缺行当帧回退逐行高斯，后续稳态帧每帧预取一张。缓存键不含
+  屏幕 y / 激活行 / 淡入权重，换行不会失效。
+- **间奏三点动画不再需要**：产品决定不迁移；间奏期间保持不点亮任何行、
+  锚点停在空隙前一行（与 §3.5 一致）。
+
+### 9.3 验收
+
+```bash
+cd app
+flutter test test/lyrics_wall_next_test.dart
+```
+
+设置页「歌词 → 引擎」切到「歌词墙」即可在真机 A/B；「默认」和「AMLL」
+分别对应旧列表与旧 AMLL 实现。新引擎的 `dart analyze` 与单测必须保持全绿。
+切换前至少确认：密集换行不抖、seek 不拖影、悬停后失焦能恢复、弱机
+开启 `auto` 能降级到 `off`、点击/拖拽/滚轮浏览与旧引擎一致。
 

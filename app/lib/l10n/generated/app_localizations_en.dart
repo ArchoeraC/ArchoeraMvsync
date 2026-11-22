@@ -4758,10 +4758,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLyricEngine => 'Engine';
 
   @override
-  String get settingsLyricEngineSimple => 'Classic';
+  String get settingsLyricEngineDefault => 'Default';
 
   @override
   String get settingsLyricEngineWall => 'Wall';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc =>
@@ -4769,14 +4772,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLyricEngineNote =>
-      'Applies to the full-player lyric area only; AMLL = Apple Music-style wall scrolling, slightly heavier.';
+      'Applies to the full-player lyric area; Wall = four-layer rewrite, AMLL = legacy Apple Music-style wall (slightly heavier).';
 
   @override
   String get settingsSectionLyricWall => 'Wall Options';
 
   @override
   String get settingsAmllNote =>
-      'Apple Music-style wall lyric parameters, used only by the AMLL engine.';
+      'Wall lyric parameters shared by the Wall and AMLL engines.';
 
   @override
   String get settingsAmllAlign => 'Active line position';

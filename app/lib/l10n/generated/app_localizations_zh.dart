@@ -4538,23 +4538,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLyricEngine => '引擎';
 
   @override
-  String get settingsLyricEngineSimple => '经典';
+  String get settingsLyricEngineDefault => '默认';
 
   @override
   String get settingsLyricEngineWall => '歌词墙';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc => '选择渲染引擎，可随时切换';
 
   @override
   String get settingsLyricEngineNote =>
-      '仅作用于全屏播放器歌词区；AMLL 为 Apple Music 风整墙滚动，占用略高。';
+      '仅作用于全屏播放器歌词区；歌词墙为四层重写引擎，AMLL 为旧版 Apple Music 风实现，占用略高。';
 
   @override
   String get settingsSectionLyricWall => '歌词墙设置';
 
   @override
-  String get settingsAmllNote => 'Apple Music 风格整墙歌词参数，仅 AMLL 引擎使用。';
+  String get settingsAmllNote => '歌词墙 / AMLL 引擎共用的整墙歌词参数。';
 
   @override
   String get settingsAmllAlign => '激活行位置';
@@ -10715,23 +10718,26 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get settingsLyricEngine => '引擎';
 
   @override
-  String get settingsLyricEngineSimple => '经典';
+  String get settingsLyricEngineDefault => '默认';
 
   @override
   String get settingsLyricEngineWall => '歌词墙';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc => '选择渲染引擎，可随时切换';
 
   @override
   String get settingsLyricEngineNote =>
-      '仅作用于全屏播放器歌词区；AMLL 为 Apple Music 风整墙滚动，占用略高。';
+      '仅作用于全屏播放器歌词区；歌词墙为四层重写引擎，AMLL 为旧版 Apple Music 风实现，占用略高。';
 
   @override
   String get settingsSectionLyricWall => '歌词墙设置';
 
   @override
-  String get settingsAmllNote => 'Apple Music 风格整墙歌词参数，仅 AMLL 引擎使用。';
+  String get settingsAmllNote => '歌词墙 / AMLL 引擎共用的整墙歌词参数。';
 
   @override
   String get settingsAmllAlign => '激活行位置';
@@ -16893,23 +16899,26 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get settingsLyricEngine => '引擎';
 
   @override
-  String get settingsLyricEngineSimple => '經典';
+  String get settingsLyricEngineDefault => '預設';
 
   @override
   String get settingsLyricEngineWall => '歌詞牆';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc => '選擇渲染引擎，可隨時切換';
 
   @override
   String get settingsLyricEngineNote =>
-      '僅作用於全螢幕播放器歌詞區；AMLL 為 Apple Music 風整牆捲動，占用略高。';
+      '僅作用於全螢幕播放器歌詞區；歌詞牆為四層重寫引擎，AMLL 為舊版 Apple Music 風實作，占用略高。';
 
   @override
   String get settingsSectionLyricWall => '歌詞牆設定';
 
   @override
-  String get settingsAmllNote => 'Apple Music 風格整牆歌詞參數，僅 AMLL 引擎使用。';
+  String get settingsAmllNote => '歌詞牆 / AMLL 引擎共用的整牆歌詞參數。';
 
   @override
   String get settingsAmllAlign => '啟用行位置';

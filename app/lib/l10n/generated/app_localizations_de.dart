@@ -4808,10 +4808,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsLyricEngine => 'Engine';
 
   @override
-  String get settingsLyricEngineSimple => 'Klassisch';
+  String get settingsLyricEngineDefault => 'Standard';
 
   @override
   String get settingsLyricEngineWall => 'Wand';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc =>
@@ -4819,14 +4822,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsLyricEngineNote =>
-      'Gilt nur für den Songtextbereich des Vollbild-Players; AMLL = Apple-Music-artiges Wandscrollen, etwas aufwendiger.';
+      'Gilt nur für den Songtextbereich des Vollbild-Players; Wand = neu geschriebene Vier-Schichten-Engine, AMLL = bisherige Apple-Music-Wand (etwas aufwendiger).';
 
   @override
   String get settingsSectionLyricWall => 'Wand-Optionen';
 
   @override
   String get settingsAmllNote =>
-      'Apple-Music-artige Wand-Songtextparameter, nur von der AMLL-Engine verwendet.';
+      'Wand-Parameter für die Engines Wand und AMLL.';
 
   @override
   String get settingsAmllAlign => 'Position der aktiven Zeile';

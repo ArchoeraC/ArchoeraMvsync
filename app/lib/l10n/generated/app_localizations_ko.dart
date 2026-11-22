@@ -4602,23 +4602,26 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsLyricEngine => '엔진';
 
   @override
-  String get settingsLyricEngineSimple => '클래식';
+  String get settingsLyricEngineDefault => '기본';
 
   @override
   String get settingsLyricEngineWall => '가사 월';
+
+  @override
+  String get settingsLyricEngineAmll => 'AMLL';
 
   @override
   String get settingsLyricEngineDesc => '렌더러를 선택하세요. 언제든 전환 가능';
 
   @override
   String get settingsLyricEngineNote =>
-      '전체 화면 플레이어 가사 영역에만 적용됩니다. AMLL = Apple Music 스타일 월 스크롤로 약간 더 무겁습니다.';
+      '전체 화면 플레이어 가사 영역에만 적용됩니다. 가사 월 = 4계층 재작성 엔진, AMLL = 기존 Apple Music 스타일 월(약간 더 무거움).';
 
   @override
   String get settingsSectionLyricWall => '월 설정';
 
   @override
-  String get settingsAmllNote => 'Apple Music 스타일 월 가사 매개변수로 AMLL 엔진에서만 사용합니다.';
+  String get settingsAmllNote => '가사 월과 AMLL 엔진이 공유하는 월 가사 매개변수.';
 
   @override
   String get settingsAmllAlign => '활성 행 위치';
