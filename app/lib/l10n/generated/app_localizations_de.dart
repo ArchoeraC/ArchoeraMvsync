@@ -3181,16 +3181,6 @@ class AppLocalizationsDe extends AppLocalizations {
       'Wiederherstellungspasswort falsch oder Entsperrung fehlgeschlagen; Anmeldedaten bleiben gesperrt';
 
   @override
-  String get settingsSchemeIntroTitle => 'Verschlüsselungsverfahren';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'Ihre Anmeldedaten (Cookies) werden durch ein Verschlüsselungsverfahren geschützt. Das LEGACY-Verfahren (empfohlen) ist aktiviert: Der Hauptschlüssel liegt im sicheren Systemspeicher — stabil und zuverlässig. Für stärkeren Schutz können Sie in Einstellungen → Verschlüsselungsverfahren für Anmeldedaten auf Vault (experimentell) wechseln — beachten Sie, dass der Wechsel die Datenbank neu aufbaut und alle Anmeldedaten verliert.';
-
-  @override
-  String get settingsSchemeIntroGotIt => 'Verstanden';
-
-  @override
   String get settingsSchemeSection =>
       'Verschlüsselungsverfahren für Anmeldedaten';
 

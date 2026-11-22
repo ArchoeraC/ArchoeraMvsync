@@ -29,7 +29,6 @@ import '../theme/cover_color.dart';
 import '../theme/theme_sources/theme_source_registry.dart';
 import '../theme/theme_sources/theme_source_style.dart';
 import '../widgets/common/app_shortcuts.dart';
-import '../widgets/common/scheme_intro_gate.dart';
 import '../widgets/common/toast.dart';
 import '../widgets/common/vault_crash_gate.dart';
 import '../widgets/common/vault_unlock_gate.dart';
@@ -152,9 +151,7 @@ class ArchoeraMvsumcApp extends ConsumerWidget {
                 var appChild = child ?? const SizedBox.shrink();
                 Widget gate = SplashGate(
                   engine: prefs.engine,
-                  child: SchemeIntroGate(
-                    child: AppShortcuts(child: ToastOverlay(child: appChild)),
-                  ),
+                  child: AppShortcuts(child: ToastOverlay(child: appChild)),
                 );
                 // v2 口令模式启动解锁门：vault 待口令解锁时全屏拦截，
                 // 解锁成功后放行（登录态恢复见解锁门内部）。无 vault 时直通。

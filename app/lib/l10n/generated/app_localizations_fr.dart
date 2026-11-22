@@ -3209,16 +3209,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'Mot de passe de récupération incorrect ou échec du déverrouillage ; identifiants toujours verrouillés';
 
   @override
-  String get settingsSchemeIntroTitle => 'Méthode de chiffrement';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'Vos identifiants de connexion (cookies) sont protégés par une méthode de chiffrement. La méthode LEGACY (recommandée) est activée : la clé maîtresse vit dans le stockage sécurisé du système — stable et fiable. Pour une protection renforcée, passez à Vault (expérimental) dans Paramètres → Méthode de chiffrement des identifiants — notez que le changement reconstruit la base de données et perd tous les identifiants de connexion.';
-
-  @override
-  String get settingsSchemeIntroGotIt => 'Compris';
-
-  @override
   String get settingsSchemeSection => 'Méthode de chiffrement des identifiants';
 
   @override

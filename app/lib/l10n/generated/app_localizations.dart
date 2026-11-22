@@ -5614,24 +5614,6 @@ abstract class AppLocalizations {
   /// **'恢复口令错误或解锁失败，凭据保持锁定'**
   String get toastDeviceBindRecoverFailed;
 
-  /// No description provided for @settingsSchemeIntroTitle.
-  ///
-  /// In zh_CN, this message translates to:
-  /// **'加密方案说明'**
-  String get settingsSchemeIntroTitle;
-
-  /// No description provided for @settingsSchemeIntroDesc.
-  ///
-  /// In zh_CN, this message translates to:
-  /// **'登录凭据（cookie）由加密方案保护。已为你启用 LEGACY 方案（推荐）：主密钥存于操作系统安全存储，稳定可靠。如需更高安全性，可在「设置 → 凭据加密方案」切换到 Vault（实验性）——注意该方案切换会重建数据库并丢失全部登录凭据。'**
-  String get settingsSchemeIntroDesc;
-
-  /// No description provided for @settingsSchemeIntroGotIt.
-  ///
-  /// In zh_CN, this message translates to:
-  /// **'知道了，继续'**
-  String get settingsSchemeIntroGotIt;
-
   /// No description provided for @settingsSchemeSection.
   ///
   /// In zh_CN, this message translates to:

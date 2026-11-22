@@ -3145,16 +3145,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Recovery password incorrect or unlock failed; credentials stay locked';
 
   @override
-  String get settingsSchemeIntroTitle => 'Encryption scheme';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'Your login credentials (cookies) are protected by an encryption scheme. LEGACY (recommended) is enabled: the master key lives in OS secure storage — stable and reliable. For stronger protection you can switch to Vault (experimental) in Settings → Credential encryption scheme — note that switching rebuilds the database and loses all login credentials.';
-
-  @override
-  String get settingsSchemeIntroGotIt => 'Got it';
-
-  @override
   String get settingsSchemeSection => 'Credential encryption scheme';
 
   @override

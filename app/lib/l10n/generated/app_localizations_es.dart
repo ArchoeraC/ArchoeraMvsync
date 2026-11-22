@@ -3205,16 +3205,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Contraseña de recuperación incorrecta o error de desbloqueo; credenciales siguen bloqueados';
 
   @override
-  String get settingsSchemeIntroTitle => 'Método de cifrado';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'Sus credenciales de inicio de sesión (cookies) están protegidas por un método de cifrado. El método LEGACY (recomendado) está activado: la clave maestra vive en el almacenamiento seguro del sistema — estable y fiable. Para una mayor protección puede cambiar a Vault (experimental) en Ajustes → Método de cifrado de credenciales — tenga en cuenta que el cambio reconstruye la base de datos y pierde todos los credenciales de inicio de sesión.';
-
-  @override
-  String get settingsSchemeIntroGotIt => 'Entendido';
-
-  @override
   String get settingsSchemeSection => 'Método de cifrado de credenciales';
 
   @override

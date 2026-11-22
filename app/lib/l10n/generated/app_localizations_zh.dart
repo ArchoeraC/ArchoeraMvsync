@@ -3014,16 +3014,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toastDeviceBindRecoverFailed => '恢复口令错误或解锁失败，凭据保持锁定';
 
   @override
-  String get settingsSchemeIntroTitle => '加密方案说明';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      '登录凭据（cookie）由加密方案保护。已为你启用 LEGACY 方案（推荐）：主密钥存于操作系统安全存储，稳定可靠。如需更高安全性，可在「设置 → 凭据加密方案」切换到 Vault（实验性）——注意该方案切换会重建数据库并丢失全部登录凭据。';
-
-  @override
-  String get settingsSchemeIntroGotIt => '知道了，继续';
-
-  @override
   String get settingsSchemeSection => '凭据加密方案';
 
   @override
@@ -9194,16 +9184,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get toastDeviceBindRecoverFailed => '恢复口令错误或解锁失败，凭据保持锁定';
 
   @override
-  String get settingsSchemeIntroTitle => '加密方案说明';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      '登录凭据（cookie）由加密方案保护。已为你启用 LEGACY 方案（推荐）：主密钥存于操作系统安全存储，稳定可靠。如需更高安全性，可在「设置 → 凭据加密方案」切换到 Vault（实验性）——注意该方案切换会重建数据库并丢失全部登录凭据。';
-
-  @override
-  String get settingsSchemeIntroGotIt => '知道了，继续';
-
-  @override
   String get settingsSchemeSection => '凭据加密方案';
 
   @override
@@ -15372,16 +15352,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get toastDeviceBindRecoverFailed => '復原密碼錯誤或解鎖失敗，憑證保持鎖定';
-
-  @override
-  String get settingsSchemeIntroTitle => '加密方案說明';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      '登入憑證（cookie）由加密方案保護。已為你啟用 LEGACY 方案（推薦）：主金鑰存於作業系統安全儲存，穩定可靠。如需更高安全性，可在「設定 → 憑證加密方案」切換到 Vault（實驗性）——注意該方案切換會重建資料庫並遺失全部登入憑證。';
-
-  @override
-  String get settingsSchemeIntroGotIt => '知道了，繼續';
 
   @override
   String get settingsSchemeSection => '憑證加密方案';

@@ -3048,16 +3048,6 @@ class AppLocalizationsJa extends AppLocalizations {
       '復旧パスワードの誤りまたはロック解除失敗。認証情報はロックのままです';
 
   @override
-  String get settingsSchemeIntroTitle => '暗号化スキームの説明';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      'ログイン認証情報（クッキー）は暗号化スキームで保護されます。LEGACY スキーム（推奨）を有効にしました：マスターキーは OS のセキュアストレージに保存され、安定・信頼性が高いです。より高い安全性が必要な場合は「設定 → 認証情報の暗号化スキーム」で Vault（実験的）に切り替えられます。なお、切り替え時はデータベースが再構築され、すべてのログイン認証情報が失われます。';
-
-  @override
-  String get settingsSchemeIntroGotIt => '了解しました';
-
-  @override
   String get settingsSchemeSection => '認証情報の暗号化スキーム';
 
   @override

@@ -3051,16 +3051,6 @@ class AppLocalizationsKo extends AppLocalizations {
       '복구 비밀번호 오류 또는 잠금 해제 실패. 자격 증명은 잠긴 상태로 유지됩니다';
 
   @override
-  String get settingsSchemeIntroTitle => '암호화 방식 안내';
-
-  @override
-  String get settingsSchemeIntroDesc =>
-      '로그인 자격 증명(쿠키)은 암호화 방식으로 보호됩니다. LEGACY 방식(권장)을 활성화했습니다: 마스터 키는 OS 보안 저장소에 보관되어 안정적이고 신뢰할 수 있습니다. 더 높은 보안이 필요하면 \'설정 → 자격 증명 암호화 방식\'에서 Vault(실험적)로 전환할 수 있습니다. 단, 전환 시 데이터베이스가 재구축되며 모든 로그인 자격 증명이 유실됩니다.';
-
-  @override
-  String get settingsSchemeIntroGotIt => '확인했습니다';
-
-  @override
   String get settingsSchemeSection => '자격 증명 암호화 방식';
 
   @override

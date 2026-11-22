@@ -27,7 +27,6 @@ import 'stores/data_dir.dart';
 import 'stores/vault_session_store.dart';
 import 'app/app.dart';
 import 'app/elevation_gate.dart';
-import 'app/router.dart' show rootNavigatorKey;
 import 'app/watermark.dart';
 import 'utils/app_version.dart';
 import 'widgets/common/tray_integration.dart';
@@ -50,10 +49,9 @@ Future<void> main(List<String> args) async {
   // 防伪锚点：把 'ARCHOERA DESIGNED' 编译进内核/AOT 快照字符串表
   // （见 app/watermark.dart；勿删，反编译识别非官方重新打包）。
   archoeraWatermarkAnchor();
-  // 品牌改名：先把旧 ArchoeraMusic 数据目录迁到 ArchoeraMvsumc。
-  // 必须在 AppPrefs.load / Log.init / vault 之前完成；自动清理失败时
-  // 返回旧目录路径，下面只记日志，不阻塞启动。
-  final legacyDataDir = await migrateLegacyDataDir();
+  // 品牌改名：使用新的 ArchoeraMvsumc 数据目录，不迁移旧 ArchoeraMusic
+  // （旧目录原样保留；迁移跨盘/保险库文件锁不稳定，已撤掉）。
+  await ensureDataDir();
   // 偏好先读一次（后面复用同一实例）：其中 `logToFile` 控制日志是否落盘。
   final prefs = AppPrefs.load();
   // 统一日志：尽早初始化。原生核心（libarchoera_log）写穿 stderr（带色）
@@ -70,17 +68,11 @@ Future<void> main(List<String> args) async {
   // 崩溃线程、调用栈与最近日志写进 `<dataDir>/logs/crash-*.txt`，随后照常
   // 重新抛出（保留 core dump）。见 docs/troubleshooting.md §0。
   Log.installCrashHandler();
-  if (legacyDataDir != null) {
-    Log.w(
-      'migration',
-      '旧数据目录未能自动删除（新目录已可用，请手动检查）：$legacyDataDir',
-    );
-  }
   // 启动标记：与退出标记配对，用于区分「闪退」与「被外部结束 / 正常退出」。
   Log.i(
     'startup',
     'ArchoeraMvsumc 启动 pid=$pid platform=${Platform.operatingSystem} '
-    'logLevel=${Log.minLevel.label}',
+        'logLevel=${Log.minLevel.label}',
   );
   // 查询日志（本机 JSONL，供 T2-7 助词容错矩阵分析）：与「日志落盘」同一开关，
   // 关闭时不装配 sink（记录调用变成零成本 no-op）。
@@ -225,33 +217,8 @@ Future<void> main(List<String> args) async {
   // 订阅 deep link 并派发（启动期链接先缓冲，首帧后统一处理）。
   final deepLinkRouter = DeepLinkRouter(platformCaps.deepLink);
   deepLinkRouter.start();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    deepLinkRouter.markReady();
-    if (legacyDataDir != null) {
-      final context = rootNavigatorKey.currentContext;
-      if (context != null) _showLegacyDataDirNotice(context, legacyDataDir);
-    }
-  });
-}
-
-/// 旧数据目录迁移后无法自动删除时的兜底提示（正常 rename 不会走到这里）。
-void _showLegacyDataDirNotice(BuildContext context, String path) {
-  showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('旧数据目录未能自动删除'),
-      content: SelectableText(
-        '新数据目录已就绪，但以下旧文件夹仍然存在：\n\n'
-        '$path\n\n'
-        '请确认数据无误后手动删除该文件夹。',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('知道了'),
-        ),
-      ],
-    ),
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => deepLinkRouter.markReady(),
   );
 }
 

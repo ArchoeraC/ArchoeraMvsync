@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+
 import '../utils/safe_file.dart';
 
 /// 应用数据根目录（按平台约定）：
@@ -12,20 +13,30 @@ import '../utils/safe_file.dart';
 ///   - Windows：`%LOCALAPPDATA%\ArchoeraMvsumc`
 /// 可用环境变量 `ARCHOERA_DATA_DIR` 覆盖（与 scanner 侧一致）。
 ///
-/// 改名兼容：旧版本使用 `ArchoeraMusic` 目录，启动时由
-/// [migrateLegacyDataDir] 自动迁移；旧目录无法自动删除时保留并返回路径。
+/// 改名后**不迁移**旧 `ArchoeraMusic` 目录：旧目录原样保留，新版本从新目录
+/// 开始（避免跨盘复制/保险库文件锁导致迁移不完整）。
 String resolveDataDir() {
   final override = Platform.environment['ARCHOERA_DATA_DIR'];
   if (override != null && override.isNotEmpty) return override;
   return '${_platformDataRoot()}/$_dataDirName';
 }
 
+/// 确保数据目录存在（首次启动/清空后）。失败时由各调用方自行降级。
+Future<void> ensureDataDir() async {
+  try {
+    await Directory(resolveDataDir()).create(recursive: true);
+  } catch (_) {
+    // 权限/磁盘问题：后续读写会走各自的错误处理。
+  }
+}
+
 const String _dataDirName = 'ArchoeraMvsumc';
-const String _legacyDataDirName = 'ArchoeraMusic';
 
 String _platformDataRoot() {
   final home =
-      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '.';
+      Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      '.';
   if (Platform.isMacOS) {
     return '$home/Library/Application Support';
   }
@@ -34,91 +45,6 @@ String _platformDataRoot() {
     return Platform.environment['LOCALAPPDATA'] ?? '$home/AppData/Local';
   }
   return '$home/.local/share';
-}
-
-/// 把旧品牌数据目录迁移到新目录。
-///
-/// - `ARCHOERA_DATA_DIR` 显式覆盖时不做迁移（用户自行管理路径）；
-/// - 新目录已存在（曾启动过新版本）时不覆盖，旧目录保留并返回其路径；
-/// - 同卷优先 `rename`；跨卷时先复制到临时目录、校验文件数/字节数，
-///   成功后再替换并删除旧目录；
-/// - 返回非 null 表示旧目录仍存在（自动清理失败），调用方应提示用户。
-Future<String?> migrateLegacyDataDir({String? rootDir}) async {
-  final override = Platform.environment['ARCHOERA_DATA_DIR'];
-  if (override != null && override.isNotEmpty) return null;
-  final root = rootDir ?? _platformDataRoot();
-  final oldPath = '$root/$_legacyDataDirName';
-  final newPath = '$root/$_dataDirName';
-  final oldDir = Directory(oldPath);
-  final newDir = Directory(newPath);
-  if (!await oldDir.exists()) return null;
-  if (await newDir.exists()) return oldPath;
-  try {
-    // 同一分区上 rename 是原子的，旧目录会直接消失。
-    await oldDir.rename(newPath);
-    return null;
-  } catch (_) {
-    // 跨卷 / 权限受限：走复制 + 校验 + 删除。
-  }
-  final temp = Directory('$newPath.migrating');
-  try {
-    if (await temp.exists()) await temp.delete(recursive: true);
-    await _copyDirectory(oldDir, temp);
-    final from = await _dirStats(oldDir);
-    final to = await _dirStats(temp);
-    if (from != to) {
-      await temp.delete(recursive: true);
-      return oldPath;
-    }
-    if (await newDir.exists()) {
-      await temp.delete(recursive: true);
-      return oldPath;
-    }
-    await temp.rename(newPath);
-    await oldDir.delete(recursive: true);
-    return null;
-  } catch (_) {
-    try {
-      if (await temp.exists()) await temp.delete(recursive: true);
-    } catch (_) {}
-    return oldPath;
-  }
-}
-
-Future<void> _copyDirectory(Directory from, Directory to) async {
-  await to.create(recursive: true);
-  await for (final entity in from.list(recursive: true, followLinks: false)) {
-    final rel = entity.path.substring(from.path.length + 1);
-    final target = '${to.path}/$rel';
-    if (entity is Directory) {
-      await Directory(target).create(recursive: true);
-    } else if (entity is File) {
-      await Directory(_parentOf(target)).create(recursive: true);
-      await entity.copy(target);
-    } else if (entity is Link) {
-      await Directory(_parentOf(target)).create(recursive: true);
-      await Link(target).create(await entity.target());
-    }
-  }
-}
-
-String _parentOf(String path) {
-  final i = path.lastIndexOf(Platform.pathSeparator);
-  return i <= 0 ? path : path.substring(0, i);
-}
-
-Future<(int, int)> _dirStats(Directory dir) async {
-  var files = 0;
-  var bytes = 0;
-  await for (final entity in dir.list(recursive: true, followLinks: false)) {
-    if (entity is File) {
-      files++;
-      try {
-        bytes += await entity.length();
-      } catch (_) {}
-    }
-  }
-  return (files, bytes);
 }
 
 /// 应用「媒体库音乐目录」：读取扫描目录配置（scan_dirs.json，与

@@ -866,12 +866,6 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
     state.save();
   }
 
-  /// 标记首次启动「加密方案选择」对话框已展示（一次性）。
-  void setSchemeDialogShown(bool value) {
-    state = state.copyWithSchemeDialogShown(value);
-    state.save();
-  }
-
   /// 标记 m2a 恢复码已由用户确认抄写/保存（设置页持久提醒的消费标记）。
   void setM2aRecoveryAcked(bool value) {
     state = state.copyWithM2aRecoveryAcked(value);
