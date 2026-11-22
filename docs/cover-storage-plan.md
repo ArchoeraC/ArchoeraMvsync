@@ -2,7 +2,7 @@
 
 > 状态：**方案稿 v2 · 2026-09-23**（v1「零常驻」→ 依参考实现修订为「**只落盘一次缩略图**」）
 > 目标：封面在**浏览/播放时**不吃内存、不持续写盘；磁盘占用 ≈ 曲数 × 小常数；大图不落盘。
-> 参考：`/home/betastudio2/文档/SPlayer-Next/Desktop-only`（Electron）的封面实现（下文 §2）。
+> 参考：`SPlayer-Next/Desktop-only`（Electron）的封面实现（下文 §2）。
 > 关联：`media-mindmap.html`（扫描写路径）、`runtime-resource-optimization.md §4.6`。
 
 ---

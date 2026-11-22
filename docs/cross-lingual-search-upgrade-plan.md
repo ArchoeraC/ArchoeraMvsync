@@ -75,8 +75,8 @@ AND 到 `reading_meta_tok` / `lyrics_rom_tok`）→ **跨语言兜底**（`love`
    `has_han=false` 时丢掉汉字候选（不可能命中），`has_latin=false` 时丢掉英文释义候选；
    因此纯英文库仍保留「爱 → love」方向，不是把整趟砍掉（比原计划更保守，避免误伤召回）。
    绝大多数纯英文曲库的读音段被永久跳过（主趟 + 拼音宽松 + 跨语言即可覆盖），主路径零改动。
-   实现在 [IndexerEngine.cs](file:///home/betastudio2/文档/ArchoeraMvsync/app/core/indexer/IndexerEngine.cs) 的
-   `ScriptProfile` 与 [SearchSession.cs](file:///home/betastudio2/文档/ArchoeraMvsync/app/core/indexer/SearchSession.cs) 的
+   实现在 [IndexerEngine.cs](../app/core/indexer/IndexerEngine.cs) 的
+   `ScriptProfile` 与 [SearchSession.cs](../app/core/indexer/SearchSession.cs) 的
    `FilterCrossLingual`；测试见 `SearchLayerTests.LanguageProfile`。
 2. ✅ **查询结果 LRU 缓存（2026-11-12 已实施）**：`SearchSession` 实例内按
    「查询串（trim + 小写）+ scope + limit / offset / fuzzy / minExact / candidateCap

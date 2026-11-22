@@ -5,7 +5,7 @@
 > 关联：[local-search-recall-precision-audit.md](local-search-recall-precision-audit.md)（问题复现与量化）、
 > [local-search-index-plan.md](local-search-index-plan.md)（架构与验收基线）、
 > [licensing.md](licensing.md)、[acknowledgements.md](acknowledgements.md)。
-> **本机参考克隆不入库**，位于 `/home/betastudio2/文档/SPlayer-Next/`。
+> **本机参考克隆不入库**，位于 `SPlayer-Next/`。
 
 ---
 
