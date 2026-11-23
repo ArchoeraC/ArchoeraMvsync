@@ -33,6 +33,19 @@ public static class Program
         RunDirectAssertions();
         EndToEnd.Run();
         SearchLayerTests.Run();
+        EraStoreFormatTests.Run();
+        EraStoreDictTests.Run();
+        EraStorePostingsTests.Run();
+        EraStoreIteratorsTests.Run();
+        EraStorePhraseTests.Run();
+        EraStoreManifestTests.Run();
+        EraStoreBuilderTests.Run();
+        EraStoreCliTests.Run();
+        EraStoreMergeTests.Run();
+        EraStoreDifferentialTests.Run();
+        EraStoreQueryCoverageTests.Run();
+        EraStoreNoPositionTests.Run();
+        EraStoreFuzzTests.Run();
 
         var vectorFiles = Directory.GetFiles(vectorsDir, "*.tsv");
         Array.Sort(vectorFiles, StringComparer.Ordinal);

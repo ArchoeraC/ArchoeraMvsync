@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>archoera-indexer-tests</AssemblyName>
     <RootNamespace>Archoera.Indexer.Tests</RootNamespace>
+    <!-- CLI Program.cs 也编入测试程序集（验证子命令退出码），入口固定为测试 Main。 -->
+    <StartupObject>Archoera.Indexer.Tests.Program</StartupObject>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
@@ -34,6 +36,12 @@
     <Compile Include="../FuzzyVocabulary.cs" Link="FuzzyVocabulary.cs" />
     <Compile Include="../ReadingRanker.cs" Link="ReadingRanker.cs" />
     <Compile Include="../SearchSession.cs" Link="SearchSession.cs" />
+    <!-- CLI 入口（诊断子命令退出码断言）；入口由 StartupObject 指定为测试 Program。 -->
+    <Compile Include="../Program.cs" Link="Program.cs" />
+    <!-- 回放 harness（Program.cs 的 replay 分派依赖；同源编入测试程序集）。 -->
+    <Compile Include="../Replay.cs" Link="Replay.cs" />
+    <!-- EraStore（自研索引存储）：整目录共享，新增文件无需再改工程。 -->
+    <Compile Include="../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
   </ItemGroup>
 

@@ -3480,7 +3480,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsDecline1Body =>
-      'Diese Software ist ein Drittanbieter-Client ohne Zugehörigkeit, Zusammenarbeit oder Autorisierung mit irgendeiner Musikplattform. Das Projekt selbst ist nicht auf Gewinn ausgerichtet und akzeptiert keine kommerziellen Partnerschaften, Werbung oder eingebettete Sponsorinhalte; es akzeptiert ausschließlich freiwillige Spenden, die keine zusätzlichen Lizenzrechte verleihen (Spenden ändern weder die Bedingungen der AGPL-3.0 noch einzelne Funktionen). Für einen größeren Funktionsumfang nutze bitte den offiziellen Client.\n\n';
+      'Diese Software ist ein Drittanbieter-Client ohne Zugehörigkeit, Zusammenarbeit oder Autorisierung mit irgendeiner Musikplattform. Das Projekt selbst ist nicht auf Gewinn ausgerichtet und akzeptiert keine kommerziellen Partnerschaften, Werbung oder eingebettete Sponsorinhalte; es akzeptiert ausschließlich freiwillige Spenden, die keine zusätzlichen Lizenzrechte verleihen (Spenden ändern weder die Bedingungen der AGPL-3.0-or-later noch einzelne Funktionen). Für einen größeren Funktionsumfang nutze bitte den offiziellen Client.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle =>
@@ -3488,7 +3488,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsDeclineLicenseBody =>
-      'Diese Software wird unter der GNU Affero General Public License Version 3 (AGPL-3.0) veröffentlicht. Im Rahmen dieser Lizenz dürfen Sie diese Software frei ausführen, untersuchen, verändern und weiterverbreiten, sofern Sie: die Urheberrechts- und Lizenzhinweise beibehalten; Ihre abgeleiteten Werke unter derselben Lizenz veröffentlichen; und, wenn Sie die Funktionalität dieser Software (einschließlich geänderter Versionen) Nutzern über ein Netzwerk bereitstellen, diesen Nutzern den entsprechenden vollständigen Quellcode zur Verfügung stellen. Dieses Projekt bietet keine Closed-Source-kommerzielle Lizenzierung außerhalb der AGPL-Pflichten an. Die vollständigen Bedingungen richten sich nach der beiliegenden LICENSE-Datei und https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
+      'Diese Software wird unter der GNU Affero General Public License Version 3 (AGPL-3.0-or-later) veröffentlicht. Im Rahmen dieser Lizenz dürfen Sie diese Software frei ausführen, untersuchen, verändern und weiterverbreiten, sofern Sie: die Urheberrechts- und Lizenzhinweise beibehalten; Ihre abgeleiteten Werke unter derselben Lizenz veröffentlichen; und, wenn Sie die Funktionalität dieser Software (einschließlich geänderter Versionen) Nutzern über ein Netzwerk bereitstellen, diesen Nutzern den entsprechenden vollständigen Quellcode zur Verfügung stellen. Dieses Projekt bietet keine Closed-Source-kommerzielle Lizenzierung außerhalb der AGPL-Pflichten an. Die vollständigen Bedingungen richten sich nach der beiliegenden LICENSE-Datei und https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
 
   @override
   String get settingsDecline2Title => '2. Inhaltsquellen & Urheberrecht\n';
@@ -3510,7 +3510,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      'Nicht für kommerzielle Aktivitäten, Massen-Scraping oder Wiederverkauf verwenden; nicht unter Verstoß gegen lokale Gesetze oder Nutzungsbedingungen verwenden.\n\n';
+      'Nutzen Sie diese Software nicht, um Urheberrechte oder andere Rechte Dritter zu verletzen (einschließlich Massen-Scraping, Crawling oder Weiterverkauf von Inhalten); nutzen Sie sie nicht unter Verstoß gegen lokale Gesetze oder Nutzungsbedingungen; umgehen Sie keine technischen Schutzmaßnahmen, Zugangskontrollen oder Nutzungsbedingungen. Dieser Abschnitt ist ein Nutzungshinweis und stellt keine zusätzliche Lizenzbeschränkung über AGPL-3.0-or-later hinaus dar; die kommerzielle Nutzung richtet sich nach der LICENSE.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. Anmeldung & Konto\n';

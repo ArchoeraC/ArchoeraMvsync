@@ -4,7 +4,7 @@
 
 part of '../settings_sections.dart';
 
-// ── 开发者 ────────────────────────────────────────────────────────────
+// ── 开发者模式 ────────────────────────────────────────────────────────────
 
 /// 下载模块风险提示色（黄色标注：与普通设置项区分，提示风险）。
 const _downloadWarningColor = Color(0xFFFFB300);
@@ -104,8 +104,7 @@ class _DeveloperSectionState extends ConsumerState<DeveloperSection> {
                     ref.read(appPrefsProvider.notifier).setDevFpsMonitor(v),
               ),
             ),
-            // 下载模块：独立可开关；仅「开关按钮」黄色标注（行样式保持常规），
-            // 开启前弹出风险确认。
+            // 在开启此模块前弹出风险确认
             SettingTile(
               icon: EtaIcons.downloadOutline,
               title: l10n.settingsDeveloperDownloadModule,
@@ -122,4 +121,3 @@ class _DeveloperSectionState extends ConsumerState<DeveloperSection> {
     );
   }
 }
-

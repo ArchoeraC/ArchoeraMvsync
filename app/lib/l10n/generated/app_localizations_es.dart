@@ -3506,7 +3506,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDecline1Body =>
-      'Este software es un cliente de terceros sin afiliación, cooperación o autorización con ninguna plataforma musical. El proyecto en sí no tiene fines de lucro y no acepta colaboraciones comerciales, publicidad ni contenido patrocinado; solo acepta donaciones voluntarias que no otorgan ningún derecho de licencia adicional (las donaciones no modifican los términos de AGPL-3.0 ni afectan a ninguna función). Para funciones más completas, utiliza el cliente oficial.\n\n';
+      'Este software es un cliente de terceros sin afiliación, cooperación o autorización con ninguna plataforma musical. El proyecto en sí no tiene fines de lucro y no acepta colaboraciones comerciales, publicidad ni contenido patrocinado; solo acepta donaciones voluntarias que no otorgan ningún derecho de licencia adicional (las donaciones no modifican los términos de AGPL-3.0-or-later ni afectan a ninguna función). Para funciones más completas, utiliza el cliente oficial.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle =>
@@ -3514,7 +3514,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDeclineLicenseBody =>
-      'Este software se publica bajo la Licencia Pública General Affero de GNU versión 3 (AGPL-3.0). Dentro del alcance de dicha licencia, usted es libre de ejecutar, estudiar, modificar y redistribuir este software, siempre que: conserve los avisos de derechos de autor y de licencia; publique sus obras derivadas bajo la misma licencia; y, si pone la funcionalidad de este software (incluidas las versiones modificadas) a disposición de los usuarios a través de una red, proporcione a esos usuarios el código fuente completo correspondiente. Este proyecto no ofrece licencias comerciales de código cerrado al margen de las obligaciones de la AGPL. Los términos completos se rigen por el archivo LICENSE adjunto y https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
+      'Este software se publica bajo la Licencia Pública General Affero de GNU versión 3 (AGPL-3.0-or-later). Dentro del alcance de dicha licencia, usted es libre de ejecutar, estudiar, modificar y redistribuir este software, siempre que: conserve los avisos de derechos de autor y de licencia; publique sus obras derivadas bajo la misma licencia; y, si pone la funcionalidad de este software (incluidas las versiones modificadas) a disposición de los usuarios a través de una red, proporcione a esos usuarios el código fuente completo correspondiente. Este proyecto no ofrece licencias comerciales de código cerrado al margen de las obligaciones de la AGPL. Los términos completos se rigen por el archivo LICENSE adjunto y https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
 
   @override
   String get settingsDecline2Title =>
@@ -3537,7 +3537,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      'No usar para actividades comerciales, scraping masivo o reventa; no usar en violación de leyes locales o términos de servicio.\n\n';
+      'No utilice este software para infringir derechos de autor u otros derechos legítimos (incluido el scraping masivo, el rastreo o la reventa de contenidos); no lo utilice en violación de leyes locales o términos de servicio; no eluda medidas técnicas de protección, controles de acceso ni términos de servicio. Esta sección es un recordatorio de uso y no impone restricciones de licencia adicionales a AGPL-3.0-or-later; el uso comercial se rige por la LICENSE.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. Inicio de sesión y cuenta\n';

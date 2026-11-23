@@ -4,7 +4,9 @@
 第三方运行库、其许可、源码获取方式与 LGPL 赋予的替换权。各原生模块自身的第三方
 登记见 `app/core/*/THIRD-PARTY-LICENSES.md`。
 
-本软件整体以 **AGPL-3.0** 授权（见根 `LICENSE`）。第三方组件按各自许可继续适用，
+本软件整体以 **AGPL-3.0-or-later** 授权：GNU Affero General Public License
+第 3 版或任何更高版本，完整正文见随包 `ArchoeraMvsync-LICENSE.txt`，对应源码
+见 <https://github.com/ArchoeraC/ArchoeraMvsync>。第三方组件按各自许可继续适用，
 仅并入与 AGPL-3.0 兼容的组件（LGPL-2.1+ / LGPL-3.0+ / MIT / BSD / Apache-2.0 /
 MPL-1.1 / 公有领域）。
 

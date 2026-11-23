@@ -3435,14 +3435,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      'This software (ArchoeraMvsync) is open source under AGPL-3.0: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
+      'This software (ArchoeraMvsync) is open source under AGPL-3.0-or-later: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
 
   @override
   String get settingsDecline1Title => '1. Software nature\n';
 
   @override
   String get settingsDecline1Body =>
-      'This software is a third-party open-source client, not affiliated with, authorized by, or cooperating with any music platform or its official client. The project itself is not run for profit and accepts no commercial partnerships, ads or sponsored content; it only accepts voluntary donations that carry no additional license rights (donations do not change the AGPL-3.0 terms or affect any feature; commercial use of the code remains governed by AGPL-3.0). For richer features, please use the official client.\n\n';
+      'This software is a third-party open-source client, not affiliated with, authorized by, or cooperating with any music platform or its official client. The project itself is not run for profit and accepts no commercial partnerships, ads or sponsored content; it only accepts voluntary donations that carry no additional license rights (donations do not change the AGPL-3.0-or-later terms or affect any feature; commercial use of the code remains governed by AGPL-3.0-or-later). For richer features, please use the official client.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle =>
@@ -3450,7 +3450,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDeclineLicenseBody =>
-      'This software is released under the GNU Affero General Public License v3 (AGPL-3.0). Within the scope of that license, you are free to run, study, modify and redistribute this software, provided that you: retain the copyright and license notices; release your derivative works under the same license; and, if you make the functionality of this software (including modified versions) available to users over a network, provide those users with the corresponding complete source code. This project offers no closed-source commercial licensing outside AGPL obligations. The complete terms are governed by the accompanying LICENSE file and https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
+      'This software is released under the GNU Affero General Public License v3 (AGPL-3.0-or-later). Within the scope of that license, you are free to run, study, modify and redistribute this software, provided that you: retain the copyright and license notices; release your derivative works under the same license; and, if you make the functionality of this software (including modified versions) available to users over a network, provide those users with the corresponding complete source code. This project offers no closed-source commercial licensing outside AGPL obligations. The complete terms are governed by the accompanying LICENSE file and https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
 
   @override
   String get settingsDecline2Title => '2. Content sources & copyright\n';
@@ -3472,7 +3472,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      'Do not use this software for commercial activities, bulk scraping, crawling or resale; do not use in violation of local laws or platform terms of service; do not bypass technical protection measures, access controls or terms of service of online platforms.\n\n';
+      'Do not use this software to infringe copyrights or other lawful rights (including bulk scraping, crawling or reselling content); do not use it in violation of local laws or platform terms of service; do not bypass technical protection measures, access controls or terms of service of online platforms. This section is a usage reminder and does not impose any additional license restriction beyond AGPL-3.0-or-later; commercial use is governed by the LICENSE.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. Login & account\n';

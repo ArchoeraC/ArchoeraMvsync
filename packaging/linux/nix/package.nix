@@ -92,7 +92,7 @@ stdenv.mkDerivation (finalAttrs: {
   meta = {
     description = "An open-source music player, connect to alternative music service, support offline playback";
     homepage = "https://github.com/ArchoeraC/ArchoeraMvsync";
-    license = lib.licenses.agpl3Only;
+    license = lib.licenses.agpl3Plus;
     platforms = [ "x86_64-linux" ];
   };
 })

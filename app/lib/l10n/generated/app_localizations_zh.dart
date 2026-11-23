@@ -3286,21 +3286,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      '本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
+      '本软件（ArchoeraMvsync）以 **AGPL-3.0-or-later** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
 
   @override
   String get settingsDecline1Title => '一、软件性质\n';
 
   @override
   String get settingsDecline1Body =>
-      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。\n\n';
+      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、开源许可与源代码\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
+      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0-or-later）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
 
   @override
   String get settingsDecline2Title => '二、内容来源与版权\n';
@@ -3321,7 +3321,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      '请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。\n\n';
+      '请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以 LICENSE 条款为准。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '五、登录与账号\n';
@@ -9456,21 +9456,21 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsDeclineText =>
-      '本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
+      '本软件（ArchoeraMvsync）以 **AGPL-3.0-or-later** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
 
   @override
   String get settingsDecline1Title => '一、软件性质\n';
 
   @override
   String get settingsDecline1Body =>
-      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n';
+      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、开源许可与源代码\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
+      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0-or-later）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
 
   @override
   String get settingsDecline2Title => '三、内容来源与版权\n';
@@ -9491,7 +9491,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsDecline4Body =>
-      '请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款；请勿将本软件用于任何侵害他人合法权益的用途。\n\n';
+      '请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以 LICENSE 条款为准。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '六、登录与账号\n';
@@ -15633,14 +15633,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsDecline1Body =>
-      '本軟體為第三方用戶端，與各音樂平台及其官方用戶端無任何關聯、合作或授權關係；不以營利為目的，不接受任何商業合作、廣告或贊助內容置入，僅接受不附帶任何額外授權權利的自願打賞（不影響功能與授權條款；程式碼層面的商業使用仍以 AGPL-3.0 條款為準）。如需更完善的功能，請下載官方用戶端體驗。\n\n';
+      '本軟體為第三方用戶端，與各音樂平台及其官方用戶端無任何關聯、合作或授權關係；不以營利為目的，不接受任何商業合作、廣告或贊助內容置入，僅接受不附帶任何額外授權權利的自願打賞（不影響功能與授權條款；程式碼層面的商業使用仍以 AGPL-3.0-or-later 條款為準）。如需更完善的功能，請下載官方用戶端體驗。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、開源授權與原始碼\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本軟體以 GNU Affero 通用公共授權條款第 3 版（AGPL-3.0）發布。在該授權條款範圍內，您可以自由執行、研究、修改與再散布本軟體，但須一併遵守：保留著作權與授權聲明；以同一授權條款發布您的衍生作品；若透過網路向使用者提供本軟體（含修改版）的功能，須向這些使用者提供對應的完整原始碼。本專案不提供任何脫離 AGPL 義務的閉源商業授權。完整條款以隨附的 LICENSE 檔案及 https://www.gnu.org/licenses/agpl-3.0.html 為準。\n\n';
+      '本軟體以 GNU Affero 通用公共授權條款第 3 版（AGPL-3.0-or-later）發布。在該授權條款範圍內，您可以自由執行、研究、修改與再散布本軟體，但須一併遵守：保留著作權與授權聲明；以同一授權條款發布您的衍生作品；若透過網路向使用者提供本軟體（含修改版）的功能，須向這些使用者提供對應的完整原始碼。本專案不提供任何脫離 AGPL 義務的閉源商業授權。完整條款以隨附的 LICENSE 檔案及 https://www.gnu.org/licenses/agpl-3.0.html 為準。\n\n';
 
   @override
   String get settingsDecline2Title => '二、內容來源與版權\n';
@@ -15661,7 +15661,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsDecline4Body =>
-      '請勿利用本軟體從事商業行為、批量抓取、爬取或轉售內容；請勿在違反當地法律法規或相關平台服務條款的情況下使用本軟體；請勿繞過線上平台的技術保護措施、存取控制或服務條款。\n\n';
+      '請勿利用本軟體實施侵害他人版權或其他合法權益的行為（包括批量抓取、爬取或轉售內容）；請勿在違反當地法律法規或相關平台服務條款的情況下使用本軟體；請勿繞過線上平台的技術保護措施、存取控制或服務條款。本條為使用提醒，不構成 AGPL-3.0-or-later 之外的附加許可限制；商業使用以 LICENSE 條款為準。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '五、登入與帳號\n';

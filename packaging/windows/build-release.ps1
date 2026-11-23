@@ -61,6 +61,15 @@ function Invoke-Bundle {
     }
     # 防伪公钥随包分发（私钥绝不入库/入包）
     Copy-Item 'app\tool\watermark_pub.pem' (Join-Path $Release 'ARCHOERA_PUBKEY.pem') -Force
+    # AGPL / 第三方许可随包（与 macOS / Linux 的 bundle-licenses.sh 对齐）
+    $licDir = Join-Path $Release 'licenses'
+    New-Item -ItemType Directory -Force -Path $licDir | Out-Null
+    Copy-Item 'LICENSE' (Join-Path $licDir 'ArchoeraMvsync-LICENSE.txt') -Force
+    Copy-Item 'THIRD-PARTY-NOTICES.md' (Join-Path $licDir 'THIRD-PARTY-NOTICES.md') -Force
+    Get-ChildItem 'app\core' -Recurse -Filter 'THIRD-PARTY-LICENSES.md' | ForEach-Object {
+        $module = Split-Path (Split-Path $_.FullName -Parent) -Leaf
+        Copy-Item $_.FullName (Join-Path $licDir "$module-THIRD-PARTY-LICENSES.md") -Force
+    }
     Write-Log 'bundle 完成（native/ 由 CMake install 目标填充）'
 }
 
@@ -77,7 +86,9 @@ function Invoke-Verify {
         'native\scanner-ffi.dll',
         'native\indexer-ffi.dll',
         'native\e_sqlite3.dll',
-        'native\archoera-vault.exe'
+        'native\archoera-vault.exe',
+        'licenses\ArchoeraMvsync-LICENSE.txt',
+        'licenses\THIRD-PARTY-NOTICES.md'
     )
     $missing = @()
     foreach ($rel in $required) {

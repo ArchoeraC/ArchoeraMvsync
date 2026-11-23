@@ -13,7 +13,7 @@ DESCRIPTION="An open-source music player, connect to alternative music service, 
 HOMEPAGE="https://github.com/ArchoeraC/ArchoeraMvsync"
 SRC_URI="https://github.com/ArchoeraC/ArchoeraMvsync/releases/download/v${PV}/ArchoeraMvsync-v${PV}-linux-x86_64.tar.gz"
 
-LICENSE="AGPL-3"
+LICENSE="AGPL-3+"
 SLOT="0"
 KEYWORDS="~amd64"
 RESTRICT="primaryuri strip"

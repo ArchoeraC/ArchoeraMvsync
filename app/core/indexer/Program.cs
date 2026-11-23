@@ -2,7 +2,11 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Archoera.Indexer.EraStore;
 
 namespace Archoera.Indexer;
 
@@ -14,6 +18,12 @@ namespace Archoera.Indexer;
 ///                          [--db &lt;library.db&gt;] [--index &lt;search.db&gt;] [--batch &lt;n&gt;]
 ///   archoera-indexer query &lt;text&gt; [--index &lt;search.db&gt;] [--limit &lt;n&gt;] [--raw] [--session]
 ///   archoera-indexer analyze &lt;field&gt; &lt;text&gt;
+///   archoera-indexer dump   --index &lt;目录或.eraindex&gt; [--field &lt;1..12|0x01&gt;]
+///                           [--prefix &lt;文本&gt;] [--limit &lt;n&gt;]
+///   archoera-indexer verify --index &lt;目录或.eraindex&gt;
+///   archoera-indexer stats  --index &lt;目录或.eraindex&gt;
+///   archoera-indexer replay run    --index &lt;search.db&gt; --queries &lt;queries.jsonl&gt; --out &lt;run.json&gt;
+///   archoera-indexer replay corpus --library &lt;library.db&gt; --tracks &lt;n&gt; --out &lt;subset.db&gt;
 ///   archoera-indexer version
 ///
 /// stdout：JSON 进度 / 结果（TS / Dart 风格，与 scanner 一致）；stderr：人类日志。
@@ -34,6 +44,10 @@ public static class Program
             "build" => RunBuild(args[1..]),
             "query" => RunQuery(args[1..]),
             "analyze" => RunAnalyze(args[1..]),
+            "dump" => RunDump(args[1..]),
+            "verify" => RunVerify(args[1..]),
+            "stats" => RunStats(args[1..]),
+            "replay" => Replay.Run(args[1..]),
             "version" => RunVersion(),
             "-h" or "--help" or "help" => PrintUsage(),
             _ => UnknownCommand(args[0]),
@@ -242,6 +256,142 @@ public static class Program
         return 0;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* EraStore 诊断：dump / verify / stats（只读，stdout 输出 JSON）        */
+    /* ------------------------------------------------------------------ */
+
+    private static int RunVerify(string[] args)
+    {
+        if (HasHelp(args)) return PrintUsage();
+        var indexPath = ReadIndexArg(args);
+        if (indexPath is null) return WriteError("缺少 --index <目录或.eraindex>");
+
+        try
+        {
+            var report = IndexVerifier.Verify(indexPath);
+            WriteJson(report.ToJson());
+            return report.Ok ? 0 : 1;
+        }
+        catch (Exception ex) when (IsDiagnosticError(ex))
+        {
+            return WriteError(ex.Message);
+        }
+    }
+
+    private static int RunStats(string[] args)
+    {
+        if (HasHelp(args)) return PrintUsage();
+        var indexPath = ReadIndexArg(args);
+        if (indexPath is null) return WriteError("缺少 --index <目录或.eraindex>");
+
+        try
+        {
+            WriteJson(IndexStats.Collect(indexPath).ToJson());
+            return 0;
+        }
+        catch (Exception ex) when (IsDiagnosticError(ex))
+        {
+            return WriteError(ex.Message);
+        }
+    }
+
+    private static int RunDump(string[] args)
+    {
+        if (HasHelp(args)) return PrintUsage();
+
+        string? indexPath = null;
+        string? prefix = null;
+        FieldId? field = null;
+        var limit = IndexDumper.DefaultLimit;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--index":
+                    if (i + 1 < args.Length) indexPath = args[++i];
+                    break;
+                case "--prefix":
+                    if (i + 1 < args.Length) prefix = args[++i];
+                    break;
+                case "--limit":
+                    if (i + 1 >= args.Length || !int.TryParse(args[++i], out limit) || limit <= 0)
+                        return WriteError("--limit 需要正整数");
+                    break;
+                case "--field":
+                    if (i + 1 >= args.Length) return WriteError("--field 需要字段编号");
+                    if (!TryParseFieldId(args[++i], out var parsed))
+                        return WriteError($"--field 非法: {args[i]}（1..12 或 0x01..0x0c）");
+                    field = parsed;
+                    break;
+            }
+        }
+
+        if (indexPath is null) return WriteError("缺少 --index <目录或.eraindex>");
+
+        try
+        {
+            WriteJson(IndexDumper.Dump(indexPath, field, prefix, limit).ToJson());
+            return 0;
+        }
+        catch (Exception ex) when (IsDiagnosticError(ex))
+        {
+            return WriteError(ex.Message);
+        }
+    }
+
+    private static bool HasHelp(string[] args) =>
+        Array.IndexOf(args, "-h") >= 0 || Array.IndexOf(args, "--help") >= 0;
+
+    private static string? ReadIndexArg(string[] args)
+    {
+        for (var i = 0; i + 1 < args.Length; i++)
+            if (args[i] == "--index") return args[i + 1];
+        return null;
+    }
+
+    /// <summary>解析 <c>--field</c>：十进制或 <c>0x</c> 十六进制，范围 1..12。</summary>
+    private static bool TryParseFieldId(string value, out FieldId field)
+    {
+        field = default;
+        int parsed;
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(value.AsSpan(2), System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out parsed))
+                return false;
+        }
+        else if (!int.TryParse(value, out parsed))
+        {
+            return false;
+        }
+
+        if (parsed < (int)FieldId.Title || parsed > (int)FieldId.ReadingMeta) return false;
+        field = (FieldId)parsed;
+        return true;
+    }
+
+    /// <summary>诊断命令可预期的失败（结构 / 文件 / 参数），转成 JSON 错误并返回 1。</summary>
+    private static bool IsDiagnosticError(Exception ex) =>
+        ex is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException;
+
+    private static void WriteJson(byte[] json) =>
+        Console.Out.WriteLine(Encoding.UTF8.GetString(json));
+
+    private static int WriteError(string message)
+    {
+        var buffer = new ArrayBufferWriter<byte>(128);
+        using (var w = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false }))
+        {
+            w.WriteStartObject();
+            w.WriteBoolean("ok", false);
+            w.WriteString("error", message);
+            w.WriteEndObject();
+        }
+        WriteJson(buffer.WrittenSpan.ToArray());
+        return 1;
+    }
+
     private static int PrintUsage()
     {
         Console.Error.WriteLine("""
@@ -259,6 +409,19 @@ public static class Program
                   排障「这首歌为什么被搜出来」用这个。
               archoera-indexer analyze <field> <text>
                   分析文本，stdout 输出 {"tokens":"...","pinyin":"...","initials":"..."}
+              archoera-indexer dump --index <目录或.eraindex> [--field <1..12|0x01>]
+                                    [--prefix <文本>] [--limit <n>]
+                  导出 EraStore 词典词条（stdout 单行 JSON）。默认最多 1000 条（上限 100000）。
+              archoera-indexer verify --index <目录或.eraindex>
+                  全量校验 Header / 提交槽 / Manifest / 段体 CRC 与段结构；
+                  通过退出码 0，发现问题退出码 1（stdout JSON 列出 errors）。
+              archoera-indexer stats --index <目录或.eraindex>
+                  只读元信息统计（段数 / 文档数 / 活数据 / 文件体积 / 各段字节）。
+              archoera-indexer replay run --index <search.db> --queries <queries.jsonl> --out <run.json>
+                                          [--limit <n>] [--repeats <n>] [--commit <sha>] [--corpus-hash <hex>]
+                  回放查询集，输出 §6.7.4 基线 JSON（每条留前 100 个 trackId，耗时取中位数）。
+              archoera-indexer replay corpus --library <library.db> --tracks <n> --out <subset.db>
+                  按 sha256(track_id) 升序取前 n 首，生成可复现子集库与 <out>.corpus.json。
               archoera-indexer version
                   输出版本锚点 {"analyzerVersion":1}
               archoera-indexer -h | --help

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>EraStoreBench</AssemblyName>
+    <RootNamespace>Archoera.Indexer.Bench</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 构建期以内存为先：索引器是后台批处理任务，峰值 RSS 比几毫秒 CPU 更敏感。
+         与 12 字段族 + V2 派生层免位置一起，把 30k 最坏情况从 187 MB 压到 ~115 MB。
+         NativeAOT 产物是否同样生效需在 S3 用真实产物复核。 -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    <RuntimeHostConfigurationOption Include="System.GC.Gen0Size" Value="2000000" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 只测存储层：链接 EraStore 源码（不含 CLI 的 Program.cs 与 tests/），
+         与索引器共用同一份实现，避免基准与生产分叉。 -->
+    <Compile Include="../../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -7,7 +7,7 @@ Name:           archoera-mvsync
 Version:        %{app_version}
 Release:        1
 Summary:        An open-source music player
-License:        AGPL-3.0-only
+License:        AGPL-3.0-or-later
 URL:            https://github.com/ArchoeraC/ArchoeraMvsync
 BuildArch:      x86_64
 Group:          Applications/Multimedia
