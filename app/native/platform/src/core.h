@@ -40,6 +40,7 @@ constexpr uint32_t CAP_TRAY = 1u << 11;
 constexpr uint32_t CAP_SECURE_FILE = 1u << 12;
 // 1u << 13 保留：原 CAP_OPEN_URL（ABI v7 移除，勿复用）。
 constexpr uint32_t CAP_ELEVATION = 1u << 14;
+constexpr uint32_t CAP_SESSION_END = 1u << 15;
 
 // ── 事件类型 / 命令 ───────────────────────────────────────────────
 constexpr int32_t EVENT_MEDIA_COMMAND = 1;
@@ -54,6 +55,7 @@ constexpr int32_t EVENT_TRAY_CLICK = 9;
 constexpr int32_t EVENT_TRAY_DOUBLE_CLICK = 10;
 constexpr int32_t EVENT_TRAY_RIGHT_CLICK = 11;
 constexpr int32_t EVENT_TRAY_MENU_COMMAND = 12;
+constexpr int32_t EVENT_SESSION_END = 13;
 
 constexpr int32_t CMD_PLAY = 0;
 constexpr int32_t CMD_PAUSE = 1;
@@ -98,6 +100,9 @@ AplEvent makeDeepLink();
 // 托盘：点击事件（左键单击/双击/右键）与菜单项命令。
 AplEvent makeTrayClick(int32_t type /* EVENT_TRAY_* */);
 AplEvent makeTrayMenuCommand(int32_t id);
+
+// 系统会话结束（关机/重启/注销；**不含**休眠/待机/锁屏/熄屏）。
+AplEvent makeSessionEnd();
 
 }  // namespace archoera
 

@@ -59,6 +59,7 @@ extern "C" {
 #define APL_CAP_SECURE_FILE        (1u << 12) /* 安全文件原语（原生 open(2)：免 TOCTOU 读/原子写） */
 /* 1u << 13 保留：原 APL_CAP_OPEN_URL（ABI v7 移除，勿复用）。 */
 #define APL_CAP_ELEVATION          (1u << 14) /* 超级用户探测（root / administrator，只读） */
+#define APL_CAP_SESSION_END        (1u << 15) /* 系统会话结束事件（关机/重启/注销；不含休眠/锁屏） */
 
 /* ── 生命周期 ───────────────────────────────────────────────────── */
 APL_API int32_t apl_abi_version(void);   /* 契约版本 */
@@ -246,6 +247,13 @@ typedef enum {
     APL_EVENT_TRAY_DOUBLE_CLICK = 10, /* 托盘左键双击（u.tray=1） */
     APL_EVENT_TRAY_RIGHT_CLICK  = 11, /* 托盘右键（u.tray=1） */
     APL_EVENT_TRAY_MENU_COMMAND = 12, /* 菜单项点击（u.tray_command.id） */
+    /* 系统即将结束当前会话（关机 / 重启 / 注销）：
+     *   Linux   = SIGTERM（systemd/logind 终止用户会话时投递）
+     *   Windows = WM_QUERYENDSESSION / WM_ENDSESSION
+     *   macOS   = NSWorkspaceWillPowerOffNotification
+     * **明确不包含**休眠 / 待机 / 锁屏 / 熄屏——这些状态必须保持进程存活，
+     * 收到事件后的唯一动作是「保存状态并主动退出」，不得弹确认框。 */
+    APL_EVENT_SESSION_END       = 13, /* u.session_end=1 */
 } AplEventType;
 
 typedef enum {
@@ -267,6 +275,7 @@ typedef struct AplEvent {
         int32_t deep_link;  /* DEEP_LINK：1=有 pending（Dart 再取） */
         int32_t tray;       /* TRAY_CLICK/DOUBLE_CLICK/RIGHT_CLICK：=1 */
         struct { int32_t id; } tray_command; /* TRAY_MENU_COMMAND：菜单项 id */
+        int32_t session_end; /* SESSION_END：=1（关机/重启/注销；休眠不产生） */
     } u;
 } AplEvent;
 

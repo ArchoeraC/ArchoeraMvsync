@@ -224,6 +224,14 @@ static void popUpTrayMenu(NSStatusItem* item, NSMenu* menu) {
     }
 }
 
+/// 系统关机 / 重启 / 注销（**不是**休眠：休眠走 NSWorkspaceWillSleep /
+/// ScreensDidSleep，不得触发退出）。仅上报一次会话结束，由 Dart 统一落盘退出。
+- (void)onWillPowerOff:(NSNotification*)note {
+    (void)note;
+    archoera::log(1, "platform", "NSWorkspaceWillPowerOff → 系统会话结束");
+    archoera::dispatch(archoera::makeSessionEnd());
+}
+
 - (MPRemoteCommandHandlerStatus)onPlay:(MPRemoteCommandEvent*)event {
     (void)event;
     archoera::dispatch(archoera::makeCommand(archoera::CMD_PLAY));
@@ -379,12 +387,19 @@ uint32_t caps() {
     return CAP_POWER_INHIBIT | CAP_POWER_SCREEN_STATE | CAP_WINDOW_STATE |
            CAP_MEDIA_SESSION | CAP_APP_INSTANCE | CAP_SYSTEM_ACCENT |
            CAP_SYSTEM_THEME | CAP_DEEP_LINK | CAP_REVEAL_PATH | CAP_TRAY |
-           CAP_SECURE_FILE | CAP_ELEVATION;
+           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END;
 }
 
 
 int32_t init() {
     ensureRemoteCommands();
+    // 系统关机/重启/注销：NSWorkspace 通知中心的 WillPowerOff。
+    // 刻意不订阅 WillSleep/ScreensDidSleep——休眠不是会话结束。
+    NSWorkspace* ws = [NSWorkspace sharedWorkspace];
+    if (ws != nil) {
+        observe([ws notificationCenter], NSWorkspaceWillPowerOffNotification,
+                @selector(onWillPowerOff:));
+    }
     // 协议唤醒：注册 archoera:// AppleEvent 处理器（scheme 由 Info.plist
     // CFBundleURLTypes 静态声明；运行时无需写系统注册表）。
     NSAppleEventManager* aem = [NSAppleEventManager sharedAppleEventManager];

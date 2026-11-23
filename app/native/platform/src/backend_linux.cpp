@@ -18,6 +18,7 @@
 #include <dbus/dbus.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -118,6 +119,34 @@ std::atomic<bool> g_theme_valid{false};
 // 深链接收常驻：与主题/防休眠订阅无关，启动即建立会话总线连接并注册
 // OpenUri，保证次实例转发的 archoera:// 总能成功送达。
 std::atomic<bool> g_deeplink_events{false};
+
+// 系统会话结束（关机/重启/注销）：SIGTERM 由 systemd/logind 终止用户会话时
+// 投递。**休眠/待机不会发送 SIGTERM**，因此不会误判为结束会话。
+// 信号处理器只允许 async-signal-safe 操作 → 仅置原子位，实际事件由泵线程派发。
+std::atomic<bool> g_session_end_requested{false};
+bool g_sigterm_installed = false;
+struct sigaction g_prev_sigterm {};
+
+void onSessionEndSignal(int) {
+    g_session_end_requested.store(true, std::memory_order_release);
+}
+
+void installSessionEndSignal() {
+    if (g_sigterm_installed) return;
+    struct sigaction sa {};
+    sa.sa_handler = onSessionEndSignal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;  // 不打断 D-Bus 读等系统调用
+    if (::sigaction(SIGTERM, &sa, &g_prev_sigterm) == 0) {
+        g_sigterm_installed = true;
+    }
+}
+
+void restoreSessionEndSignal() {
+    if (!g_sigterm_installed) return;
+    ::sigaction(SIGTERM, &g_prev_sigterm, nullptr);
+    g_sigterm_installed = false;
+}
 
 // 系统强调色缓存（异步查询结果）：apl_system_accent 立即返回缓存，避免在
 // Dart/主线程同步等待 XDG portal（切回应用时会重读，同步调用会卡住 UI）。
@@ -844,6 +873,12 @@ void applyInhibit(DBusConnection* c);
 
 void pumpLoop() {
     while (g_running.load(std::memory_order_acquire)) {
+        // 会话结束（SIGTERM，见 onSessionEndSignal）：信号处理器只置位，这里
+        // 负责派发到 Dart。只发一次，避免重复触发退出流程。
+        if (g_session_end_requested.exchange(false, std::memory_order_acq_rel)) {
+            log(1, "platform", "收到 SIGTERM（系统关机/注销）→ 会话结束");
+            dispatch(makeSessionEnd());
+        }
         DBusConnection* c = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_mtx);
@@ -1952,7 +1987,8 @@ uint32_t caps() {
     uint32_t c = CAP_POWER_INHIBIT | CAP_POWER_SCREEN_STATE | CAP_MEDIA_SESSION |
                  CAP_MEDIA_SEEK | CAP_MEDIA_ARTWORK | CAP_APP_INSTANCE |
                  CAP_SYSTEM_ACCENT | CAP_SYSTEM_THEME | CAP_DEEP_LINK |
-                 CAP_REVEAL_PATH | CAP_TRAY | CAP_SECURE_FILE | CAP_ELEVATION;
+                 CAP_REVEAL_PATH | CAP_TRAY | CAP_SECURE_FILE | CAP_ELEVATION |
+                 CAP_SESSION_END;
     const bool hasDisplay = std::getenv("WAYLAND_DISPLAY") != nullptr ||
                             std::getenv("DISPLAY") != nullptr;
     if (hasDisplay && gtkwin::available()) c |= CAP_WINDOW_STATE;
@@ -1986,6 +2022,7 @@ int32_t processElevation() {
 
 int32_t init() {
     dbus_threads_init_default();
+    installSessionEndSignal();  // 系统关机/注销 → SIGTERM（休眠不投递）
     g_running.store(true, std::memory_order_release);
     // 深链服务常驻：即使主题/防休眠从不订阅，也要建立会话总线并注册
     // OpenUri，否则次实例转发的 archoera:// 会因找不到服务而失败。
@@ -2019,6 +2056,8 @@ int32_t shutdown() {
     g_inhibit_on = false;
     g_screen_events.store(false, std::memory_order_release);
     g_accent_events.store(false, std::memory_order_release);
+    g_session_end_requested.store(false, std::memory_order_release);
+    restoreSessionEndSignal();
     return OK;
 }
 

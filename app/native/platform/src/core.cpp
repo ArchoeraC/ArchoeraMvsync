@@ -25,6 +25,11 @@ std::atomic<AplLogFn> g_log_sink{nullptr};
 // （Dart FfiSystemDeepLink 在任意平台事件后 drain）。
 AplEvent g_event_slot{};
 
+// 系统会话结束是「必须送达」的一次性事件：独立粘性槽位。Dart listener 异步
+// 读取，若与窗口/熄屏等高频事件共用 g_event_slot，可能在读取前被覆盖 →
+// 关机时错过退出。独立槽位只被后续 SESSION_END 重写（语义等价，仍为 1）。
+AplEvent g_session_end_slot{};
+
 }  // namespace
 
 bool isInitialized() {
@@ -61,14 +66,16 @@ void log(int level, const char* tag, const char* message) {
 void dispatch(const AplEvent& event) {
     AplEventCallback cb;
     void* user;
+    AplEvent* slot = &g_event_slot;
+    if (event.type == APL_EVENT_SESSION_END) slot = &g_session_end_slot;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_event_slot = event;
+        *slot = event;
         cb = g_callback;
         user = g_user_data;
     }
     if (cb == nullptr) return;
-    cb(&g_event_slot, user);
+    cb(slot, user);
 }
 
 AplEvent makeCommand(int32_t command) {
@@ -142,6 +149,13 @@ AplEvent makeTrayMenuCommand(int32_t id) {
     AplEvent e{};
     e.type = APL_EVENT_TRAY_MENU_COMMAND;
     e.u.tray_command.id = id;
+    return e;
+}
+
+AplEvent makeSessionEnd() {
+    AplEvent e{};
+    e.type = APL_EVENT_SESSION_END;
+    e.u.session_end = 1;
     return e;
 }
 

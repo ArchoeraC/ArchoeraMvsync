@@ -36,6 +36,7 @@ import '../widgets/common/vault_version_gate.dart';
 import 'appearance_styles/appearance_style_registry.dart';
 import 'bootstrap.dart';
 import 'router.dart';
+import 'system_session_host.dart';
 import 'theme_provider.dart';
 
 /// 桌面端窗口装饰（配合 main.dart 的 applyWindowDecor）：
@@ -231,6 +232,9 @@ class ArchoeraMvsyncApp extends ConsumerWidget {
                     ),
                   );
                 }
+                // 系统关机/注销：原生会话结束事件直接退出，不弹「关闭应用」确认框。
+                // 放在所有门/装饰之外，任何界面状态下都能接管（休眠/锁屏不触发）。
+                gate = SystemSessionHost(child: gate);
                 return gate;
               },
             ),

@@ -455,6 +455,19 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         case WM_APPCOMMAND:
             if (dispatchAppCommand(lparam)) return 1;  // 已消费，不再下传
             break;
+        // 系统关机 / 重启 / 注销：允许结束会话（TRUE），并上报 Dart 走统一
+        // 退出（保存播放现场 / flush 凭据队列）。**休眠/待机不会走这里**——
+        // 它走 WM_POWERBROADCAST(PBT_APMSUSPEND)，必须保持进程存活。
+        case WM_QUERYENDSESSION:
+            dispatch(makeSessionEnd());
+            return TRUE;
+        case WM_ENDSESSION:
+            if (wparam != 0) dispatch(makeSessionEnd());
+            break;
+        case WM_POWERBROADCAST:
+            // 休眠/待机（PBT_APMSUSPEND 等）不是会话结束：明确不派发
+            // SESSION_END，交回原 WndProc 处理，进程继续存活。
+            break;
         default:
             break;
     }
@@ -1568,12 +1581,15 @@ uint32_t caps() {
     return CAP_POWER_INHIBIT | CAP_POWER_SCREEN_STATE | CAP_WINDOW_STATE |
            CAP_MEDIA_SESSION | CAP_APP_INSTANCE | CAP_SYSTEM_ACCENT |
            CAP_SYSTEM_THEME | CAP_DEEP_LINK | CAP_REVEAL_PATH | CAP_TRAY |
-           CAP_SECURE_FILE | CAP_ELEVATION;
+           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END;
 }
 
 int32_t init() {
     setAumid();             // 显式 AUMID（媒体浮出/任务栏分组 + Toast 身份）
     ensureToastShortcut();  // Toast 前提：开始菜单快捷方式带同一 AUMID
+    // 系统关机/注销早于首次窗口事件订阅：尽早子类化顶层窗口，确保
+    // WM_QUERYENDSESSION 能被收到（失败无妨，windowSetEvents 会再试）。
+    subclassWindow();
     // 协议唤醒：冷启动 argv 中的 URI 先入队；隐藏消息窗口只在**首实例**
     // 通过 appInstanceAcquire 后创建（见下方），避免第二实例建同名窗口后
     // 把自己的 URI 投回自己。
