@@ -97,9 +97,9 @@ KrcParsed _parseKrc(String raw) {
   if (langMatch != null) {
     text = text.replaceFirst(_languageLineReg, '');
     try {
-      final json =
-          jsonDecode(utf8.decode(base64Decode(langMatch.group(1)!)))
-              as Map<String, dynamic>;
+      final json = jsonDecode(
+        utf8.decode(base64Decode(langMatch.group(1)!)),
+      ) as Map<String, dynamic>;
       for (final item in (json['content'] as List? ?? const [])) {
         final it = item as Map;
         final lines = (it['lyricContent'] as List)

@@ -608,6 +608,10 @@ class _NeteaseCollection extends CollectionPlatform {
 // ── KG ─────────────────────────────────────────────────────────────────
 
 class _KugouCollection extends CollectionPlatform {
+  /// 最近一次 `/v7/get_all_list` 的条目索引（`CoverItem.id` → 条目），
+  /// 收藏页打开时据此取 `listid` 做公开接口失败后的个人接口兜底。
+  Map<String, KugouLibraryItem> _libraryItems = const {};
+
   @override
   String get source => 'kugou';
 
@@ -732,6 +736,8 @@ class _KugouCollection extends CollectionPlatform {
     // （List<dynamic> 不是 List<CoverItem> 的子类型 → 运行时类型错误）。
     final KugouApi api = ref.read(kugouApiProvider);
     final lib = await api.userLibrary();
+    // 收藏页打开条目时要拿 listid（个人接口兜底），按 gid 建索引。
+    _libraryItems = {for (final i in lib.items) i.id: i};
     // 一次 `/v7/get_all_list` 拉全部分类（切 tab 不再重复请求）。
     return {
       tabKey('created'): lib.createdPlaylists
@@ -753,7 +759,8 @@ class _KugouCollection extends CollectionPlatform {
     String tabId,
     CoverItem item,
   ) {
-    if (item.title == '我喜欢') {
+    final lib = _libraryItems[item.id];
+    if (lib?.isLiked ?? item.title == '我喜欢') {
       showKugouTracksDialog(
         context,
         title: item.title,
@@ -762,7 +769,18 @@ class _KugouCollection extends CollectionPlatform {
       );
       return;
     }
-    showKugouPlaylistDetailDialog(context, item);
+    // 个人接口（listid）优先：私有/收藏歌单也能量到全量、带 fileid，并统一
+    // 反转成「最新在前」；没有 listid 才用 gid 公开接口（本身已是最新在前）。
+    // 只有非 listid 的 id 才当 gid 传，避免把用户本地 listid 误当数字 specialid。
+    final gid = (lib != null && lib.id == lib.listid) ? null : item.id;
+    showKugouTracksDialog(
+      context,
+      title: item.title,
+      subtitle: item.subtitle,
+      cover: item.cover,
+      loadTracks: (r) =>
+          r.read(kugouApiProvider).userPlaylistTracks(lib?.listid, gid: gid),
+    );
   }
 
   @override

@@ -123,24 +123,27 @@ class KugouTrackInfo {
   /// 可用品质 key 列表。
   List<String> get available => hashes.keys.toList();
 
-  static const _levelChain = <String, List<String>>{
-    'lq': ['128k'],
-    'sq': ['320k', '128k'],
-    'hq': ['320k', '128k'],
-    'lossless': ['flac', '320k', '128k'],
-    'hi-res': ['flac24bit', 'flac', '320k', '128k'],
+  /// 音质档位 → KG 品质 key（**精确档位**，不做跨档回退）。
+  ///
+  /// 回退只应发生在「取链」阶段（见 `KugouApi.resolvePlayUrl`）；标签 /
+  /// 可选档位必须精确，否则 128k 曲目会被标成 HQ（历史 `hq` 回退到
+  /// `128k` 导致）。
+  static const _levelHashes = <String, String>{
+    'sq': '128k',
+    'hq': '320k',
+    'lossless': 'flac',
+    'hi-res': 'flac24bit',
   };
 
-  /// 该音质档实际命中的品质 key（缺档时按高→低回退；无可用返回 null）。
+  /// 该音质档对应的品质 key（无该档返回 null）。
   String? keyFor(String level) {
-    for (final q in _levelChain[level] ?? const <String>[]) {
-      final h = hashes[q];
-      if (h != null && h.isNotEmpty) return q;
-    }
-    return null;
+    final q = _levelHashes[level];
+    if (q == null) return null;
+    final h = hashes[q];
+    return h != null && h.isNotEmpty ? q : null;
   }
 
-  /// 该音质档的 hash；档位缺档时按高→低回退。
+  /// 该音质档的 hash（无该档返回 null）。
   String? hashFor(String level) {
     final q = keyFor(level);
     return q != null ? hashes[q] : null;
@@ -645,12 +648,37 @@ class Track {
       source: 'kugou',
       kugou: hashes.isEmpty
           ? null
-          : KugouTrackInfo(hash: hash, hashes: hashes, sizes: sizes),
+          : KugouTrackInfo(
+              hash: hash,
+              hashes: hashes,
+              sizes: sizes,
+              // mobilecdn/songsearch 都带专辑/音频 id：mobilecdn 用小写
+              // （album_id/album_audio_id），songsearch 用 PascalCase
+              // （AlbumID/MixSongID）；audio_id 不是 album_audio_id，误用会让
+              // 取链返回 "Hash not found"。
+              albumId: _toInt(song['album_id'] ?? song['AlbumID']),
+              mixSongId: _toInt(
+                song['album_audio_id'] ??
+                    song['mixsongid'] ??
+                    song['MixSongID'] ??
+                    song['AlbumAudioID'],
+              ),
+              fileid: _toInt(song['fileid']),
+            ),
       // 原唱标识（`IsOriginal == 1`）+ KG 版权
       // privilege == 10 → VIP（接口约定）
       isOriginal: _kgIsOriginal(song['IsOriginal'] ?? song['isOriginal']),
       fee: _kgFee(song['privilege']),
     );
+  }
+
+  /// 数字字段兼容（num / 字符串）→ int?；空/非法返回 null。
+  static int? _toInt(Object? raw) {
+    if (raw == null) return null;
+    if (raw is num) return raw.toInt();
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    return int.tryParse(s);
   }
 
   /// KG `IsOriginal`（1=原唱）→ bool；兼容数字与字符串。

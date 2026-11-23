@@ -157,12 +157,13 @@ class KugouLibraryItem {
     this.cover,
     this.trackCount = 0,
     this.listid,
+    this.isLiked = false,
   });
 
   final KugouLibraryType type;
 
-  /// 详情弹窗用 id（`list_create_gid` 优先，`global_collection_id` 兜底；
-  /// 跳转 PlaylistDetail 时的取参约定）。
+  /// 详情弹窗用 id：`global_collection_id`（本人副本）优先，
+  /// `list_create_gid`（原作者歌单）/ `listid` 兜底。
   final String id;
 
   final String title;
@@ -171,6 +172,9 @@ class KugouLibraryItem {
 
   /// 歌单列表用 id（「我喜欢」播放链路用，非公开歌单接口参数）。
   final String? listid;
+
+  /// 系统内置「我喜欢」（`is_def == 2` 或 name == '我喜欢'）。
+  final bool isLiked;
 
   CoverItem toCoverItem() =>
       CoverItem(id: id, title: title, cover: cover, trackCount: trackCount);

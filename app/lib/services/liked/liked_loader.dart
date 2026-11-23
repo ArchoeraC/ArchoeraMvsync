@@ -162,8 +162,15 @@ class LikedStore extends ChangeNotifier {
   Future<void> addTrack(String platform, Track t) async {
     final s = _state(platform);
     if (!s.loaded) return;
-    // 防重复插入（幂等）
-    if (s.tracks.any((x) => x.source == t.source && x.id == t.id)) return;
+    // 防重复插入（幂等）：按平台红心键比较（KG hash 大小写不敏感），
+    // 否则从搜索（小写 hash）点亮时会与列表里的大写 hash 重复成两行。
+    final adapter = collectionPlatform(t.source);
+    final likeKey = adapter.likeKey(t);
+    if (s.tracks.any(
+      (x) => x.source == t.source && adapter.likeKey(x) == likeKey,
+    )) {
+      return;
+    }
     s.tracks = [t, ...s.tracks];
     s.total = s.tracks.length;
     notifyListeners();
@@ -178,19 +185,24 @@ class LikedStore extends ChangeNotifier {
 
   /// 取消喜欢后从列表移除该行（不重新拉取），并同步重写缓存快照
   /// （显式操作写回——否则重启后已取消的歌会从缓存「复活」）。
-  Future<void> removeTrack(String platform, String source, String id) async {
+  ///
+  /// [key] 为平台红心键（[CollectionPlatform.likeKey]，KG 已转小写）：
+  /// 用键比较而不是 `Track.id`，避免搜索结果（小写 hash）删不掉列表里的
+  /// 大写 hash 行。
+  Future<void> removeTrack(String platform, String source, String key) async {
+    final adapter = collectionPlatform(source);
     final s = _state(platform);
     final before = s.tracks.length;
     s.tracks = s.tracks
-        .where((t) => !(t.source == source && t.id == id))
+        .where((t) => !(t.source == source && adapter.likeKey(t) == key))
         .toList();
     if (s.tracks.length == before) return;
     s.total = s.tracks.length;
     notifyListeners();
-    final key = _userKey(platform);
-    if (key == null) return;
+    final userKey = _userKey(platform);
+    if (userKey == null) return;
     try {
-      await LikedCacheStore.shared.replace(platform, key, s.tracks);
+      await LikedCacheStore.shared.replace(platform, userKey, s.tracks);
     } catch (e) {
       Log.e('liked', '缓存移除失败: $e');
     }
