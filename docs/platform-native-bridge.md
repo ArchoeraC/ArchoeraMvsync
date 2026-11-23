@@ -164,6 +164,7 @@ uint32_t apl_capabilities(void);         /* 能力位图 */
 #define APL_CAP_SECURE_FILE        (1u << 12)  /* 安全文件原语（原生 open(2)，ABI v4） */
 /* 1u << 13 保留：原 APL_CAP_OPEN_URL（ABI v7 移除，勿复用） */
 #define APL_CAP_ELEVATION          (1u << 14)  /* 提权探测：root / 管理员（只读，ABI v6） */
+#define APL_CAP_SESSION_END        (1u << 15)  /* 系统会话结束：关机/重启/注销（ABI v8；不含休眠） */
 ```
 
 协议唤醒（`APL_CAP_DEEP_LINK`，ABI v2 起）：`apl_protocol_register/unregister`
@@ -194,6 +195,9 @@ D-Bus（回退 GIO 默认应用打开所在目录）；Windows 走 `SHOpenFolder
 > **ABI v7（2026-11-09，破坏性）**：随浏览器打开登录回调能力的拆除，
 > 删除 `apl_open_url` 与 `APL_CAP_OPEN_URL`。Dart 侧 `aplAbiVersion` 同步升到 7，
 > 旧桥接库会被版本门禁拒绝。
+>
+> **ABI v8（2026-11-23，加法）**：新增 `APL_EVENT_SESSION_END` 与
+> `APL_CAP_SESSION_END`（`1u << 15`）。Dart 侧 `aplAbiVersion` 同步升到 8。
 
 提权探测（`APL_CAP_ELEVATION`，ABI v6 起）：`apl_process_elevation()` **只读**返回
 `APL_ELEVATION_NONE` / `ROOT` / `ADMIN`——Linux / POSIX 与 macOS 查 `geteuid() == 0`
@@ -343,6 +347,7 @@ typedef enum {
     APL_EVENT_WINDOW_STATE  = 4,  /* u.window：minimized / focused（即时布尔快照） */
     APL_EVENT_BACKEND_STATE = 5,  /* u.backend：lost（后端断连，Dart 显式告警 + Noop 回落） */
     APL_EVENT_SYSTEM_ACCENT = 6,  /* 主题色变更（无载荷；收到后重读 apl_system_accent 去重） */
+    APL_EVENT_SESSION_END   = 13, /* u.session_end：=1（关机/重启/注销；休眠不触发） */
 } AplEventType;
 
 typedef enum { APL_CMD_PLAY=0, APL_CMD_PAUSE, APL_CMD_TOGGLE, APL_CMD_STOP,
@@ -357,6 +362,7 @@ typedef struct AplEvent {
         int32_t active;                 /* SCREEN_STATE */
         struct { int32_t minimized; int32_t focused; } window;
         int32_t backend_lost;           /* BACKEND_STATE：1=断连 */
+        int32_t session_end;            /* SESSION_END：1=关机/重启/注销 */
     } u;
 } AplEvent;
 
@@ -372,6 +378,24 @@ int32_t apl_set_event_callback(AplEventCallback cb, void* user_data);
 Dart 侧映射（`platform_bindings.dart`）：`MediaCommandEvent` / `MediaSeekEvent` /
 `screenState` 流，与 `system_media.dart` / `system_power.dart` 契约一一对应——
 **契约层与主程序完全不感知 FFI 细节**。
+
+**系统会话结束（`APL_CAP_SESSION_END`，ABI v8 起）**：`APL_EVENT_SESSION_END`
+（`u.session_end=1`）表示 OS 即将结束当前会话，来源严格限定为：
+
+| 平台 | 触发源 | 说明 |
+| --- | --- | --- |
+| Linux | `SIGTERM` | systemd/logind 终止用户会话时投递；处理器只置原子位，泵线程派发 |
+| Windows | `WM_QUERYENDSESSION` / `WM_ENDSESSION` | `WM_QUERYENDSESSION` 返回 `TRUE` 允许关机 |
+| macOS | `NSWorkspaceWillPowerOffNotification` | 关机 / 重启 / 注销 |
+
+**明确排除休眠 / 待机 / 锁屏 / 熄屏**：Windows 的 `WM_POWERBROADCAST`
+（`PBT_APMSUSPEND`）、macOS 的 `NSWorkspaceWillSleep` / `ScreensDidSleep`、
+Linux 的 D-Bus `PrepareForSleep` 都**不产生**本事件，进程必须继续存活（只按
+节能档位降频）。Dart 侧 `SystemSessionHost`
+（`app/lib/app/system_session_host.dart`）收到事件后直接走统一退出
+（保存播放现场 → flush 凭据队列 → 桥接收尾 → `exit(0)`），**不弹**窗口
+「关闭应用时」确认框；该事件与用户点关闭（`WindowCloseRequestedEvent`）是两条
+独立路径。
 
 ### 3.7 SystemAccent（系统主题色）
 

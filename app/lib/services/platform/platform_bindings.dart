@@ -47,6 +47,7 @@ const int aplCapTray = 1 << 11;
 const int aplCapSecureFile = 1 << 12;
 // 1 << 13 保留：原 aplCapOpenUrl（ABI v7 移除，勿复用）。
 const int aplCapElevation = 1 << 14;
+const int aplCapSessionEnd = 1 << 15;
 
 /// 提权探测结果（对齐 `APL_ELEVATION_*`）。
 const int aplElevationNone = 0;
@@ -65,9 +66,11 @@ const int aplEventTrayClick = 9;
 const int aplEventTrayDoubleClick = 10;
 const int aplEventTrayRightClick = 11;
 const int aplEventTrayMenuCommand = 12;
+const int aplEventSessionEnd = 13;
 
-/// 契约版本 7：移除 `apl_open_url` / `APL_CAP_OPEN_URL`（破坏性 ABI 变更）。
-const int aplAbiVersion = 7;
+/// 契约版本 8：新增 `APL_EVENT_SESSION_END` / `APL_CAP_SESSION_END`（系统关机/注销事件）。
+/// 版本 7：移除 `apl_open_url` / `APL_CAP_OPEN_URL`（破坏性 ABI 变更）。
+const int aplAbiVersion = 8;
 
 /// 托盘菜单项（对齐 `AplTrayMenuItem`）：id==0 为分隔符；checked==-1 非复选。
 class AplTrayMenuItem {
@@ -407,6 +410,14 @@ final class AplTrayMenuCommandEvent extends AplNativeEvent {
   final int id;
 }
 
+/// 系统会话结束（关机/重启/注销）。
+///
+/// **不包含**休眠/待机/锁屏/熄屏：那些状态只降频，不得退出。收到后消费方
+/// 应直接走统一退出（保存现场 + flush 凭据队列），不再弹「关闭应用」确认框。
+final class AplSessionEndEvent extends AplNativeEvent {
+  const AplSessionEndEvent();
+}
+
 /// libarchoera_platform 绑定（进程级单例，[tryLoad] 失败返回 null → Noop）。
 class PlatformBindings {
   PlatformBindings._(DynamicLibrary lib)
@@ -584,6 +595,7 @@ class PlatformBindings {
   final _trayRightClickCtrl =
       StreamController<AplTrayRightClickEvent>.broadcast();
   final _trayMenuCtrl = StreamController<AplTrayMenuCommandEvent>.broadcast();
+  final _sessionEndCtrl = StreamController<AplSessionEndEvent>.broadcast();
 
   /// 单实例仲裁：1=首实例；0=已有实例；<0=错误。
   /// 进程硬化：**禁 core dump**（防已解密明文随 core 落盘被同用户取走，见 SEC-48）。
@@ -728,6 +740,9 @@ class PlatformBindings {
   Stream<AplTrayRightClickEvent> get trayRightClickEvents =>
       _trayRightClickCtrl.stream;
   Stream<AplTrayMenuCommandEvent> get trayMenuEvents => _trayMenuCtrl.stream;
+
+  /// 系统会话结束（关机/重启/注销；休眠/锁屏不会触发）。
+  Stream<AplSessionEndEvent> get sessionEndEvents => _sessionEndCtrl.stream;
 
   /// 注册/注销当前用户的 URI scheme 处理程序（免提权）；[aplOk]=成功。
   int protocolRegister(String scheme) {
@@ -879,6 +894,8 @@ class PlatformBindings {
         b._trayRightClickCtrl.add(const AplTrayRightClickEvent());
       case aplEventTrayMenuCommand:
         b._trayMenuCtrl.add(AplTrayMenuCommandEvent(ref.u.trayCommand.id));
+      case aplEventSessionEnd:
+        b._sessionEndCtrl.add(const AplSessionEndEvent());
     }
   }
 
@@ -997,6 +1014,7 @@ class PlatformBindings {
     _trayDoubleClickCtrl.close();
     _trayRightClickCtrl.close();
     _trayMenuCtrl.close();
+    _sessionEndCtrl.close();
     _instance = null;
   }
 }

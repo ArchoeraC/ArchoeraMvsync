@@ -34,6 +34,8 @@ void main() {
     expect(caps.powerInhibitAvailable, isFalse);
     expect(caps.mediaSessionAvailable, isFalse);
     expect(caps.windowStateAvailable, isFalse);
+    // 系统会话结束事件同样按能力位降级（桥接缺失 → 空流）。
+    expect(caps.sessionEndAvailable, isFalse);
     // 文件管理器定位能力：桥接缺失 → 不可用且返回 UNSUPPORTED（Dart 侧降级）。
     expect(caps.revealPathAvailable, isFalse);
     expect(caps.revealPath('/tmp'), aplErrUnsupported);
@@ -56,11 +58,15 @@ void main() {
 
     expect(await caps.power.setSleepInhibit(true), isFalse);
     expect(await caps.media.setNowPlaying(null), isFalse);
-    expect(await caps.media.setPlaybackState(MediaPlaybackState.playing), isFalse);
+    expect(
+      await caps.media.setPlaybackState(MediaPlaybackState.playing),
+      isFalse,
+    );
     expect(await caps.window.setEvents(true), isFalse);
     await expectLater(caps.power.screenState, emitsDone);
     await expectLater(caps.media.commands, emitsDone);
     await expectLater(caps.window.state, emitsDone);
+    await expectLater(caps.sessionEndEvents, emitsDone);
     await expectLater(caps.power.failures, emitsDone);
   });
 }

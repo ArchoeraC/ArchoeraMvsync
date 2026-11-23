@@ -61,6 +61,18 @@ class PlatformCapabilities {
   bool get systemAccentAvailable => caps & aplCapSystemAccent != 0;
   bool get deepLinkAvailable => caps & aplCapDeepLink != 0;
   bool get trayAvailable => caps & aplCapTray != 0;
+
+  /// 系统会话结束事件（关机/重启/注销）是否可用。
+  bool get sessionEndAvailable => caps & aplCapSessionEnd != 0;
+
+  /// 系统会话结束事件流（关机/重启/注销；**休眠/锁屏不会触发**）。
+  /// 桥接缺失/无该能力时为空流（需要窗口/信号监听兜底时由调用方决定）。
+  Stream<AplSessionEndEvent> get sessionEndEvents {
+    final b = _bindings;
+    if (b == null || caps & aplCapSessionEnd == 0) return const Stream.empty();
+    return b.sessionEndEvents;
+  }
+
   bool get bridgeLoaded => _bindings != null;
 
   /// 是否具备「安全文件原语」能力（原生 `open(2)`，收口 SafeFile 的 TOCTOU 残余）。
