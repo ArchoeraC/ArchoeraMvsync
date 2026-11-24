@@ -54,6 +54,9 @@
     <Compile Include="../../SearchQuery.cs" Link="SearchQuery.cs" />
     <Compile Include="../../FuzzyVocabulary.cs" Link="FuzzyVocabulary.cs" />
     <Compile Include="../../ReadingRanker.cs" Link="ReadingRanker.cs" />
+    <Compile Include="../../SearchPolicy.cs" Link="SearchPolicy.cs" />
+    <Compile Include="../../SearchPlan.cs" Link="SearchPlan.cs" />
+    <Compile Include="../../SearchPlanCompiler.cs" Link="SearchPlanCompiler.cs" />
     <Compile Include="../../SearchSession.cs" Link="SearchSession.cs" />
     <Compile Include="../../../shared/text/ScriptRanges.cs" Link="shared/text/ScriptRanges.cs" />
   </ItemGroup>

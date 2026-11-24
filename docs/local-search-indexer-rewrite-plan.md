@@ -1,6 +1,6 @@
 # 本地曲库索引器与搜索层重写方案（提案，未实施）
 
-> 状态：**方案文档；S2.7 EraStore 原型已落地，未接入发布路径**（v0.25）。本文只回答两个问题：
+> 状态：**方案文档；S2.7 EraStore 原型已落地，未接入发布路径**（v0.28）。本文只回答两个问题：
 > ① 现有索引 / 搜索逻辑为什么"不够好"（结构性原因，不是 bug 清单）；
 > ② 如果**直接重构**（不再对外移植），怎样组织成**可组合、可替换、可演进**的方案层，
 > 并把索引器 / 搜索逻辑**尽可能全部收进 .NET**。
@@ -313,6 +313,10 @@ int32_t  era_search_health(const char* index_dir, char** out_json);
 
 迁移方式：**一次性替换**——加 `era_search_*`，同时删除全部 `indexer_*` 符号；Dart 同 PR 切到新符号，
 打包脚本 / 校验 / 文档中所有旧符号引用一并改掉。不留 wrapper，不留别名。
+
+> **S1 执行结果（2026-11-24）**：符号替换已完成（`nm -D` 只剩 `era_*`，Dart 已同包切换）。
+> 句柄生命周期为 `open` / `run` / `close`；「句柄可并发」尚未实现——S1 仍共享
+> `SearchSession` 的进程级静态缓存与锁（`close` 会丢弃共享缓存），per-handle 化归 S3。
 
 ---
 
@@ -2333,6 +2337,36 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 > `SearchSpec v1` 文本、Plan/Rank 三层向量、真实库歌词分布统计（本机真实库仅 117 首、
 > 且只有 `lyrics` 一层，样本不足以校准 V6 护栏）。
 
+> **2026-11-24 S0 收口补记**：
+>
+> - **查询集抽样器已落地**：`replay sample`（`app/core/indexer/Replay.cs`）兼容桌面端真实日志键
+>   （`q` / `sc=m`）与 §6.7.1 键；按 trim 后 `(query, scope)` 去重并累计频次，固定 14 条
+>   （与 qbench `Cases` 同文）+ 按频次加权无放回抽 N 条（SHA-256 派生 key，确定性，
+>   `--seed` 可复现）；输出键序固定，`lyrics` / `typo` / `title` 等不可推导 tag 不臆造。
+> - **歌词分布统计工具已落地**：`lyrics stats --library <library.db> [--out <json>] [--no-lrc]`
+>   （`app/core/indexer/LyricsStats.cs`）按 `IndexerEngine` 同口径分原文 / 译文 / 音译三层，
+>   输出行数 / 去重行数 / UTF-8 字节的 p50/p95/p99/max、行级去重率与 V6 护栏触发数；
+>   旧库缺侧车列自动降级，输出不含绝对路径。已在 400 首确定性合成语料上跑通
+>   （原文 p95 140 行、去重率 5.05%、0 触发）；**真实库仍缺**，V6 阈值暂不据此定稿。
+> - **`SearchSpec v1` 已成文**：`docs/search-spec-v1.md`（S1 起唯一规格来源；
+>   迁移顺序仍只认本文 §5）。**Plan / Rank 向量**受 S1/S2 类型未就位阻塞，
+>   先在 `app/core/indexer/tests/vectors/README.md` 固化格式与准入规则。
+>   **`scheme` 注册表**按 RP T2.4 归 S2；S0 只在 SearchSpec v1 §2 固化四方案 /
+>   能力协商 / 降级链，不提前写注册表代码。
+> - **负例对照基线已落地**：`tests/NegativeBaselineTests.cs` 覆盖能独立执行的 N1–N17
+>   （12 绿 / N12、N15 为 known-gap / N8、N10、N11、N18–N24 为 blocked，等 S1/S2 的
+>   plan、explain 或 `scope=lyrics`）；`KNOWN-GAP` / `BLOCKED` 不计入 FAIL。
+> - **日志不足的派生补齐已落地**：`replay sample --library <library.db> [--with-lyrics]`
+>   在日志候选不足时按 `sha256(track_id)` 升序派生标题 / 文件名 / 歌手 / 专辑 / 标题前缀 /
+>   歌词首行查询（标 `derived`），仍保持确定性；派生结果只写本地 `--out`。
+> - **qbench quick 基线已跑**（commit `94ae5bdf`，3000 曲 / seed 20261013 / 词表 400 / 本机 tmpfs）：
+>   A（拼音）全量构建 8.84 s、峰值 RSS 137 MB、`search.db` 33.8 MB；B（无拼音）7.97 s / 136 MB / 22.0 MB；
+>   A 查询 pooled P50 2.855 / P95 5.317 ms（n=280），B 0.275 / 1.321 ms；
+>   质量（14 条固定查询）P@1 0.786 / P@10 0.643 / NDCG@10 0.811 / MRR@10 0.824。
+>   这只是 **quick 档日常基线**，不是正式 30k / 50k 基线；报告文件留在本地，未覆盖 `bench/REPORT.md`。
+> - **仍未做（进 S1 前要补）**：正式 30k / full 档基线、
+>   真实库歌词分布（§11 的 48,759 首库不随仓库分发）。
+
 ### S1 — 行为等价重构（**改动最大、风险最低**）
 
 把现状的"六趟 + 短路 + 常量"重排成"Plan + Evidence"，**但保持输出 top-k 逐条字节一致**。
@@ -2354,6 +2388,47 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 对照对象是**基线文件**，不是保留旧实现——旧代码在 T1.5 已删除。
 `scope=lyrics` 与 `typo2` 没有旧基线，S1 只做"不崩溃 / 不越界"冒烟，正式判定在 S2 的负例。
 失败处置：**不进入 S2**，修复后重跑等价性（不提供运行时回退开关）。
+
+> **落地进度（2026-11-24，S1 核心 T1.1–T1.8）**：
+>
+> - **T1.1–T1.5 已落地**：`SearchPolicy.cs`（现值快照）、`SearchPlan.cs`（QueryTerm / Step /
+>   QueryPlan，可序列化）、`SearchPlanCompiler.cs`（六趟 + 丢词 + 容错编译成有序 Step）、
+>   `SearchSession.ExecuteUncached` 改为 PlanExecutor；旧六趟直连代码已删除，无第二引擎 / 无开关。
+> - **`scope=lyrics` 已落地**：六趟最终表达式统一加歌词列外过滤（`{lyrics…} : (expr)`）；
+>   单 CJK 字返回空计划；缓存键区分 all / metadata / lyrics；N21 / N24 已从 BLOCKED 转为绿。
+>   all / metadata 的表达式与 400 语料输出逐条未变。
+> - **T1.6 已落地**：`replay compare`（`Replay.cs`）对两份 §6.7.4 基线逐条比较**完整 ids 数组**，
+>   任何增删 / 名次 / 空态变化退出 1，完全一致退出 0。
+> - **等价性实测（changed=0，queries hash 一致）**：
+>   - 400 合成 / 57 条查询；
+>   - 3k quick / 214 条查询；
+>   - 400 派生（标题 / 歌手 / 专辑 / 歌词首行）/ 64 条查询。
+>   真实库 5k 子集仍无数据，未跑；fixture 级 12 条六趟用例另由 `SearchPlanTests` 固化。
+> - **Plan 向量已接线**：`tests/vectors/plan/*.jsonl` + `PlanVectorTests`（45 条，覆盖查询形状 ×
+>   scope（all / metadata / lyrics）× profile × fuzzy）；`tests/SearchPlanTests.cs` 另含默认值
+>   快照、丢词重排、fuzzy / CJK 容错、lyrics 列裁剪与端到端（标题 / 歌词分离命中）、JSON
+>   序列化与改动前录制的端到端等价。
+> - **T1.7 ABI v2 已落地**：`Ffi.cs` / 新 `SearchApi.cs` 导出 `era_search_api_version` /
+>   `open` / `run` / `free` / `close` / `health`；构建与诊断过渡为 `era_index_run` /
+>   `era_index_cancel` / `era_analyze` / `era_set_log_sink`（任务句柄留给 S3）。
+>   请求 / 响应 / 错误 JSON 均为 `api: 2`，旧字段（`minExact` / `candidateCap` / `fuzzy` /
+>   `ranking` / `engine`）出现即错误码 1；全部 `indexer_*` 符号已删除（`nm -D` 零残留）。
+>   成功响应里的 `passes` 是 **S1 过渡诊断字段**（Dart 查询日志仍消费，S2.5 由
+>   `explain` / `trace` 取代后删除）。
+> - **T1.8 Dart FFI v2 已落地**：`IndexerLibrary` 启动握手 `api_version == 2`、句柄式
+>   `openSearch` / `search` / `closeSearch`；请求删除 `fuzzy` / `minExact` / `candidateCap` /
+>   `offset`（服务端默认 `default@1` 兜底）；`dart analyze lib` 0 issue，真实 FFI 冒烟 14 项绿。
+> - **性能复测**：同一 3k 索引 qbench 复测 pooled P50 2.66 / P95 5.48 ms（改动前 2.86 / 5.32，
+>   差值在机器噪声量级）；未跑正式 full 档。
+> - **测试**：C# PASS 2769 / FAIL 0（含 SearchApiTests 82 项；KNOWN-GAP 2 / BLOCKED 8 不计
+>   FAIL，均为 S2/S3 待办）；Dart `dart analyze lib` 0 issue，搜索相关单测与真实 FFI 冒烟全绿。
+> - **实现层两处输出中性差异**（不影响 top-k / pass 计数）：
+>   ① 所有丢词表达式都为空时不再做字段亲和度探测（旧代码会空探）；
+>   ② CJK 容错变体在计划期预编译（旧代码门打开后才编译），CPU 有界。
+> - **未做 / 留给后续阶段**：`typo2` 与 `scope=lyrics` 的正式排序 / 负例判定归 S2；
+>   ABI 的 `era_search_fallback`、任务句柄 `era_search_start/wait/free`、游标分页
+>   （`cursor` / `next` / `restart`）、`total=capped|exact`、`explain` / `highlight` /
+>   `snippet` 产出、per-handle 并发与缓存分片归 S2/S3（S1 请求只解析不报错）。
 
 > 这一步是"重写"与"打补丁"的分水岭。跳过它直接改语义，就永远说不清"变好还是变坏"。
 > 注意：等价性允许"排序相同但内部结构不同"，**不允许**"差一条然后解释为噪声"。
@@ -3024,11 +3099,12 @@ app/core/indexer/data/
 |---|---|
 | `id` | 稳定主键；一旦进入基线**不可复用** |
 | `source` | `fixed`（14 条固定） / `replay`（日志抽样） / `synthetic`（负例） |
-| `tags` | `cjk` / `latin` / `mixed` / `lyrics` / `single-char` / `typo` / `empty` |
+| `tags` | `cjk` / `latin` / `mixed` / `lyrics` / `single-char` / `typo` / `empty`；`derived` 表示日志不足时由曲库派生的补齐条目 |
 | `weight` | 聚合指标用；默认 1 |
 
 - 固定 14 条 + 回放 200 条，两组分开报；
-- 回放集按 `(query, scope)` 去重，按频次加权抽 200 条；
+- 回放集按 `(query, scope)` 去重，按频次加权抽 200 条；**日志不足时**可从 `library.db`
+  按 `sha256(track_id)` 派生标题 / 歌手 / 专辑 / 歌词行补齐（条目带 `derived` tag）；
 - 丢弃空串、纯空白、长度 >200 的查询；
 - **冻结后不许为了"结果好看"改查询**；新增查询必须新 id，旧基线保留。
 
@@ -3526,6 +3602,21 @@ indexBuilding ──构建完成回调──▶ 若查询非空，静默重跑�
 Dart 与 C# 是同一个安装包里的两层，没有第三方调用方；因此这里**只保证一份契约**，
 不做 `api:1` 兼容。所有结构用 `api` 字段标注版本，当前为 **2**。
 
+> **S1 实际落地范围（2026-11-24，T1.7 / T1.8）**：已实现 D.1 的
+> `api_version` / `open` / `run` / `free` / `close` / `health`，以及过渡入口
+> `era_index_run` / `era_index_cancel` / `era_analyze` / `era_set_log_sink`。
+> 与完整 v2 的差异（均在代码注释中标明，**不是永久契约**）：
+> - `era_search_open` 的 `index_dir` 按单文件 `search.db` 路径处理（S1 索引是单文件）；
+> - `era_search_fallback`、`era_search_start` / `wait` / `free` 任务句柄未实现
+>   （S1 构建是同步 `era_index_run` + 全局 `era_index_cancel`，任务 API 留 S3）；
+> - `cursor` / `next` / `restart` 分页、`total=capped|exact`、`explain` / `highlight` /
+>   `snippet` 产出未实现（请求只解析、不报错，归 T2.7 / T2.8）；
+> - 不同句柄并发与 per-handle 缓存未实现：S1 仍共享 `SearchSession` 进程级缓存，
+>   `close` 会丢弃共享缓存（S3 句柄化）；
+> - 成功响应暂留 `passes`（六趟计数）作为 **S1 过渡诊断字段**，供 Dart 查询日志使用；
+>   S2.5 由 `explain` / `trace` 取代后删除；
+> - 错误码 4（Busy）已定义但 S1 不会返回（写任务留 S3）。
+
 ### D.1 ABI 与所有权
 
 ```c
@@ -3959,14 +4050,28 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 ## 附录 H：开工前检查清单（S1 之前必须全部打勾）
 
 - [ ] `SearchSpec v1` 评审通过（本文 §3 升格为正式规格，含所有数字的证据链接）。
+      **已成文**（`docs/search-spec-v1.md`，2026-11-24），待人工评审。
 - [ ] 回放语料就位：桌面端查询日志导出为 JSONL（脱敏、去重、去空）。
+      **`replay sample` 已落地**；真实日志按 §6.7.2 只留本地，不入库。
 - [ ] 基准语料就位：400 合成 / 3k quick / 50k 真实子集三档可重复构建。
-- [ ] `qbench` 能在当前实现上跑出基线（延迟 / 召回 / 体积 / **启动**四份 JSON）。
+      **生成器与 `replay corpus` 已就位**；400 合成与 3k quick 已实跑，50k 真实子集无数据。
+- [x] `qbench` 能在当前实现上跑出基线（延迟 / 召回 / 体积 / **启动**四份 JSON）。
+      **quick 3k 已跑**（`metrics.json` / `qbench_A` / `qbench_B` / `qeval_A`，commit `94ae5bdf`）；
+      正式 30k / full 档与 50k 真实子集未跑。
 - [ ] 负例集 N1–N20 全部写成可执行断言（当前实现允许部分失败，作为对照基线）。
-- [ ] golden vectors 目录与加载器就位（C# 全量跑；Dart 只做响应 schema 校验）。
+      **对照基线已落地**（`tests/NegativeBaselineTests.cs`）：12 绿 / N12、N15 known-gap /
+      N8、N10、N11、N18–N20 blocked（等 plan、explain 或集成层）；
+      S1 收尾后 N21、N24 已转绿，N22、N23 仍 blocked（留给 S2 的正式 lyrics 判定）。
+- [x] golden vectors 目录与加载器就位（C# 全量跑；Dart 只做响应 schema 校验）。
+      **analyze / query / plan 已接线**（`plan/*.jsonl` 45 条，2026-11-24）；
+      Rank 向量等 S2 的 `SearchRanker`；Dart 侧 v2 握手与响应 schema 校验已随 T1.8 落地。
 - [ ] `rev` 的 canonical 格式冻结（C# 实现 + 向量，格式变更走 `rev2`）。
+      **仍未冻结**（EraStore Manifest 已有字段，向量未覆盖）。
 - [ ] 开关命名冻结：`scheme`、`explain`（**不存在** `engine` / `ranking` / `index.schema` 回退开关）。
+      **SearchSpec v1 已定名**；代码侧 `scheme` 注册表归 S2。
 - [ ] 清理演练一次：搜索代码里搜不到旧符号、旧索引格式、旧 ranker 的任何引用。
+      **部分完成**（S1 T1.7）：FFI 层 `indexer_*` 符号与旧请求字段已零残留；
+      旧索引格式 / 旧 ranker 的删除清单归 S3。
 
 ## 附录 I：算法候选矩阵（可插拔清单）
 
@@ -4020,6 +4125,9 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 | v0.23 | 2026-11-23 | 新增 §5.3.1 S2.7 归档结论（T2.17）：P0–P11 与 T2.13–T2.16 完成状态、quick 实测（12 字段族语料、8 份 JSON、1,558 B/轨、open 3.64 ms、pooled P50 0.02 ms 等）、七条已知限制（构建 RSS 触线、positions 占 57.2%、体积比值待 S0、full 未跑、差分仅存储层、整段合并、纯构建无 Stats/Tombs）与 S3 前置项 |
 | v0.24 | 2026-11-23 | 修正 §5.3.1 为构建内存修复后的最终数据：quick 6,200,917 B / 1,240 B/轨 / RSS 97.2 MB，30k 36,099,278 B / 1,203 B/轨 / RSS 118.7 MB；记录紧凑累加器 + 块缓冲复用 + V2 派生层免位置（`NoPositionFields`）三项改动；重写已知限制（新增 `MaxSections=64` 段数硬顶与写侧无校验风险、`NoPositionFields` 的 PhraseIter 降级语义、bench GC 配置需 NativeAOT 复核、full 仍缺）；T2.14 更新为 PASS 956 |
 | v0.25 | 2026-11-23 | S0 落地 `replay run` / `replay corpus`（`app/core/indexer/Replay.cs`）：查询集 JSONL → §6.7.4 基线 JSON（前 100 个 trackId、中位耗时、queries hash），真实库 `sha256(track_id)` 子集与 corpus hash；并在 §S0 记录已实现 / 未实现范围 |
+| v0.26 | 2026-11-24 | S0 收口：`replay sample`（真实日志键兼容 / 固定 14 / 频次加权确定性抽样 / 日志不足时从 `library.db` 派生补齐）、`lyrics stats`（三层行数分位 / 去重率 / V6 护栏、旧库降级、隐私输出）、N1–N17 负例对照基线（N12/N15 known-gap，N8/N10/N11/N18–N24 blocked）、qbench quick 3k 基线与 400 首回放/歌词统计实测，新增 `docs/search-spec-v1.md` 与 `tests/vectors/README.md`；Plan/Rank 向量留待 S1/S2 类型就位，scheme 注册表归 S2，正式 30k/50k 基线与真实库歌词分布仍未做 |
+| v0.27 | 2026-11-24 | S1 核心 T1.1–T1.6：`SearchPolicy` / `SearchPlan` / `SearchPlanCompiler` / PlanExecutor 落地，删除旧六趟直连；新增 `replay compare`（完整 ids 逐条比较）；三语料对拍 changed=0（400/57、3k/214、400 派生/64）；Plan 向量 40 条接线；T1.7（ABI v2）/ T1.8（Dart FFI v2）与 `scope=lyrics` / `typo2` 仍待 S1 收尾 |
+| v0.28 | 2026-11-24 | S1 收尾 T1.7 / T1.8 + `scope=lyrics`：`era_search_*` 句柄 ABI v2（`api:2` 请求 / 响应 / 错误 JSON、`era_index_run` 过渡入口、`indexer_*` 零残留）；Dart 同包升级（启动握手、句柄式查询、删除 `fuzzy`/`minExact`/`candidateCap`/`offset`）；歌词 scope 列裁剪与单 CJK 字空计划（N21/N24 转绿）、缓存键三态；Plan 向量 45 条；C# PASS 2769 / FAIL 0（SearchApiTests 82 项），三语料对拍仍 changed=0；`passes` 暂留为 S1 过渡诊断字段，附录 D 记录未实现的 v2 项（fallback、任务句柄、游标、explain/highlight/snippet、per-handle 并发） |
 
 ---
 

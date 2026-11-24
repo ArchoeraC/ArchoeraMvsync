@@ -26,14 +26,14 @@ import 'search_models.dart';
 ///     indexer 模块、**不建库**、**不查询**，[search] 直接返回 null（调用方
 ///     回退现有 `LIKE`），零成本；
 ///   - 开启时按需加载 indexer（NativeAOT 常驻、不 unload），`search.db` 缺失或
-///     schema 版本不符时在**后台 isolate** 跑 `indexer_run`（全量 / 增量），
+///     schema 版本不符时在**后台 isolate** 跑 `era_index_run`（全量 / 增量），
 ///     完成后以只读连接打开 [SearchIndex]；
 ///   - 任何失败（模块缺失 / 构建失败 / 查询异常）都降级为返回 null，**绝不抛到
 ///     UI**（索引是派生数据，可随时重建）。
 ///
 /// **构建串行化（build gate）**：`rebuild` / `reindex` / `deleteIndex` 以及
 /// [ensureIndex] 的「构建 + 重开」关键段都是**互斥**的——全部经单一异步门
-/// [_serialize] 排队，后到者等待而非并发执行。并发调用 NativeAOT `indexer_run`
+/// [_serialize] 排队，后到者等待而非并发执行。并发调用 NativeAOT `era_index_run`
 /// （同一 `search.db` / `-wal` / `-shm`）会互相破坏，故必须串行。
 /// 该门只是 Dart 侧 `Future` 链式串行（不是内核等待式竞态判定），门内**绝不**
 /// 调用会再次取门的公开方法，避免自锁。
@@ -129,7 +129,7 @@ class SearchService {
   /// 最近一次构建结果摘要（诊断 / 设置页展示用）。
   IndexerRunResult? lastResult;
 
-  /// 最近一次构建失败的**具体**原因（`indexer_run` 退出信息 / isolate 异常文本）；
+  /// 最近一次构建失败的**具体**原因（`era_index_run` 退出信息 / isolate 异常文本）；
   /// 未构建或成功时为 null。
   ///
   /// 由 [_buildAndOpenLocked] 转述进 [status]（error 态的 `message`），使设置页
@@ -159,15 +159,15 @@ class SearchService {
   /// 直接返回 null 回退 `LIKE`（构建完成后再次搜索即命中）；其余情况经
   /// [ensureIndex] 走构建门。任何异常都降级返回 null，**绝不抛到 UI**。
   ///
-  /// [fuzzy]（默认开）启用**两趟容错**（设计文档 §4.6）：精确命中不足 [fuzzyMinExact]
-  /// 且查询含拉丁词元时，追加编辑距离 ≤ 1 的模糊查询。失败仍降级返回 null，不抛到 UI。
+  /// [scope] 取 `all` / `metadata` / `lyrics`，直接映射为请求 JSON 的 `scope`。
+  ///
+  /// 服务端默认 `default@1` 方案已启用兜底（渐进趟 / 容错 / 跨语言），行为与旧
+  /// `fuzzy: true` 一致；Dart 不再传 `fuzzy` / `minExact` / `offset` 等废弃字段。
+  /// 失败仍降级返回 null，不抛到 UI。
   Future<List<LocalSearchHit>?> search(
     String query, {
     LocalSearchScope scope = LocalSearchScope.all,
     int limit = 200,
-    int offset = 0,
-    bool fuzzy = true,
-    int fuzzyMinExact = 1,
   }) async {
     // 总开关关闭：第一道门，零成本回退（不触碰模块 / search.db）。
     if (!enabled) return null;
@@ -179,14 +179,7 @@ class SearchService {
       final started = QueryLogger.enabled ? DateTime.now() : null;
       // 计数器是累加值：记录前先取快照，查询后再求差，才能得到**本次**实际趟次。
       final before = index.passCounts;
-      final hits = index.search(
-        keyword,
-        scope: scope,
-        limit: limit,
-        offset: offset,
-        fuzzy: fuzzy,
-        minExact: fuzzyMinExact,
-      );
+      final hits = index.search(keyword, scope: scope, limit: limit);
       if (started != null) {
         _recordQuery(
           keyword,
@@ -319,7 +312,7 @@ class SearchService {
     });
   }
 
-  /// 请求取消进行中的构建（透传 `indexer_cancel`）。
+  /// 请求取消进行中的构建（透传 `era_index_cancel`）。
   bool cancel() {
     final override = debugCancelOverride;
     if (override != null) return override();
@@ -355,7 +348,7 @@ class SearchService {
   /// **不删除** `search.db`（派生数据默认保留，避免每次开关都全量重建）；
   /// 需要释放空间走 [deleteIndex]。总开关关闭后 [search] 本就返回 null，
   /// 这里额外：
-  /// - 经 [cancel] 请求取消在途 `indexer_run`（透传 `indexer_cancel`；无在途
+  /// - 经 [cancel] 请求取消在途 `era_index_run`（透传 `era_index_cancel`；无在途
   ///   构建时为 no-op）——**不绕过构建门**，只是取消信号，门内关键段仍串行；
   /// - 释放连接；进行中的构建会在其门内段结束时发现总开关已关（`!enabled`）
   ///   而**放弃重开**（不复活连接），状态回到 [LocalSearchStatus.disabled]。
@@ -388,7 +381,7 @@ class SearchService {
 
   /// 关闭只读连接并释放回调。
   ///
-  /// 设置关闭标志（后续入口拒绝开新连接）、请求取消在途 `indexer_run`；在途
+  /// 设置关闭标志（后续入口拒绝开新连接）、请求取消在途 `era_index_run`；在途
   /// 关键段发现已关闭后**不再开新连接**。绝不抛异常。
   void dispose() {
     if (_disposed) return;
@@ -507,9 +500,8 @@ class SearchService {
   void _closeIndexLocked() {
     _index?.close();
     _index = null;
-    // C# 侧按 search.db 路径缓存只读查询会话：重建 / 删除 / 关闭前显式释放，
-    // 否则 Windows 上残留句柄会阻塞 search.db 的替换（File.Move）。
-    _lib?.closeQuery();
+    // 查询句柄由 [SearchIndex.close]（→ `era_search_close`）释放：重建 / 删除 /
+    // 关闭前必须显式关闭，否则 Windows 上残留句柄会阻塞 search.db 的替换。
   }
 
   SearchIndex? _openIndexLocked() {
@@ -529,7 +521,7 @@ class SearchService {
     return index;
   }
 
-  /// 在后台 isolate 跑 `indexer_run`；进度经 [progress] 暴露（不阻塞 UI）。
+  /// 在后台 isolate 跑 `era_index_run`；进度经 [progress] 暴露（不阻塞 UI）。
   ///
   /// isolate 入口是 [IndexerLibrary.runInIsolate]（**静态**）：`Isolate.run` 的闭包
   /// 若留在本实例方法内，会经上下文链连带捕获本服务（持有 `_gateTail`（Future）等
@@ -570,7 +562,7 @@ class SearchService {
       );
       if (_disposed) return false;
       if (code != 0) {
-        _buildFailure = text.isEmpty ? 'indexer_run 退出码 $code' : text;
+        _buildFailure = _buildErrorMessage(code, text);
         Log.w('search', '索引构建失败（exit=$code）: $text');
         return false;
       }
@@ -585,6 +577,23 @@ class SearchService {
       callable.close();
       _setProgress(null);
     }
+  }
+
+  /// 构建失败文本：ABI v2 返回错误 JSON 时取 `error.message`，否则用原始文本。
+  static String _buildErrorMessage(int code, String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        final error = decoded['error'];
+        if (error is Map<String, dynamic>) {
+          final message = error['message'];
+          if (message is String && message.isNotEmpty) return message;
+        }
+      }
+    } catch (_) {
+      // 非 JSON：退回原始文本。
+    }
+    return text.isEmpty ? 'era_index_run 退出码 $code' : text;
   }
 
   /// 仅在未关闭时写进度（`dispose` 后 [progress] 已释放，写入会抛）。

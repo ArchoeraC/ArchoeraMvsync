@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // `SearchService.deactivate()`（总开关 开→关）语义回归：
-//   - **取消在途构建**（走 `cancel()` / `indexer_cancel`，经测试接缝观测）；
+//   - **取消在途构建**（走 `cancel()` / `era_index_cancel`，经测试接缝观测）；
 //   - 在途构建段 await 后因 `!enabled` **不重开连接**，状态回到 disabled；
 //   - 不破坏串行门：取消只是信号，排队的关键段仍串行、不并发，且因总开关已关
 //     而早退（不再触达构建）。

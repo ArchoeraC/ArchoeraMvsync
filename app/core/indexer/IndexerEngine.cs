@@ -389,7 +389,7 @@ public sealed class IndexerEngine
     /// （体积 + bm25 词频翻倍）。只有**完全相同**才去重；部分重叠（例如侧车另带
     /// 「作词/作曲」行）仍按并集处理，不丢信息。
     /// </summary>
-    private static string JoinLayers(string embedded, string sidecar)
+    internal static string JoinLayers(string embedded, string sidecar)
     {
         if (embedded.Length == 0) return sidecar;
         if (sidecar.Length == 0) return embedded;

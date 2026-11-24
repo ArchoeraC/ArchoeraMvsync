@@ -16,8 +16,9 @@ import 'package:archoera_mvsync/services/search/search_models.dart';
 
 /// indexer 原生冒烟测试（受保护：无 `.so` 时整体 skip）。
 ///
-/// 覆盖：加载 indexer-ffi → 建临时 `library.db` fixture → `indexer_run` 全量 →
-/// `indexer_analyze` → 经 [SearchIndex]（只读 `search.db`）查询命中（中文子串 /
+/// 覆盖：加载 indexer-ffi（`era_search_api_version` 握手）→ 建临时 `library.db`
+/// fixture → `era_index_run` 全量 → `era_analyze` → 经 [SearchIndex]
+/// （`era_search_open` / `era_search_run`，只读 `search.db`）查询命中（中文子串 /
 /// 拼音 / 首字母）。
 ///
 /// 定位共享库：dev 兜底 cwd=app/ → `app/core/indexer/build/indexer-ffi.so`。
@@ -27,7 +28,7 @@ void main() {
       ? '未找到 indexer-ffi 共享库（先构建 app/core/indexer/build）'
       : false;
 
-  test('indexer_analyze 与索引同构（中文 bigram / 拼音 / 首字母）', () {
+  test('era_analyze 与索引同构（中文 bigram / 拼音 / 首字母）', () {
     final lib = IndexerLibrary.load(soPath: soPath);
     final tokens = lib.analyze('我爱你');
     expect(tokens, isNotNull);
@@ -45,7 +46,7 @@ void main() {
     expect(lib.analyze('hello')!.pinyin, const ['hello']);
   }, skip: skip);
 
-  test('indexer_run 全量 + SearchIndex 查询命中', () async {
+  test('era_index_run 全量 + SearchIndex 查询命中', () async {
     final tmp = await Directory.systemTemp.createTemp('indexer_smoke');
     addTearDown(() => tmp.deleteSync(recursive: true));
 
@@ -88,7 +89,7 @@ void main() {
       full: true,
       onProgress: nullptr.cast<Void>(),
     );
-    expect(code, 0, reason: 'indexer_run 应返回 0，实际: $resultText');
+    expect(code, 0, reason: 'era_index_run 应返回 0，实际: $resultText');
     final result =
         IndexerRunResult.fromJson(jsonDecode(resultText) as Map<String, dynamic>);
     expect(result.indexed, 1);
@@ -125,25 +126,22 @@ void main() {
     expect(meta.map((h) => h.trackId), contains('t1'));
   }, skip: skip);
 
-  test('两趟容错：精确命中即短路（不触发模糊）', () async {
+  test('容错默认开启：精确命中即短路（不触发模糊）', () async {
     final lib = IndexerLibrary.load(soPath: soPath);
     final index = await _buildIndex(lib, const [('t1', 'Hello World')]);
 
-    final hits = index.search('hello', fuzzy: true);
+    final hits = index.search('hello');
     expect(hits.map((h) => h.trackId), contains('t1'));
     expect(index.fuzzyQueries, 0, reason: '精确已命中，不应触发第二趟模糊');
   }, skip: skip);
 
-  test('两趟容错：精确为空时模糊命中（拼写错字）', () async {
+  test('容错默认开启：精确为空时模糊命中（拼写错字）', () async {
     final lib = IndexerLibrary.load(soPath: soPath);
     // 标题拼写错字 helo；查询为正确拼写 hello。
     final index = await _buildIndex(lib, const [('t1', 'Helo Song')]);
 
-    // 单趟精确：错误拼写漏召回。
-    expect(index.search('hello').map((h) => h.trackId), isEmpty);
-
-    // 两趟：精确为空 → 编辑距离 ≤1 变体（helo）命中。
-    final fuzzy = index.search('hello', fuzzy: true);
+    // 服务端默认方案（default@1）已启用兜底：精确为空 → 编辑距离 ≤1 变体（helo）命中。
+    final fuzzy = index.search('hello');
     expect(fuzzy.map((h) => h.trackId), contains('t1'));
     expect(index.fuzzyQueries, 1, reason: '精确为空应触发一次模糊查询');
   }, skip: skip);
@@ -165,19 +163,14 @@ void main() {
 
     // 非同音错字（周杰美：美「mei」不在文档）：精确 + 拼音兜底皆空 → CJK 变体趟
     // （删除变体「周杰」）命中 t1。
-    expect(index.search('周杰美', fuzzy: true).map((h) => h.trackId), contains('t1'));
+    expect(index.search('周杰美').map((h) => h.trackId), contains('t1'));
     expect(index.cjkFuzzyQueries, 1, reason: '精确 / 拼音皆空应触发一次 CJK 容错查询');
 
     // 多打一字（我爱美：美不在文档）：CJK 变体趟命中 t2。
-    expect(index.search('我爱美', fuzzy: true).map((h) => h.trackId),
-        contains('t2'));
+    expect(index.search('我爱美').map((h) => h.trackId), contains('t2'));
 
     // metadata 范围：兜底趟同样对整条表达式施加列过滤，标题命中仍生效。
-    final meta = index.search(
-      '周杰美',
-      scope: LocalSearchScope.metadata,
-      fuzzy: true,
-    );
+    final meta = index.search('周杰美', scope: LocalSearchScope.metadata);
     expect(meta.map((h) => h.trackId), contains('t1'));
   }, skip: skip);
 
@@ -185,7 +178,7 @@ void main() {
     final lib = IndexerLibrary.load(soPath: soPath);
     final index = await _buildIndex(lib, const [('t1', '周杰伦')]);
 
-    final hits = index.search('周杰伦', fuzzy: true);
+    final hits = index.search('周杰伦');
     expect(hits.map((h) => h.trackId), contains('t1'));
     expect(index.cjkFuzzyQueries, 0, reason: '精确已命中，不应触发 CJK 容错');
   }, skip: skip);
@@ -194,7 +187,7 @@ void main() {
     final lib = IndexerLibrary.load(soPath: soPath);
     final index = await _buildIndex(lib, const [('t1', 'Helo Song')]);
 
-    final hits = index.search('hello', fuzzy: true);
+    final hits = index.search('hello');
     expect(hits.map((h) => h.trackId), contains('t1'));
     expect(index.cjkFuzzyQueries, 0, reason: '无 CJK 不应触发第三趟');
     expect(index.fuzzyQueries, 1, reason: '应走拉丁第二趟');
@@ -260,7 +253,7 @@ void main() {
     expect(index.search('kurarin').map((h) => h.trackId), isNot(contains('t2')));
   }, skip: skip);
 
-  test('候选上限已撤销：candidateCap 不再裁剪结果（ABI 兼容参数）', () async {
+  test('limit 生效：多命中按 limit 裁剪', () async {
     final lib = IndexerLibrary.load(soPath: soPath);
     final index = await _buildIndex(lib, const [
       ('t1', '共同词元 一'),
@@ -268,13 +261,9 @@ void main() {
       ('t3', '共同词元 三'),
     ]);
     const query = '共同';
-    // 该参数曾用 `rowid IN (子查询)` 实现，会让 FTS5 的 bm25 静默返回 0
-    // （相关性排序整体失效）。现保留参数但不再裁剪候选——任何取值都返回全部命中。
-    expect(index.search(query, limit: 10, candidateCap: 0).length, 3);
-    expect(index.search(query, limit: 10, candidateCap: 2).length, 3,
-        reason: 'candidateCap 已不裁剪候选');
-    expect(index.search(query, limit: 10, candidateCap: 1).length, 3,
-        reason: 'candidateCap 已不裁剪候选');
+    // S1 契约已移除 candidateCap（候选上限机制在 2026-11-12 撤销，bm25 排序
+    // 全量生效）；此处只验证 `limit` 对 items 的裁剪仍正常。
+    expect(index.search(query, limit: 2).length, 2);
     expect(index.search(query, limit: 10).length, 3);
     // 顺序仍须按相关度（此处三首同分，只断言集合完整）。
     expect(
@@ -320,7 +309,7 @@ void main() {
       optionsJson: jsonEncode({'index_lrc': true, 'pinyin': true}),
       onProgress: nullptr.cast<Void>(),
     );
-    expect(code, 0, reason: 'indexer_run 应返回 0，实际: $text');
+    expect(code, 0, reason: 'era_index_run 应返回 0，实际: $text');
 
     final index = SearchIndex.open(searchDb, lib: lib);
     expect(index, isNotNull);
@@ -371,7 +360,7 @@ Future<SearchIndex> _buildIndex(
     full: true,
     onProgress: nullptr.cast<Void>(),
   );
-  expect(code, 0, reason: 'indexer_run 应返回 0，实际: $text');
+  expect(code, 0, reason: 'era_index_run 应返回 0，实际: $text');
 
   final index = SearchIndex.open(searchDb, lib: lib);
   expect(index, isNotNull);

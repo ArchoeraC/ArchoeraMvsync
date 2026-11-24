@@ -180,7 +180,7 @@ class SearchHighlighter {
   /// 缓存条目上限（超出后清空重建，保证内存有界）。
   final int maxEntries;
 
-  /// 可选查询 / 文本分析器（FFI `indexer_analyze`）；null = 仅字面高亮。
+  /// 可选查询 / 文本分析器（FFI `era_analyze`）；null = 仅字面高亮。
   final AnalyzerTokens? Function(String text)? analyzer;
 
   final Map<String, List<MatchRange>> _cache = {};

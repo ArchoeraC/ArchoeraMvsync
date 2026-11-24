@@ -32,6 +32,15 @@ internal static class SearchQuery
     public const string MetadataColumns =
         "title_tok artist_tok album_tok filename_tok pinyin_meta_tok initials_meta_tok reading_meta_tok";
 
+    /// <summary>
+    /// 歌词列过滤用的 FTS5 列集合（<c>scope=lyrics</c>）：原文 / 译文 / 音译 / 拼音 / 首字母。
+    ///
+    /// <para>FTS5 的 <c>{cols} : (expr)</c> 外过滤与表达式内部已有的列过滤**取交集**，
+    /// 因此歌词趟可以复用元数据趟的编译结果，再统一收紧到歌词字段族。</para>
+    /// </summary>
+    public const string LyricsColumns =
+        "lyrics_tok lyrics_tr_tok lyrics_rom_tok pinyin_lyrics_tok initials_lyrics_tok";
+
     /// <summary>索引里存放拼音的列集合。</summary>
     public const string PinyinColumns = "pinyin_meta_tok pinyin_lyrics_tok";
 

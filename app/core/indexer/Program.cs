@@ -24,6 +24,11 @@ namespace Archoera.Indexer;
 ///   archoera-indexer stats  --index &lt;目录或.eraindex&gt;
 ///   archoera-indexer replay run    --index &lt;search.db&gt; --queries &lt;queries.jsonl&gt; --out &lt;run.json&gt;
 ///   archoera-indexer replay corpus --library &lt;library.db&gt; --tracks &lt;n&gt; --out &lt;subset.db&gt;
+///   archoera-indexer replay sample --log &lt;查询日志.jsonl&gt; --out &lt;queries.jsonl&gt;
+///                                   [--library &lt;library.db&gt; [--with-lyrics]]
+///                                   [--replay &lt;n&gt;] [--seed &lt;int&gt;] [--limit &lt;n&gt;]
+///   archoera-indexer replay compare --baseline &lt;baseline.json&gt; --run &lt;run.json&gt; [--out &lt;diff.json&gt;]
+///   archoera-indexer lyrics stats   --library &lt;library.db&gt; [--out &lt;json&gt;] [--no-lrc]
 ///   archoera-indexer version
 ///
 /// stdout：JSON 进度 / 结果（TS / Dart 风格，与 scanner 一致）；stderr：人类日志。
@@ -48,6 +53,7 @@ public static class Program
             "verify" => RunVerify(args[1..]),
             "stats" => RunStats(args[1..]),
             "replay" => Replay.Run(args[1..]),
+            "lyrics" => LyricsStats.Run(args[1..]),
             "version" => RunVersion(),
             "-h" or "--help" or "help" => PrintUsage(),
             _ => UnknownCommand(args[0]),
@@ -422,6 +428,16 @@ public static class Program
                   回放查询集，输出 §6.7.4 基线 JSON（每条留前 100 个 trackId，耗时取中位数）。
               archoera-indexer replay corpus --library <library.db> --tracks <n> --out <subset.db>
                   按 sha256(track_id) 升序取前 n 首，生成可复现子集库与 <out>.corpus.json。
+              archoera-indexer replay sample --log <查询日志.jsonl> --out <queries.jsonl>
+                                          [--library <library.db> [--with-lyrics]]
+                                          [--replay <n>] [--seed <int>] [--limit <n>]
+                  把桌面端查询日志抽样成 §6.7.1 查询集（固定 14 条 + 加权回放，默认 200）；
+                  日志不足时可从 library.db 按 sha256(track_id) 派生查询补齐。
+              archoera-indexer replay compare --baseline <baseline.json> --run <run.json>
+                                             [--out <diff.json>] [--allow-subset]
+                  逐条比较两份 §6.7.4 基线；ids 顺序 / 空态完全一致退出 0，否则退出 1。
+              archoera-indexer lyrics stats --library <library.db> [--out <json>] [--no-lrc]
+                  统计歌词三层行数分位 / 去重率 / 护栏触发（V6 阈值校准，只读 library.db）。
               archoera-indexer version
                   输出版本锚点 {"analyzerVersion":1}
               archoera-indexer -h | --help

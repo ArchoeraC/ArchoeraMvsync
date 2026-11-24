@@ -6,7 +6,7 @@
 //
 // 覆盖要求：
 //   - 并发 rebuild + reindex：严格串行、**不重叠**（同一 `search.db` 上并发
-//     `indexer_run` 会互相破坏）；
+//     `era_index_run` 会互相破坏）；
 //   - rebuild 与 search→ensureIndex 串行；
 //   - deleteIndex 不与构建并发（构建结束前不得动 `search.db`）；
 //   - search 在构建中不抛异常（回退 LIKE 返回 null）；

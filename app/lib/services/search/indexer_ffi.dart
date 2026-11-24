@@ -20,16 +20,23 @@ import 'search_models.dart';
 /// 纯 FFI 层：不持有任何 isolate 本地状态，可在任意 isolate 内 [load] 后调用
 /// [runBlocking] / [cancel] / [analyze]（同一进程共享句柄）。
 ///
+/// **ABI v2**：只认 `era_search_*` / `era_index_*` / `era_analyze` 符号
+/// （旧 `indexer_*` 已删除，同包升级不兼容）。[load] 时用
+/// `era_search_api_version()` 握手，版本不符直接抛出（不「猜着用」）。
+///
 /// 产物约定：`indexer/build/indexer-ffi.{so,dylib,dll}` + 同目录
 /// `libe_sqlite3.{so,dylib}`（与 scanner 同版本同实例）。
 ///
 /// 生命周期：与 scanner 一致，`indexer-ffi` 为 .NET NativeAOT（C# runtime），
-/// `indexer_run` 返回后仍可能有后台线程存活且**无模块级 destroy/join**，
+/// `era_index_run` 返回后仍可能有后台线程存活且**无模块级 destroy/join**，
 /// 立即 `DynamicLibrary.close()` 会 unmap 代码段导致崩溃；故**常驻、不 unload**。
 class IndexerLibrary {
   IndexerLibrary._(this._lib);
 
   final DynamicLibrary _lib;
+
+  /// 本库要求的 C ABI 版本（`era_search_api_version()` 的期望值）。
+  static const int apiVersion = 2;
 
   // ---------------------------------------------------------------- 定位
 
@@ -55,6 +62,9 @@ class IndexerLibrary {
   /// 先预加载同目录的 `libe_sqlite3`（见 [preloadBundledSqlite]），否则
   /// SQLitePCLRaw 运行期会因找不到符号失败（Linux 需 RTLD_DEEPBIND
   /// 防系统 libsqlite3 全局符号遮蔽）。
+  ///
+  /// 加载后立即握手 `era_search_api_version()`：缺少符号（旧库）或版本 !=
+  /// [apiVersion] 均抛 [StateError]——不做「猜着用」的兼容兜底。
   static IndexerLibrary load({String? soPath}) {
     final path = soPath ?? resolveSoPath();
     final dir = File(path).parent;
@@ -68,46 +78,63 @@ class IndexerLibrary {
     }
     NativeIntegrity.verifyOrThrow(path);
     final lib = DynamicLibrary.open(path);
+    int actual;
+    try {
+      actual = lib
+          .lookupFunction<_ApiVersionNative, _ApiVersionDart>(
+            'era_search_api_version',
+          )();
+    } on ArgumentError catch (err) {
+      throw StateError('indexer-ffi 缺少 era_search_api_version 符号: $err');
+    }
+    if (actual != apiVersion) {
+      throw StateError(
+        'indexer-ffi ABI 版本不符: 期望 $apiVersion，实际 $actual',
+      );
+    }
     return IndexerLibrary._(lib)..installLogSink();
   }
 
-  /// 注入统一日志 sink（缺失符号时静默跳过，兼容旧版库）。
+  /// 注入统一日志 sink（缺失符号时静默跳过，兼容降级构建）。
   void installLogSink() {
     final sink = Log.nativeWritePointer;
     if (sink == null) return;
     try {
       _lib.lookupFunction<_SetLogSinkNative, _SetLogSinkDart>(
-        'indexer_set_log_sink',
+        'era_set_log_sink',
       )(sink, Log.effectiveLevel);
     } catch (_) {
-      // 旧版库无此符号：保持 Console 兜底。
+      // 无此符号：保持 Console 兜底。
     }
   }
 
   // ---------------------------------------------------------------- FFI
 
   late final _RunDart _run = _lib.lookupFunction<_RunNative, _RunDart>(
-    'indexer_run',
+    'era_index_run',
   );
-  late final _CancelDart _cancel = _lib
-      .lookupFunction<_CancelNative, _CancelDart>('indexer_cancel');
+  late final _CancelDart _cancel = _lib.lookupFunction<_CancelNative, _CancelDart>(
+    'era_index_cancel',
+  );
   late final _FreeDart _free = _lib.lookupFunction<_FreeNative, _FreeDart>(
-    'indexer_free',
+    'era_search_free',
   );
-  late final _AnalyzeDart _analyze = _lib
-      .lookupFunction<_AnalyzeNative, _AnalyzeDart>('indexer_analyze');
-  late final _QueryDart _query = _lib.lookupFunction<_QueryNative, _QueryDart>(
-    'indexer_query',
+  late final _AnalyzeDart _analyze = _lib.lookupFunction<_AnalyzeNative, _AnalyzeDart>(
+    'era_analyze',
   );
-  late final _QueryCloseDart _queryClose = _lib
-      .lookupFunction<_QueryCloseNative, _QueryCloseDart>('indexer_query_close');
+  late final _OpenSearchDart _openSearchFn = _lib
+      .lookupFunction<_OpenSearchNative, _OpenSearchDart>('era_search_open');
+  late final _SearchDart _searchFn = _lib
+      .lookupFunction<_SearchNative, _SearchDart>('era_search_run');
+  late final _CloseSearchDart _closeSearchFn = _lib
+      .lookupFunction<_CloseSearchNative, _CloseSearchDart>('era_search_close');
 
   /// 同步阻塞执行构建 / 增量（须在子 isolate 调用，避免阻塞 UI 线程）。
   ///
   /// [onProgress] 为 C# 侧回调函数指针（`NativeCallable.nativeFunction.cast()`，
   /// 可为 `nullptr.cast<Void>()` 关闭进度）。返回 `(exitCode, resultText)`：
-  /// exitCode==0 时 resultText 为 `IndexerResult` JSON，否则为错误文本。进度
-  /// 回调 JSON 与结果内存均须由调用方调 [free] 释放。
+  /// exitCode==0 时 resultText 为构建结果 JSON，否则为错误文本。进度回调
+  /// JSON 与结果内存均须由调用方调 [free] 释放。
   (int, String) runBlocking({
     required String dbPath,
     required String indexPath,
@@ -216,43 +243,58 @@ class IndexerLibrary {
     }
   }
 
-  /// 执行本地索引查询：查询编译、多趟渐进兜底、bm25 排序与 docId 映射均在 C# 内完成。
+  /// 打开只读查询句柄（`era_search_open`）；失败返回 `nullptr`。
   ///
-  /// 返回 `(exitCode, resultText)`：成功时 `resultText` 为结果 JSON，失败时为错误文本。
-  /// 结果内存由本方法释放；旧版库缺少 `indexer_query` 时返回 `(1, 错误文本)` 而非抛出。
-  (int, String) query({
-    required String indexPath,
-    required String requestJson,
-  }) {
+  /// [optionsJson] 为句柄选项（scheme / 缓存 / mmap / 日志级别），空串表示
+  /// 全部用 C# 侧缺省。句柄须由 [closeSearch] 释放（重建 / 删除索引前必须
+  /// 关闭，Windows 上残留只读句柄会阻塞 `search.db` 的替换）。
+  Pointer<Void> openSearch(String indexPath, {String optionsJson = ''}) {
     final index = indexPath.toNativeUtf8();
+    final opts = optionsJson.toNativeUtf8();
+    final out = calloc<Pointer<Void>>();
+    try {
+      final code = _openSearchFn(index, opts, out);
+      final handle = out.value;
+      if (code != 0) {
+        // 契约上失败时 out 为 nullptr；防御性地释放非空句柄避免泄漏。
+        if (handle != nullptr) _closeSearchFn(handle);
+        return nullptr;
+      }
+      return handle;
+    } finally {
+      calloc.free(index);
+      calloc.free(opts);
+      calloc.free(out);
+    }
+  }
+
+  /// 在已打开句柄上执行一次查询（`era_search_run`）。
+  ///
+  /// 返回 `(exitCode, resultText)`：成功时 `resultText` 为响应 JSON（`api:2`），
+  /// 失败时为错误 JSON（`error.message`）或错误文本。结果内存由本方法释放。
+  (int, String) search(Pointer<Void> handle, String requestJson) {
     final request = requestJson.toNativeUtf8();
     final out = calloc<Pointer<Utf8>>();
     final outLen = calloc<Int32>();
     try {
-      final code = _query(index, request, out, outLen);
+      final code = _searchFn(handle, request, out, outLen);
       final resultPtr = out.value;
       final text = resultPtr == nullptr
           ? ''
           : resultPtr.cast<Utf8>().toDartString(length: outLen.value);
       if (resultPtr != nullptr) _free(resultPtr.cast());
       return (code, text);
-    } catch (e) {
-      return (1, 'indexer_query 不可用: $e');
     } finally {
-      calloc.free(index);
       calloc.free(request);
       calloc.free(out);
       calloc.free(outLen);
     }
   }
 
-  /// 释放 C# 侧缓存的只读查询会话（索引重建 / 删除 / 退出前调用）。
-  void closeQuery() {
-    try {
-      _queryClose();
-    } catch (_) {
-      // 旧版库无此符号：忽略。
-    }
+  /// 关闭查询句柄（`era_search_close`）。空句柄为 no-op。
+  void closeSearch(Pointer<Void> handle) {
+    if (handle == nullptr) return;
+    _closeSearchFn(handle);
   }
 
   /// 释放 indexer-ffi 侧（NativeMemory.Alloc）分配的内存。
@@ -268,6 +310,9 @@ class IndexerLibrary {
     return raw;
   }
 }
+
+typedef _ApiVersionNative = Int32 Function();
+typedef _ApiVersionDart = int Function();
 
 typedef _RunNative =
     Int32 Function(
@@ -311,23 +356,36 @@ typedef _AnalyzeDart =
       Pointer<Int32>,
     );
 
-typedef _QueryNative =
+typedef _OpenSearchNative =
     Int32 Function(
       Pointer<Utf8> indexPath,
+      Pointer<Utf8> optionsJson,
+      Pointer<Pointer<Void>> out,
+    );
+typedef _OpenSearchDart =
+    int Function(
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Pointer<Pointer<Void>>,
+    );
+
+typedef _SearchNative =
+    Int32 Function(
+      Pointer<Void> handle,
       Pointer<Utf8> requestJson,
       Pointer<Pointer<Utf8>> outResult,
       Pointer<Int32> outLen,
     );
-typedef _QueryDart =
+typedef _SearchDart =
     int Function(
-      Pointer<Utf8>,
+      Pointer<Void>,
       Pointer<Utf8>,
       Pointer<Pointer<Utf8>>,
       Pointer<Int32>,
     );
 
-typedef _QueryCloseNative = Void Function();
-typedef _QueryCloseDart = void Function();
+typedef _CloseSearchNative = Void Function(Pointer<Void>);
+typedef _CloseSearchDart = void Function(Pointer<Void>);
 
 typedef _SetLogSinkNative =
     Void Function(Pointer<NativeFunction<LogWriteNative>> fn, Int32 minLevel);

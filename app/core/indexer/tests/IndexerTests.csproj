@@ -36,10 +36,20 @@
     <Compile Include="../FuzzyVocabulary.cs" Link="FuzzyVocabulary.cs" />
     <Compile Include="../ReadingRanker.cs" Link="ReadingRanker.cs" />
     <Compile Include="../SearchSession.cs" Link="SearchSession.cs" />
+    <!-- S1 查询计划（SearchSession 的 PlanExecutor 依赖；与 CLI 同源）。 -->
+    <Compile Include="../SearchPolicy.cs" Link="SearchPolicy.cs" />
+    <Compile Include="../SearchPlan.cs" Link="SearchPlan.cs" />
+    <Compile Include="../SearchPlanCompiler.cs" Link="SearchPlanCompiler.cs" />
+    <!-- C ABI v2：请求 / 响应 v2（SearchApi）与导出层（Ffi）。
+         导出层以同源编译进测试程序集，SearchApiTests 直接调托管入口验证句柄 / 错误码。 -->
+    <Compile Include="../SearchApi.cs" Link="SearchApi.cs" />
+    <Compile Include="../indexer-ffi/Ffi.cs" Link="indexer-ffi/Ffi.cs" />
     <!-- CLI 入口（诊断子命令退出码断言）；入口由 StartupObject 指定为测试 Program。 -->
     <Compile Include="../Program.cs" Link="Program.cs" />
     <!-- 回放 harness（Program.cs 的 replay 分派依赖；同源编入测试程序集）。 -->
     <Compile Include="../Replay.cs" Link="Replay.cs" />
+    <!-- 歌词分布统计（Program.cs 的 lyrics 分派依赖；S0 校准 V6 护栏）。 -->
+    <Compile Include="../LyricsStats.cs" Link="LyricsStats.cs" />
     <!-- EraStore（自研索引存储）：整目录共享，新增文件无需再改工程。 -->
     <Compile Include="../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
@@ -75,6 +85,7 @@
   <ItemGroup>
     <!-- 测试向量随输出复制（运行器优先在输出目录旁查找）。 -->
     <None Include="vectors/*.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="vectors/plan/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

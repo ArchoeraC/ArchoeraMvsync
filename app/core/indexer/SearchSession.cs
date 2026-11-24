@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Text.Json;
-using Archoera.Text;
 
 namespace Archoera.Indexer;
 
@@ -15,6 +14,12 @@ internal sealed class SearchRequest
 
     /// <summary>只搜元数据（标题 / 歌手 / 专辑 / 文件名），不触歌词 / 译文 / 音译。</summary>
     public bool Metadata { get; init; }
+
+    /// <summary>
+    /// 只搜歌词字段族（原文 / 译文 / 音译 / 歌词拼音 / 歌词首字母），不触元数据。
+    /// 与 <see cref="Metadata"/> 互斥；同时为真时按元数据语义（调用方保证不出现）。
+    /// </summary>
+    public bool Lyrics { get; init; }
 
     public int Limit { get; init; } = 200;
 
@@ -44,12 +49,17 @@ internal sealed class SearchRequest
         var query = root.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String
             ? q.GetString() ?? ""
             : "";
+        var scope = root.TryGetProperty("scope", out var scopeElement)
+            && scopeElement.ValueKind == JsonValueKind.String
+            ? scopeElement.GetString()
+            : null;
+        var metadata = string.Equals(scope, "metadata", StringComparison.OrdinalIgnoreCase);
+        var lyrics = string.Equals(scope, "lyrics", StringComparison.OrdinalIgnoreCase);
         return new SearchRequest
         {
             Query = query,
-            Metadata = root.TryGetProperty("scope", out var scope)
-                && scope.ValueKind == JsonValueKind.String
-                && string.Equals(scope.GetString(), "metadata", StringComparison.OrdinalIgnoreCase),
+            Metadata = metadata,
+            Lyrics = lyrics && !metadata,
             Limit = ReadInt(root, "limit", 200),
             Offset = ReadInt(root, "offset", 0),
             Fuzzy = ReadBool(root, "fuzzy", false),
@@ -119,6 +129,8 @@ internal sealed class SearchResult
 /// <summary>
 /// 只读查询会话：缓存一个 <see cref="FtsStore"/> 连接（按 <c>search.db</c> 路径复用），
 /// 在库内执行「主趟 → 拼音宽松 → 日文读音 → 跨语言 → 模糊 → 中文容错」六段渐进查询。
+/// S1 起这六趟由 <see cref="SearchPlanCompiler"/> 编译成有序 <see cref="Step"/>，
+/// <see cref="ExecuteUncached"/> 只保留 Plan 一条执行路径。
 ///
 /// 查询规则与旧 Dart <c>SearchIndex.search</c> 逐项等价；区别只是执行位置。
 /// 所有调用在静态锁下串行——Dart 侧只在 UI isolate 查询，锁只用于防御。
@@ -254,7 +266,7 @@ internal sealed class SearchSession : IDisposable
     private string BuildCacheKey(SearchRequest request)
         => string.Join('\u0001',
             request.Query.Trim().ToLowerInvariant(),
-            request.Metadata ? "meta" : "all",
+            request.Metadata ? "meta" : request.Lyrics ? "lyrics" : "all",
             request.Limit.ToString(CultureInfo.InvariantCulture),
             request.Offset.ToString(CultureInfo.InvariantCulture),
             request.Fuzzy ? "fuzzy" : "exact",
@@ -266,6 +278,7 @@ internal sealed class SearchSession : IDisposable
     {
         var result = new SearchResult();
         var tokens = Analyzer.AnalyzeQuery(request.Query);
+        var plan = SearchPlanCompiler.Compile(request, tokens, _meta, SearchPolicy.Default);
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         void Merge(string? expression, string pass, IReadOnlyList<string[]>? readingSequences = null)
@@ -277,121 +290,52 @@ internal sealed class SearchSession : IDisposable
             }
         }
 
-        // 主趟：精确表达式（词法 / 拼音 / 首字母）。
-        Merge(SearchQuery.CompileMatch(tokens, request.Metadata), SearchPassNames.Lexical);
-
-        // 丢词降级（精度审计 §18 / §22 / §23）：多词查询主趟不足时，**先试「少匹配一个词」**，
-        // 而不是直接放宽到读音 / 拼音 / 跨语言 / 容错。
-        //
-        // 理由：减词仍是**字面匹配**，只是少了约束；改读音是**换了一个维度**，
-        // 语义可能完全无关（`鬱 → yu` 召回 36.8% 全库）。见
-        // `docs/local-search-indexer-references.md` §6.2 的方向性区分。
-        //
-        // **逐轮尝试**（§22）：不能只丢末词就收工——`周杰伦 晴天` 丢掉「晴天」后
-        // 仍会靠「周杰伦」返回结果，于是永远轮不到「保留晴天、丢掉周杰伦」这一轮。
-        // 每一轮丢一个词、重新召回，命中数达到阈值即停。
-        //
-        // **按字段亲和度排序**（§23）：位置顺序只是初始猜测；更可靠的信号是
-        // 「该词在 title 与 artist 列的命中分布」——只在 title 命中的词是歌名，最后才丢。
-        // 这样「晴天 周杰伦」这类反向写法也能正确保留歌名。
-        if (result.Items.Count < request.MinExact && SearchQuery.AllowDropTokens)
+        // 只保留一条执行路径：按 plan.Steps 顺序跑，门语义逐项复刻旧 if 链
+        // （MinExact 短路 / fuzzy 开关），合并顺序与去重规则不变。
+        var steps = plan.Steps;
+        var dropsOrdered = false;
+        for (var index = 0; index < steps.Count; index++)
         {
-            var candidates = SearchQuery.DropTokenCandidates(tokens, request.Query);
-            if (candidates.Count > 0)
+            var step = steps[index];
+            if (step.Gate.RequiresMainMiss && result.Items.Count >= request.MinExact) continue;
+            if (step.Gate.RequiresFuzzy && !request.Fuzzy) continue;
+
+            // 丢词候选按 title / artist 命中分布重排：只在门真正打开、且遇到第一个
+            // drop step 时探测一次（保持旧实现的查询成本特征）。
+            if (step.DropIndex >= 0 && !dropsOrdered)
             {
-                var (titleCounts, artistCounts) = ProbeFieldAffinity(request.Query, candidates.Count);
-                candidates = SearchQuery.OrderDropsByFieldAffinity(
-                    candidates, titleCounts, artistCounts);
+                dropsOrdered = true;
+                var (titleCounts, artistCounts) =
+                    ProbeFieldAffinity(request.Query, plan.DropCandidates.Count);
+                steps = SearchPlanCompiler.OrderDropSteps(plan, titleCounts, artistCounts);
+                step = steps[index];
             }
 
-            foreach (var dropIndex in candidates)
-            {
-                var dropped = SearchQuery.CompileDropTokens(
-                    tokens, request.Query, request.Metadata, dropIndex);
-                if (dropped is null) continue;
+            var expression = SearchPlanCompiler.ResolveDeferredExpression(
+                step, tokens, request.Metadata, request.Lyrics, _store.LoadFuzzyVocabulary);
 
-                result.Passes.DropTokens = 1;
-                Merge(dropped, SearchPassNames.DropTokens);
+            // 旧 pass 计数：字面 / 丢词 / 拼音 / 读音 / 跨语言只在表达式非空时计；
+            // 模糊趟只要执行就计（表达式由词表延迟生成）；中文容错按 step 声明计。
+            if (step.NeedsFuzzyVocabulary || expression is not null || step.CountPassOnNullExpression)
+                CountPass(result.Passes, step.Pass);
 
-                // 丢掉第 i 个词后仍有后续丢法；但若本轮的命中已明显优于
-                // 「丢掉更靠前 / 更靠后的词」，继续尝试也只会得到更宽的结果。
-                // 直接以**第一个非空**的丢法为准，既避免取到最宽的结果，
-                // 又保证「保留歌名」的丢法排在前面（见 DropTokenCandidates 的方向）。
-                if (result.Items.Count >= request.MinExact) break;
-            }
-        }
-
-        // 兜底趟只在主趟命中不足时付钱（渐进式，绝大多数查询止步于此）。
-        if (result.Items.Count < request.MinExact)
-        {
-            var expression = SearchQuery.CompilePinyinLoose(tokens, request.Metadata);
-            if (expression is not null)
-            {
-                result.Passes.PinyinLoose = 1;
-                Merge(expression, SearchPassNames.PinyinLoose);
-            }
-        }
-        if (result.Items.Count < request.MinExact && (_meta.HasJapanese || _meta.HasKorean))
-        {
-            var expression = SearchQuery.CompileReading(tokens, request.Metadata);
-            if (expression is not null)
-            {
-                result.Passes.Reading = 1;
-                // T1-4：读音趟内按「整词前缀 > 整词包含」重排（bm25 只保证连续子串命中）。
-                Merge(expression, SearchPassNames.Reading, SearchQuery.ReadingSequences(tokens));
-            }
-        }
-        if (result.Items.Count < request.MinExact)
-        {
-            // 语言画像（v7）：按候选脚本裁剪，纯英文库不再为汉字段付 MATCH 成本，
-            // 但仍保留「汉字查询 → 英文释义候选」方向（反之亦然）。
-            var candidates = FilterCrossLingual(tokens.CrossLingual);
-            if (candidates.Count > 0)
-            {
-                tokens.CrossLingual.Clear();
-                tokens.CrossLingual.AddRange(candidates);
-                var expression = SearchQuery.CompileCrossLingual(tokens, request.Metadata);
-                if (expression is not null)
-                {
-                    result.Passes.CrossLingual = 1;
-                    Merge(expression, SearchPassNames.CrossLingual);
-                }
-            }
-        }
-
-        // 模糊趟：仅在调用方显式启用且前几趟仍不足时执行。
-        if (!request.Fuzzy || result.Items.Count >= request.MinExact) return result;
-
-        if (SearchQuery.HasFuzzyEligible(tokens))
-        {
-            result.Passes.Fuzzy = 1;
-            // T1-8：先用索引词表过滤变体（只留真实存在且 Damerau ≤1 的 term），
-            // 词表加载失败时返回空集 → CompileFuzzy 自动退回旧的变体枚举行为。
-            Merge(SearchQuery.CompileFuzzy(tokens, request.Metadata, _store.LoadFuzzyVocabulary()),
-                SearchPassNames.Fuzzy);
-        }
-        if (result.Items.Count >= request.MinExact) return result;
-
-        // 中文容错趟：删除 / 相邻换位变体逐个编译后 OR 进同一趟。
-        var variants = SearchQuery.CjkVariants(request.Query);
-        if (variants.Count == 0) return result;
-        result.Passes.CjkFuzzy = 1;
-
-        var parts = new List<string>(variants.Count);
-        foreach (var variant in variants)
-        {
-            var expression = SearchQuery.CompileMatch(
-                Analyzer.AnalyzeQuery(variant), metadata: false);
-            if (expression is not null) parts.Add(expression);
-        }
-        if (parts.Count > 0)
-        {
-            var joined = parts.Count == 1 ? parts[0] : "(" + string.Join(" OR ", parts) + ")";
-            Merge(request.Metadata
-                ? $"{{{SearchQuery.MetadataColumns}}} : ({joined})"
-                : joined, SearchPassNames.CjkFuzzy);
+            Merge(expression, step.Pass, step.ReadingSequences);
         }
         return result;
+    }
+
+    /// <summary>把趟次名映射到 <see cref="PassCounts"/> 字段（未列出的趟不计）。</summary>
+    private static void CountPass(PassCounts passes, string pass)
+    {
+        switch (pass)
+        {
+            case SearchPassNames.DropTokens: passes.DropTokens = 1; break;
+            case SearchPassNames.PinyinLoose: passes.PinyinLoose = 1; break;
+            case SearchPassNames.Reading: passes.Reading = 1; break;
+            case SearchPassNames.CrossLingual: passes.CrossLingual = 1; break;
+            case SearchPassNames.Fuzzy: passes.Fuzzy = 1; break;
+            case SearchPassNames.CjkFuzzy: passes.CjkFuzzy = 1; break;
+        }
     }
 
     /// <summary>
@@ -425,24 +369,6 @@ internal sealed class SearchSession : IDisposable
             artist.Add(_store.CountMatches($"{{artist_tok}} : ({lexical})"));
         }
         return (title, artist);
-    }
-
-    /// <summary>
-    /// 按曲库语言画像裁剪跨语言候选（v7）：汉字候选只可能在库内含汉字时命中，
-    /// 拉丁释义候选只可能在库内含拉丁字母时命中。
-    ///
-    /// 只裁「不可能命中」的方向，不裁整趟——纯英文库里输入「爱」仍能经英文释义候选命中英文标题。
-    /// </summary>
-    private List<string> FilterCrossLingual(List<string> candidates)
-    {
-        var output = new List<string>(candidates.Count);
-        foreach (var candidate in candidates)
-        {
-            var han = candidate.Any(ScriptRanges.IsCjk);
-            if (han ? !_meta.HasHan : !_meta.HasLatin) continue;
-            output.Add(candidate);
-        }
-        return output;
     }
 
     private List<SearchHit> ExecuteMatch(

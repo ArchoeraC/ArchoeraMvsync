@@ -107,7 +107,7 @@ internal static class IndexerJson
     /// <summary>
     /// 查询侧分析结果（<see cref="Analyzer.AnalyzeQuery"/>）序列化：与索引侧同形
     /// （空格分隔的 <c>tokens</c> / <c>pinyin</c> / <c>initials</c>），供 Dart 的
-    /// <c>indexer_analyze</c> 取得含连写全拼切分的词元；另附 <c>defs</c> = 空格连接的
+    /// <c>era_analyze</c> 取得含连写全拼切分的词元；另附 <c>defs</c> = 空格连接的
     /// 跨语言候选（<see cref="QueryTokens.CrossLingual"/>，T1，Unihan 释义扩展）。
     /// </summary>
     public static string Analysis(QueryTokens query) => Write(w =>

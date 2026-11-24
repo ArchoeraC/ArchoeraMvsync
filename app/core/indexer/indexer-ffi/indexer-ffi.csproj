@@ -44,7 +44,12 @@
     <Compile Include="../SearchQuery.cs" Link="SearchQuery.cs" />
     <Compile Include="../FuzzyVocabulary.cs" Link="FuzzyVocabulary.cs" />
     <Compile Include="../ReadingRanker.cs" Link="ReadingRanker.cs" />
+    <Compile Include="../SearchPolicy.cs" Link="SearchPolicy.cs" />
+    <Compile Include="../SearchPlan.cs" Link="SearchPlan.cs" />
+    <Compile Include="../SearchPlanCompiler.cs" Link="SearchPlanCompiler.cs" />
     <Compile Include="../SearchSession.cs" Link="SearchSession.cs" />
+    <!-- C ABI v2 的请求 / 响应 JSON（SearchApi）；导出层 Ffi.cs 依赖它。 -->
+    <Compile Include="../SearchApi.cs" Link="SearchApi.cs" />
     <Compile Include="../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
   </ItemGroup>
 

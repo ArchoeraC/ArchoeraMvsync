@@ -10,7 +10,7 @@ namespace Archoera.Indexer;
 /// <summary>
 /// 索引器统一日志门面（与 scanner 的 <c>Log</c> 同构）。
 ///
-/// 宿主（Dart）在载入 indexer-ffi 后，经 <c>indexer_set_log_sink</c> 注入
+/// 宿主（Dart）在载入 indexer-ffi 后，经 <c>era_set_log_sink</c> 注入
 /// <c>libarchoera_log</c> 的 <c>archoera_log_write</c> 指针，索引器日志即走
 /// 统一格式/落盘；未注入时（CLI / 测试）回退 stderr，格式与统一日志核心一致：
 /// <c>[HH:mm:ss LEVEL] [tag] message</c>（本地时间）。
@@ -34,7 +34,7 @@ public static class Log
     private static int _minLevel = Info;
 
     /// <summary>
-    /// 注入/注销统一日志 sink（由 indexer-ffi 的 <c>indexer_set_log_sink</c> 调用）。
+    /// 注入/注销统一日志 sink（由 indexer-ffi 的 <c>era_set_log_sink</c> 调用）。
     /// sink=NULL 注销并回退 stderr；[minLevel] 越界时收敛到 0..4。幂等，可随时调用。
     /// </summary>
     public static unsafe void SetSink(

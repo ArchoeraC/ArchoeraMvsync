@@ -10,7 +10,7 @@
 /// `docs/local-search-index-plan.md` §9.2 / §9.3）。
 library;
 
-/// 查询侧分析词元：与索引侧同构的分析结果（`indexer_analyze`）。
+/// 查询侧分析词元：与索引侧同构的分析结果（`era_analyze`）。
 ///
 /// 由原生分析器（C# `Analyzer.AnalyzeQuery`）产出：CJK 段输出 bigram + unigram
 /// 词元与逐字主读音拼音，拉丁 / 数字段整词进入三列；查询侧另对纯拉丁词做
@@ -34,7 +34,7 @@ class AnalyzerTokens {
   /// 首字母串（无有效内容时为 null）。
   final String? initials;
 
-  /// 跨语言候选（T1，仅查询侧；`indexer_analyze` 的 `defs`）：拉丁/数字词 → 候选汉字，
+  /// 跨语言候选（T1，仅查询侧；`era_analyze` 的 `defs`）：拉丁/数字词 → 候选汉字，
   /// CJK 字 → 英文释义词。默认空（向后兼容旧库 / 手建 tokens）。
   final List<String> crossLingual;
 
@@ -45,13 +45,18 @@ class AnalyzerTokens {
       (initials == null || initials!.trim().isEmpty);
 }
 
-/// 本地搜索范围（对齐 FTS5 列过滤，设计文档 §4.5）。
+/// 本地搜索范围（对齐 ABI v2 的 `scope` 取值：`all` / `metadata` / `lyrics`）。
+///
+/// 序列化直接用 `name`（与请求 JSON 的 `scope` 字段一一对应）。
 enum LocalSearchScope {
   /// 全部列（标题 / 歌手 / 专辑 / 歌词 / 译文 / 音译 / 拼音 / 文件名）。
   all,
 
   /// 仅元数据列（标题 / 歌手 / 专辑 / 文件名 / 拼音；不触歌词段）。
   metadata,
+
+  /// 仅歌词列（歌词原文 / 译文 / 音译 / 读音；不触元数据列）。
+  lyrics,
 }
 
 /// 单条本地搜索命中（`track_id` = `tracks.id`，与 UI 曲目 id 一致）。

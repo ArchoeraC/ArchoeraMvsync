@@ -18,6 +18,8 @@ public static class Program
 {
     private static int _pass;
     private static int _fail;
+    private static int _knownGap;
+    private static int _blocked;
 
     public static int Main(string[] args)
     {
@@ -33,6 +35,13 @@ public static class Program
         RunDirectAssertions();
         EndToEnd.Run();
         SearchLayerTests.Run();
+        SearchPlanTests.Run();
+        PlanVectorTests.Run();
+        SearchApiTests.Run();
+        NegativeBaselineTests.Run();
+        ReplaySampleTests.Run();
+        ReplayCompareTests.Run();
+        LyricsStatsTests.Run();
         EraStoreFormatTests.Run();
         EraStoreDictTests.Run();
         EraStorePostingsTests.Run();
@@ -53,7 +62,7 @@ public static class Program
             RunVectorFile(file);
 
         Console.WriteLine();
-        Console.WriteLine($"PASS {_pass}  FAIL {_fail}");
+        Console.WriteLine($"PASS {_pass}  FAIL {_fail}  KNOWN-GAP {_knownGap}  BLOCKED {_blocked}");
         if (_fail == 0)
         {
             Console.WriteLine("ALL PASS");
@@ -418,6 +427,29 @@ public static class Program
 
     /// <summary>供其它测试文件（EndToEnd）复用的断言入口。</summary>
     public static void Check(string name, bool ok, string? detail = null) => Assert(name, ok, detail);
+
+    /// <summary>
+    /// **已知缺口**：要求当前尚未成立（S0 负例对照基线）。不增加 FAIL，只记录；
+    /// 若行为已经修好（<paramref name="met"/> 为 true），自动记为 PASS 并提示可以清掉标记。
+    /// </summary>
+    public static void KnownGap(string name, bool met, string detail)
+    {
+        if (met)
+        {
+            _pass++;
+            Console.WriteLine($"PASS {name}（缺口已消失，可删除 KNOWN-GAP 标记）");
+            return;
+        }
+        _knownGap++;
+        Console.WriteLine($"KNOWN-GAP {name} ({detail})");
+    }
+
+    /// <summary>当前无法断言的条目（缺 plan / explain / scope=lyrics 等）；只记录，不伪造期望。</summary>
+    public static void Blocked(string name, string reason)
+    {
+        _blocked++;
+        Console.WriteLine($"BLOCKED {name} ({reason})");
+    }
 
     /// <summary>定位向量目录：参数 &gt; 输出目录旁 &gt; 向上查找 tests/vectors。</summary>
     private static string? ResolveVectorsDir(string[] args)

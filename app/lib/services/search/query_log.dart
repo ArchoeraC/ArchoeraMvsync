@@ -52,7 +52,7 @@ class QueryLogEntry {
   String toString() => toJson().toString();
 }
 
-/// 一次查询的原始计数（来自 `indexer_query` 的 `passes` 对象）。
+/// 一次查询的原始计数（来自 `era_search_run` 响应的 `passes` 对象）。
 ///
 /// 计数器是**累加值**（`SearchIndex` 里 `+=`），所以调用方必须先取**差值**
 /// 再交给 [passesOf]，否则同一条查询会带上此前所有查询的趟次。
