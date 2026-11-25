@@ -793,3 +793,99 @@ COWAIT_DISPATCH_WINDOW_MESSAGES)` 泵消息，不再 `Sleep`。交叉编译通�
 - macOS：`bash app/tool/verify_macos.sh [--download]`（clang 交叉 + macOS SDK）
 
 详见 `docs/native-bridge-local-verify.md`。
+
+---
+
+## 附：窗口关闭崩溃（macOS / Windows）与窗口能力迁入 C++ 的计划
+
+### 现象与证据
+
+- macOS 关闭窗口 / 退出时 `SIGSEGV`，崩溃线程是主线程，栈顶为：
+  `NSNotificationCenter postNotificationName:` → `_CFXRegistrationPost` →
+  `__CFNOTIFICATIONCENTER_IS_CALLING_OUT_TO_AN_OBSERVER__` → **跳转到未映射地址**
+  （`crash-849`：`0x119ef0ec8` 不在任何 VM region），调用链经
+  `-[NSWindow resignKeyWindow]` / `_closeForTermination` / `NSApplication terminate`。
+- Windows 侧同类现象：`window_manager`（0.6+ 依赖 `nativeapi`/`cnativeapi`）在
+  注册/注销窗口监听、跨线程同步读窗口状态时卡死或崩溃（见
+  `lib/stores/window_full_screen.dart` 的注释与规避）。
+
+### 根因（第三方插件生命周期，不是 Flutter 本身）
+
+`window_manager 0.7` 经 `nativeapi`/`cnativeapi 0.6.1` 实现窗口能力。其 macOS 后端
+`cxx_impl/src/platform/macos/window_manager_macos.mm`：
+
+- 在 `StartEventListening()` 里向 `NSNotificationCenter` 注册 9 个窗口通知
+  （`windowDidResignKey:` 等），观察者是 `delegate_`，内部保存 **原始 `Impl*`** 指针；
+- 只有 `Impl` 析构时 `StopEventListening()` 才 `removeObserver`；
+- 应用终止 / 引擎关闭时，AppKit 关闭窗口 → 投递 `resignKey` 等通知 → 观察者仍指向
+  已释放的 `Impl` / 引擎回调 → 跳转到被 unmap 的内存 → SIGSEGV。
+
+这与「是不是 Flutter 跨平台 bug」无关；是插件在**进程退出时序**里没有先把原生观察者
+摘干净。Flutter 官方 embedder 不控制插件的这些 observer。
+
+### 已应用的止损（本次）
+
+- `WindowControls` 的关闭按钮**不再调用 `window.close()`**（那是 cnativeapi 的直接
+  关窗路径，必触发上述通知）。改为转交 `TrayIntegration` 注册的统一关闭策略
+  （后台常驻 / 退出 / 询问），与系统关闭请求同一条路（`appWindowCloseHandler`）。
+- 退出仍走 `quitApplication` → 落盘 → 平台桥接收尾 → `exit(0)`（不经过 AppKit 的
+  窗口关闭链），与 Linux 的既有规避一致。
+
+> 剩余风险：⌘Q / 系统注销仍可能由 AppKit 走 `terminate → closeForTermination`；
+> 只要 `window_manager` 的原生观察者仍在，就有同一崩溃面。要彻底消除，需把窗口能力
+> 迁入自研桥接（见下）。
+
+### 迁移计划（符合「系统能力只走 C++ 桥接器」）
+
+目标：删除 `window_manager` / `nativeapi` / `cnativeapi` 依赖，窗口生命周期由
+`app/native/platform` 拥有（观察者的注册与注销都在我们的对象内，退出前可显式 stop）。
+
+**新增 ABI（`archoera_platform.h`，ABI v4）**
+
+```c
+APL_API int32_t apl_window_set_size(int32_t w, int32_t h);
+APL_API int32_t apl_window_set_min_size(int32_t w, int32_t h);
+APL_API int32_t apl_window_center(void);
+APL_API int32_t apl_window_show(void);
+APL_API int32_t apl_window_hide(void);
+APL_API int32_t apl_window_minimize(void);
+APL_API int32_t apl_window_set_maximized(int32_t on);
+APL_API int32_t apl_window_set_fullscreen(int32_t on);
+APL_API int32_t apl_window_set_always_on_top(int32_t on);
+APL_API int32_t apl_window_set_resizable(int32_t on);
+APL_API int32_t apl_window_set_decor(int32_t mode);   /* system / caption / borderless */
+APL_API int32_t apl_window_request_close(void);       /* 只发事件，不直接关窗 */
+APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观察者 */
+```
+
+事件扩为：`APL_EVENT_WINDOW_STATE`（minimized/focused/maximized/fullscreen 位域）+
+`APL_EVENT_WINDOW_CLOSE_REQUEST`（Dart 决定隐藏/退出，桥接不自行关窗）。
+
+**平台实现要点**
+
+- macOS：桥接持有 `NSWindowDelegate` + `NSNotificationCenter` 观察者，**所有 observer
+  句柄都有 owner 并在 stop/destroy 时 remove**；`applicationShouldTerminate` 可经桥接
+  暴露的 native hook 转交 Dart 的 `quitApplication`（落盘后 `exit(0)`），不再让 AppKit
+  走 `closeForTermination`。
+- Windows：`SetWindowLongPtrW(GWLP_WNDPROC)` 子类化 + `WM_*` 处理；`WM_CLOSE` 只投递
+  `WINDOW_CLOSE_REQUEST`，不直接 `DestroyWindow`；退出前恢复原 wndproc。
+- Linux：沿用现有 X11/GTK 窗口状态后端，补 `_NET_WM_STATE_*`（最大化 / 全屏 /
+  always-on-top）与 `WM_DELETE_WINDOW` 事件转发。
+
+**Dart 侧**
+
+- `lib/services/platform/window_controls.dart`（新）封装 `apl_window_*`，替换
+  `window_manager` 的调用点（`main.dart`、`window_controls.dart`、
+  `window_full_screen.dart`、`tray_integration_logic.dart`、`window_effects.dart`、
+  `power_saver.dart`、`window_decor.dart`）。
+- 关闭路径统一：`apl_window_request_close` → Dart 策略 → `hide()` 或 `quitApplication`。
+
+**验收**
+
+1. `rg "window_manager|nativeapi|cnativeapi" app/pubspec.* app/lib` 零命中；
+2. macOS：⌘Q / 关闭按钮 / 托盘退出三条路径各 20 次无崩溃，且落盘完整；
+3. Windows：关闭 + 快速重开 ×20 不卡死；4. 三端窗口状态（最大化/全屏/焦点）
+   与现行为一致；5. `flutter test` 与 ABI 守卫（`native_platform_abi_test.dart`）全绿。
+
+> 迁移前，任何**新功能**不得再新增 `window_manager` 调用；本节的止损（关闭按钮改道）
+> 是所有现网版本的推荐修复。

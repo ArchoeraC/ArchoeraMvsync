@@ -8,12 +8,16 @@
 /// 最大化 / 关闭以圆形幽灵按钮并入页面顶栏，空白处整行可拖动窗口。
 library;
 
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../app/app_quit.dart';
 import '../../l10n/l10n.dart';
+import '../common/tray_integration.dart';
 import '../player/s_controls.dart';
 
 /// 铺满父级的「拖动窗口」手势层，位于内容**之下**。
@@ -98,8 +102,24 @@ class _WindowControlsState extends State<WindowControls> {
     }
   }
 
-  /// 走 nativeapi 的关闭请求：仍由 TrayIntegration 决定隐藏到托盘还是退出。
-  void _close() => _window?.close();
+  /// 关闭窗口：**不得**直接调 `window.close()`。
+  ///
+  /// window_manager 0.7（cnativeapi）的原生关闭路径会在 AppKit 窗口通知里回调
+  /// 已释放的监听目标——macOS 关窗 / 终止时必现 SIGSEGV（Windows 同类崩溃）。
+  /// 这里转交给 TrayIntegration 注册的策略入口（后台常驻 / 退出 / 询问），
+  /// 与系统关闭请求走同一条路。
+  void _close() {
+    final handler = appWindowCloseHandler;
+    if (handler != null) {
+      unawaited(handler());
+      return;
+    }
+    // 托盘尚未挂载（极早期 / 测试 / 桥接缺失）：退回统一退出路径，
+    // 依旧不触碰原生 window.close()。
+    unawaited(
+      quitApplicationWith(ProviderScope.containerOf(context)),
+    );
+  }
 
   Widget _button({
     required String tooltip,

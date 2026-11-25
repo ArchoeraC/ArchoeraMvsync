@@ -25,6 +25,16 @@ import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 part 'tray_integration/tray_integration_logic.dart';
 
+/// 自绘标题栏「关闭」按钮的统一入口（由 [TrayIntegration] 注册）。
+///
+/// **不得**在关闭按钮里调用 `window.close()`：window_manager 0.7（cnativeapi）
+/// 的原生关闭路径会在 AppKit 的窗口通知里回调已释放的监听目标，macOS 终止 /
+/// 关窗时必现 SIGSEGV（Windows 同类崩溃同理）。关闭按钮必须复用系统关闭请求
+/// 同一条策略（后台常驻 / 直接退出 / 询问），由本回调转交。
+///
+/// 未注册（托盘尚未挂载 / 单元测试）时为 null，调用方应回退到统一退出路径。
+Future<void> Function()? appWindowCloseHandler;
+
 /// 后台常驻：系统托盘集成（自研平台桥接 `apl_tray_*`）。
 ///
 /// 2026-10-02 由 Flutter 插件 `tray_manager` 迁至自研桥接：`tray_manager` 0.6+
@@ -71,14 +81,33 @@ class _TrayIntegrationState extends ConsumerState<TrayIntegration> {
   /// 落到临时文件的图标路径（销毁时清理）。
   String? _iconTempPath;
 
+  /// 注册到 [appWindowCloseHandler] 的闭包（dispose 时按同一实例注销）。
+  Future<void> Function()? _registeredCloseHandler;
+
   @override
   void initState() {
     super.initState();
+    _registeredCloseHandler = _onCloseButton;
+    appWindowCloseHandler = _registeredCloseHandler;
     _setup();
+  }
+
+  /// 自绘标题栏关闭按钮：与系统关闭请求共用 `_handleWindowClose` 的策略。
+  Future<void> _onCloseButton() async {
+    if (_handlingClose) return;
+    _handlingClose = true;
+    try {
+      await _handleWindowClose();
+    } finally {
+      _handlingClose = false;
+    }
   }
 
   @override
   void dispose() {
+    if (identical(appWindowCloseHandler, _registeredCloseHandler)) {
+      appWindowCloseHandler = null;
+    }
     final listenerId = _windowListenerId;
     if (listenerId != null) _window?.removeListener(listenerId);
     _disposeTray();
