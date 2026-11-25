@@ -48,17 +48,16 @@ internal sealed class OrIter : IDocIter
         if (_current >= target) return true;
         if (_exhausted) return false;
 
-        // 把所有落后于 target 的子迭代器抬到 target，耗尽的移出堆。
-        var changed = false;
-        for (var i = 0; i < _children.Count; i++)
+        // 只抬堆顶那些仍落后于 target 的子迭代器：堆按 Current 升序，落后的一定在
+        // 堆顶连续出现。旧实现每次 Advance 线性扫全部 children 并 Rebuild（O(K)），
+        // 前缀展开 1 万词条时单次查询要扫 300M 次（T3.14 的 dfs 热点）。
+        while (_heapCount > 0)
         {
-            if (_dead[i]) continue;
-            var child = _children[i];
-            if (child.Current >= target) continue;
-            if (!child.Advance(target)) _dead[i] = true;
-            changed = true;
+            var index = _heap[0];
+            if (_children[index].Current >= target) break;
+            if (_children[index].Advance(target)) SiftDown(0);
+            else { _dead[index] = true; PopMin(); }
         }
-        if (changed) Rebuild();
 
         if (_heapCount == 0)
         {

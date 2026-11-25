@@ -1,6 +1,11 @@
 # 本地曲库搜索索引器 性能实测报告（P5）（2026-11-12）
 
-> 对象：**真实产物** `app/core/indexer`（C# FTS5 索引器，`FtsStore` + `Analyzer` + `IndexerEngine`）。
+> **⚠ 历史报告（pre-EraStore）**：本报告由 v7 / FTS5 时代的实现与机器跑出，
+> 其中的 `search.db` / `search_fts` / `schema_version=7` / `dbstat` 数据都不再适用。
+> 当前实现只写 EraStore（`search.era/`），门禁与最新实测见
+> `docs/local-search-indexer-t314-gate.md`。本文件保留作沿革对照，**不要据此判断现状**。
+>
+> 对象：~~C# FTS5 索引器（`FtsStore` + `Analyzer` + `IndexerEngine`）~~ → 现为 EraStore（`Analyzer` + `IndexerEngine` + `EraStore`）。
 > harness：`app/core/indexer/bench/`（确定性语料生成器 + 跑测编排 + 进程内查询 harness，MATCH 构造与生产查询编译器 `app/core/indexer/SearchQuery.cs` 同构）。
 > 判定依据：设计文档 `docs/local-search-index-plan.md` §2.2（预算）/ §5.5（条件触发）/ §7.3–7.4 / §8 / §10（P0/P5）。
 > 命令：`bash app/core/indexer/bench/run_bench.sh`（N=30000，`--with-lrc`，查询 LIMIT=50,10000）；本报告数据由该命令一次跑出。

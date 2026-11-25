@@ -189,7 +189,7 @@ class TracksDb {
 
   /// 按 id 列表取行（**保持 [ids] 的顺序**；不含 lyrics）。
   ///
-  /// 供本地索引排行分页按排名切片取行（`search.db` 的 trackId 顺序 →
+  /// 供本地索引排行分页按排名切片取行（索引返回的 trackId 顺序 →
   /// `library.db` 行）。缺失的 id 被跳过（索引是派生数据，可能短暂落后）；
   /// 分批查询避免 SQL 变量数上限。
   List<TrackRow> listTracksByIds(List<String> ids) {
@@ -213,7 +213,7 @@ class TracksDb {
 
   /// 返回 [ids] 中在 tracks 表里**实际存在**的子集（保持输入顺序）。
   ///
-  /// 用于索引排行分页前的清洗：剔除 `search.db` 中残留的已删除 id，
+  /// 用于索引排行分页前的清洗：剔除索引中残留的已删除 id，
   /// 保证「按排名切片取行」每页行数与排名窗口对齐。
   List<String> existingTrackIds(List<String> ids) {
     if (ids.isEmpty) return const [];

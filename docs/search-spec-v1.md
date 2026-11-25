@@ -273,9 +273,12 @@ est_typo   = est * variants(term)
 | 7 | `docId` | 升序 | 稳定键，保证重复查询 / 重启 / 翻页一致 |
 
 > 任务口径简称的「kind → coverage → field → bm25 → docId」是这 7 键的子集，实际以本表为准。
-> ⚠ **阶段约束**：S2 仍在旧存储上，没有 DocStore 原文，`exactness` / `proximity` 只能记常量，
-> 实际生效的是 kind / coverage / field / bm25 / docId；这两个键到 S3 才生效，届时 MUST 再跑
-> 一轮回放评审，不得与桶序首秀同批上线（RP §3.6.3）。
+> **S3 状态（2026-11-25）**：`exactness` / `proximity` 已按本表真实生效——
+> 精确度来自 DocStore v3 的 `title_norm/artist_norm/album_norm`（Mixed/Meta 步、单步命中
+> ≤2048 才复核，空白不敏感、三列取最优并回传命中列作为 `field`）；邻近度对
+> 单 term=0、整短语=`token-1`、散落多 term 用元数据字段内的位置最小窗口，歌词 / 无位置 /
+> 超 cap 记 `int.MaxValue`（wire `-1`）。歌词族没有原文，`exactness` 恒 `none`（按本表
+> 「宁可把歌词命中排低」）。回放评审已随 T3.11 完成（30k / 5k 逐项对比）。
 
 `explain.bucket` 只序列化**前五键**（kind / coverage / field / exactness / proximity）；
 `bm25` 与 `docId` 不进数组（RP §3.6.4 / D.3.1）。
@@ -340,8 +343,8 @@ top-k 用固定大小堆，`effectiveLimit = min(limit, 10000)`，不排全命�
 **请求**（D.2）：`api` / `query` / `scope` / `limit` / `cursor` / `total` / `explain` /
 `highlight` / `snippet` / `scheme` / `filter`。`api` MUST = 2；`query` 去首尾空白后 0..200 码点，
 空串返回空结果不报错，超长截断并置 `queryTruncated`；`scope ∈ {all, metadata, lyrics}`；`limit`
-缺省 20、`>10000` 压到 10000 并置 `clamped`；`cursor` ≤4KB；`explain` / `highlight` 只对**前
-50 条**生成，`snippet` 只对**前 10 条**；`scheme` 未知值回退默认并保留 `schemeRequested`；
+缺省 20、`>10000` 压到 10000 并置 `clamped`；`cursor` ≤4KB；`explain` 只对**前
+50 条**生成，`highlight` / `snippet` 对**前 300 条**（一页容量）生成；`scheme` 未知值回退默认并保留 `schemeRequested`；
 `filter.trackIds` ≤50k、元素 32 hex，只过滤、不参与排序键。
 
 **响应**（D.3）：`api` / `gen` / `scheme` / `schemeRequested` / `items` / `total` / `totalExact` /
@@ -351,9 +354,14 @@ top-k 用固定大小堆，`effectiveLimit = min(limit, 10000)`，不排全命�
 - `explain`：`version` / `kind` / `field` / `fieldId` / `matched` / `total` / `coverage` /
   `exact` / `proximity` / `positioned` / `bucket`(5 元) / `bm25` / `lexicalSources`；**不参与
   排序**，关掉它排序结果 MUST 完全一致（RP §3.7.1 / D.3.1）。
+  `resolvedField` / `resolvedFieldId`：**保留字段**。精确度复核生效时 `field == resolvedField`
+  （排序与归因同源，取真实命中列 title/artist/album）；只有未复核步（宽命中 / 转写 / 歌词族）
+  才用 explain 期逐列探测的保守值。
 - `trace`：`steps[]`（`state ∈ ran/skipped/degraded`）、`skipped[]`（`reason` 取
   `kind_dominated`/`budget`/`df_gate`/`capability`）、`truncated[]`（`what` 取
   `prefix_expansions`/`df_estimates`/`typo_variants`）、`deadlineHit`（D.3.3）。
+  **S2 过渡**：`StepDominated` 未启用，`reason` 额外出现 `min_exact` / `fuzzy_off` /
+  `empty_expression`，`est` 缺失（无 df 快照），`truncated` 恒空。
 - `highlight`：UTF-16 偏移（`end` 不含）；`mode ∈ literal/reading/initial`；每字段 ≤32 段、最多
   4 字段，超出置 `highlightTruncated`；歌词高亮只在 `snippet=true` 时返回（D.3.2）。
 - `snippet`：≤512 UTF-16 code unit；查询期只读 `library.db`，失败返回 `null` 不报错。
@@ -361,6 +369,8 @@ top-k 用固定大小堆，`effectiveLimit = min(limit, 10000)`，不排全命�
 **错误**（D.4）：码 1–8 = 请求无效 / 索引未就绪 / 版本或能力不符 / 忙 / IO / 内存不足 / 已取消 /
 内部错误；失败 MUST NOT 用空 `items` 表达。`fallback` 与正式查询同构，`scheme` 固定
 `fallback@1`，`explain` / `trace` 为空，`highlight` 仍返回原文区间。
+`era_search_decorate` 是独立的**按 trackId 装饰入口**（只读 `library.db`，返回
+`highlights` / `snippets`，不含 `items` / `total`；`trackIds` ≤300）。
 
 **S1 必须交付**（RP 修订 v0.5 / §5）：`scope=lyrics` 全链路（请求 → 列裁剪 → 空结果语义 →
 `explain.field` 只落在歌词族）与 `typo2`（`recall@1` 的 matcher，`typo1`/`typo2` 是同一角色的
@@ -368,8 +378,9 @@ top-k 用固定大小堆，`effectiveLimit = min(limit, 10000)`，不排全命�
 
 > **S1 实况（2026-11-24）**：`scope=lyrics` 的请求解析、歌词列外过滤
 > （`{lyrics_tok lyrics_tr_tok lyrics_rom_tok pinyin_lyrics_tok initials_lyrics_tok} : (expr)`）
-> 与单 CJK 字空计划已落地，N21 / N24 已转绿；`explain.field` 属于 T2.7，S1 尚未产出。
-> `typo2` 未随 S1 落地，仍在 S2 的 `recall@1` 范围（N22 / N23 保持 blocked）。
+> 与单 CJK 字空计划已落地，N21 / N24 已转绿；`explain` / `trace` 已随 S2 落地（T2.7 部分），
+> 字段归因见 §9.3。`snippet` 已随 S2 / T2.8 落地（查询期只读 `library.db`）。
+> `typo2` 随 S2 / T2.6 落地（N22 / N23 已转绿，仅 `recall@1` 启用）。
 
 ## 7. golden vectors 与负例
 
@@ -424,10 +435,10 @@ S0 复核另发现以下**规格内部待统一项**，同样不阻塞 S1，但 
 
 | # | 待统一项 | 现状 / 处理 |
 |---|---|---|
-| U1 | `explain.kind` wire 字符串 | §3.7.1 / D.3.1 / 步骤表三套写法 → S1 定一份枚举 + JSON Schema + 向量 |
+| U1 | `explain.kind` wire 字符串 | ✅ S2 定稿 10 档 lowerCamel：`exact` / `phrase` / `prefix` / `partial` / `pinyinExact` / `pinyinPhrase` / `initials` / `reading` / `crossLingual` / `typo`（不把读音精确 / 短语合并成 `pinyin`）；由 `SearchExplainBuilder.KindName` 输出，`vectors/rank` 覆盖 10 档偏序 |
 | U2 | 计划期词典二分次数 | §3.1 写 ≤10 次，§3.5.3 写 ≤3×词数 → S1 统一上限并写进 policy |
 | U3 | `kMergeCap` / `maxPrefixExpansions` / 拼音变体预算 | 无值 → S1 回放后定 |
-| U4 | 请求 200 码点 vs 计划期 64 码点收缩 | 两层约束，"策略上限"未写清 → S1 明确并加日志字段 |
+| U4 | 请求 200 码点 vs 计划期 64 码点收缩 | ✅ S1 定案（2026-11-25）：请求层仍按 200 码点截断（`queryTruncated`）；计划层按**可见码点** ≥ `SearchQuery.MaxPlanQueryCodePoints`（64，`SearchPolicy` 可覆盖）**只生成字面主趟**，不生成丢词 / 拼音 / 读音 / 跨语言 / 容错 step。两层门槛独立、不改写查询文本；64 仍是初版策略上限（待回放校准），N15 已转绿 |
 | U5 | `scheme` 的 `requires` / 预算 / 向量归属 | §3.4.3 未逐方案列 → S1 注册表显式写死 |
 
 ## 9. S0 → S1 交接清单
@@ -438,10 +449,13 @@ S0 复核另发现以下**规格内部待统一项**，同样不阻塞 S1，但 
 - `replay sample`（同日 S0 补齐）：固定 14 条 + 加权回放，默认 200（RP §6.7.1）；
   日志不足时 `--library <library.db>` 按 `sha256(track_id)` 派生标题 / 歌手 / 专辑 / 歌词首行补齐。
 - `lyrics stats`（同日 S0 补齐）：三层行数分位 / 去重率 / 护栏触发，用于校准 V6。
-- 负例对照基线 `tests/NegativeBaselineTests.cs`：N1–N17 已按 RP §6.2 断言（12 绿 / N12、N15 known-gap；
+- 负例对照基线 `tests/NegativeBaselineTests.cs`：N1–N17 已按 RP §6.2 断言（13 绿 / N15 known-gap；
   N8、N10、N11、N18–N24 blocked，等 S1/S2 的 plan / explain / `scope=lyrics`）。
-- 本文与 `tests/vectors/README.md`；Plan 向量已接线（`plan/*.jsonl` + `PlanVectorTests`，40 条）；
-  Rank 向量等 S2 的 `SearchRanker` / 桶序。
+  **2026-11-25 现状**：N15 已转绿（计划期收缩）；N19 由
+  `app/test/search_version_mismatch_fallback_test.dart` + `SearchApiTests` 覆盖，
+  N20 由 `SearchConcurrencyTests` 覆盖；仍 blocked 的只有 N10、N11、N18。
+- 本文与 `tests/vectors/README.md`；Plan 向量已接线（`plan/*.jsonl` + `PlanVectorTests`）；
+  Rank 向量已随 S2 接线（`vectors/rank`）并在 S3 保持；Scheme 向量见 `vectors/scheme`。
 
 > 同日补齐项的**实现文件以合并结果为准**；未合并前不得在验收里声称已具备。
 
@@ -449,13 +463,33 @@ S0 复核另发现以下**规格内部待统一项**，同样不阻塞 S1，但 
 
 | 项 | 状态 |
 |---|---|
-| Plan 向量 | ✅ 已接线（`vectors/plan/*.jsonl` + `PlanVectorTests`，40 条）；Rank 等 S2 的 `SearchRanker`；Negative 先走代码级对照基线 |
+| Plan 向量 | ✅ 已接线（`vectors/plan/*.jsonl` + `PlanVectorTests`，40 条）；Rank / Scheme 向量已随 S2 接线（`vectors/rank` 30 条、`vectors/scheme` 20 条） |
 | `SearchPolicy` / 计划类型与编译器 | ✅ `SearchPolicy.cs`、`SearchPlan.cs`、`SearchPlanCompiler.cs`；默认值快照、plan 稳定 |
 | 执行器替换 | ✅ `SearchSession.cs` 只剩 Plan 一条路径，旧六趟直连已删除；三语料 `replay compare` changed=0 |
-| scheme registry（最小） | ⏳ 未做；`default@1` + 降级链解析仍待 S1 收尾 / S2 T2.4 |
-| ABI v2 / Dart FFI v2 | ⏳ 未做；`era_search_api_version()==2`、旧符号清理、Dart DTO 收敛 |
-| `scope=lyrics` / `typo2` | ⏳ 未做；S1 只要求不崩溃 / 不越界，正式判定在 S2 |
+| scheme registry | ✅ S2 / T2.4 完成：`SearchScheme.cs` 四方案 + 能力协商 + 环检测，`s1-compat@1` 退役 |
+| ABI v2 / Dart FFI v2 | ✅ S1 收尾完成；`era_search_api_version()==2`、旧符号清理、Dart DTO 收敛 |
+| `scope=lyrics` / `typo2` | ✅ `scope=lyrics` 已落地（N21/N24 转绿）；`typo2` 随 S2/T2.6 落地（N22/N23 转绿），仅 `recall@1` 启用 |
 
 > ⚠ 完整四方案注册与方案向量按 RP T2.4 归 S2；本文要求的「最小 registry」只为让 `scheme` 字段与降级链在 S1 可工作，不等于提前做 S2 的方案评审。
+
+### 9.3 S2 → S3 进度（2026-11-24 起，2026-11-25 更新）
+
+| 项 | 状态 |
+|---|---|
+| 桶序唯一入口 | ✅ `SearchRanker.Compare`：kind → coverage → field → exactness → proximity → bm25 → docId；`Merge` 同 track 取最高 kind，不累加分数 |
+| 证据缺口（v7，已由 S3 补齐） | 原：field 只到字段族、exactness 仅读音趟、proximity 恒常量。现：字面步按 DocStore 归一列取真实 field、exactness（equal/prefix/contains/none）与 proximity 均生效；转写族仍按字段族保守归因，歌词族 exactness=none |
+| 方案注册表 | ✅ fast/default/recall/minimal；未知 id → default；缺能力沿 degradeTo 下降；`minimal ⊆ fast ⊆ default ⊆ recall` |
+| 方案差异 | fast/minimal 共用 lexical（v7 的 exact+prefix 配对未拆）；recall 额外执行 `typo2@1`（Damerau ≤2、首字符不变、词长 ≥7、依赖词表） |
+| typo2 | `FuzzyVocabulary.WithinTwo` + `DistanceTwoCandidates`（首字符前缀区间、严格距离 2、扫描上限 20000）；真实库 `pikasonax` → default 0 / recall 3 |
+| explain / trace | ✅ 前 50 条 `explain`（kind / field / resolvedField / matched / coverage / exact / bucket / bm25 / lexicalSources）+ `trace`（steps / skipped）；关闭 explain 时 items 逐条一致（`SearchExplainTests`） |
+| 负例（N8） | ✅ 标题「(Cover)」修饰不进 `matched`，真实字段探测为 `title`（保守排序字段仍是 `lyrics`） |
+| 陈旧曲目（N12） | ✅ `options_json.libraryDb` → 返回时按 `library.db.tracks` 回查；缓存保留原始 top-k、每次派生过滤；库不可读失败开放 |
+| 歌词片段（T2.8） | ✅ `snippet=true` 时前 300 条返回 `{field,text,ranges,truncated}`；查询期只读 `library.db`（`busy_timeout=1000`），原文 / 译文 / 音译按首个字面命中截取 ≤512 UTF-16 窗口；库缺失 / 锁冲突返回 null 不报错；缓存键含 `snippet` |
+| 结果高亮（T2.7） | ✅ `highlight=true` 时前 300 条返回 `{field,start,end,mode}`（UTF-16 半开区间；`literal` / `reading` / `initial`）；歌词仅 `snippet=true` 时取原文；每字段 ≤32 段、最多 4 字段，超出 `highlightTruncated=true`；库缺失失败开放；缓存键含 `highlight` |
+| 按页装饰（T2.11） | ✅ `era_search_decorate(library_path, request_json) → {api,highlights,snippets}`：请求 `{api:2,query,trackIds[≤300],snippet}`，按 trackId 只读 `library.db` 复用 T2.7/T2.8，不重跑排名；`trackIds` 非 32 hex / 超 300 → 码 1，库缺失 → 码 2；artist 展示文本按 `" / "` 连接（对齐 Dart `artistNames`）；Dart 删除 `search_highlight*` / `script_ranges.dart` / `search_lyric_snippet.dart` |
+| 分页与 total（T2.10） | ✅ `cursor` 为不透明 `base64url(32B)`（v1），`next` 由本页最后一条的全序位置生成；`restart=true` 仅当 gen / scheme 失配或位置消失（items=[] / next=null）；`total=none` → -1、`capped` → ≤10001、`exact` → 全量且 `totalExact=true`；分页 / 计数请求每步召回同一候选集（exact 不截断、capped 取 10002）以避免跨页漂移；缓存键含 `cursor` 与 `total` |
+| 降级检索（T2.12） | ✅ `era_search_fallback`：只读 `library.db` 参数化 `title/artists/album LIKE '%query%'`，匹配集合与旧 Dart 一致；排序 title(3) > artist(2) > album(1) 再 title/id；`scheme="fallback@1"`、`total` 全量、`next=null`、无 explain/trace；`highlight` / `snippet` 与正式查询同实现；Dart 仅在索引未就绪时调用，失败（码 2/5）回退既有 LIKE |
+| 回放评审 | ✅ 真实库 15 条 `changed=0 / identical=true`（本轮不改召回范围）；NDCG / 负例按 kind 扩展待 T2.5/T2.6 |
+| 键序 | kind → coverage → field → exactness → proximity → bm25 → docId（S3 起 7 键全部生效；proximity 对歌词 / 算不出时为哨兵） |
 
 **一句话**：查询期只做三件事——把归一化词元编译成显式步骤、按预算给每步上限、用唯一 ranker 按 7 键字典序取 top-k；放宽与排序理由必须来自计划与证据，不藏在常量、趟次或后处理里。

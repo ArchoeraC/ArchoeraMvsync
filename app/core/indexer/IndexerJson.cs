@@ -26,22 +26,18 @@ public sealed class IndexerOptions
     /// </summary>
     public bool RomajiLyrics { get; set; }
 
+    /// <summary>
+    /// 是否为歌词生成首字母列（T3.4 V4，**默认 false**）。
+    ///
+    /// 关闭时 <c>initials_lyrics_tok</c> 留空，元数据首字母（<c>initials_meta_tok</c>）
+    /// 不受影响；歌词**拼音**列也照旧写入。歌词首字母是独立能力：开启后可用
+    /// 「wanzg」这类歌词首字母串检索，代价是歌词派生列体积增加，故默认关闭、
+    /// 由用户在设置里显式开启。切换会改变 Manifest 选项位并触发全量重建。
+    /// </summary>
+    public bool InitialsLyrics { get; set; }
+
     /// <summary>内部批量事务条数（0 = 使用存储默认）。</summary>
     public int Batch { get; set; }
-
-    /// <summary>累计改写多少首曲目后触发 FTS5 全段合并（见 <see cref="StoreMeta.UpdatesSinceMerge"/>）。</summary>
-    ///
-    /// <remarks>
-    /// 合并是 O(索引) 的全库重写（402MB 实测 4.5–13s），**与脏曲数无关**——只改 1 首也要付全额。
-    /// 而跳过合并会让 `contentless_delete` 的墓碑累积、查询随之退化（实测 `爱你`：20 曲 +34%、
-    /// 60 曲 +73%、120 曲 +103%）。默认 30 是两者之间的折中：常态增量只写不合并（亚秒级），
-    /// 累计约 30 首后的一次增量顺带合并，把查询退化压在 ~±40% 以内。
-    /// 测试可调小以验证计数与触发。
-    /// </remarks>
-    public int MergeEveryUpdates { get; set; } = DefaultMergeEveryUpdates;
-
-    /// <summary>合并阈值默认值（见 <see cref="MergeEveryUpdates"/>）。</summary>
-    public const int DefaultMergeEveryUpdates = 30;
 }
 
 /// <summary>索引进度（stdout JSON / FFI 回调共用）。</summary>
@@ -57,6 +53,12 @@ public sealed class IndexerProgress
     public int Indexed { get; set; }
     public int Deleted { get; set; }
     public string Current { get; set; } = "";
+
+    /// <summary>本次运行截至当前被 V6 护栏截断的（曲目, 歌词层）数。</summary>
+    public int LyricsTruncatedLayers { get; set; }
+
+    /// <summary>本次运行截至当前受影响曲目数（同一曲多层只计一次）。</summary>
+    public int LyricsTruncatedTracks { get; set; }
 }
 
 /// <summary>索引结果摘要（stdout JSON / FFI 回参共用）。</summary>
@@ -71,14 +73,66 @@ public sealed class IndexerResult
     public long Generation { get; set; }
     public long DurationMs { get; set; }
 
-    /// <summary>
-    /// 本次是否执行了 FTS5 全段合并（`optimize`）。合并是 O(索引) 的全库重写，
-    /// 会是增量耗时的主要构成——报告/诊断据此区分「写路径慢」与「合并慢」。
-    /// </summary>
-    public bool Merged { get; set; }
+    /// <summary>本次是否写过 EraStore（全量或增量）。</summary>
+    public bool EraWritten { get; set; }
 
-    /// <summary>本次结束后距下次合并还累计了多少首改写（见 <see cref="StoreMeta.UpdatesSinceMerge"/>）。</summary>
-    public int UpdatesSinceMerge { get; set; }
+    /// <summary>EraStore 是否按 T3.10 增量路径更新（false = 全量构建 / 未写）。</summary>
+    public bool EraIncremental { get; set; }
+
+    /// <summary>EraStore 是否在本次执行了段合并。</summary>
+    public bool EraMerged { get; set; }
+
+    /// <summary>提交后的 EraStore 物理段数。</summary>
+    public int EraSegments { get; set; }
+
+    /// <summary>
+    /// 全量构建后的有界自动压缩是否执行过（增量构建恒为 false）。
+    /// 见 <see cref="EraStore.BuildCompactor"/>。
+    /// </summary>
+    public bool EraCompacted { get; set; }
+
+    /// <summary>
+    /// 自动压缩前的物理段数（未压缩时等于 <see cref="EraSegments"/>）；
+    /// 与 <see cref="EraSegments"/> 一起给出 before → after。
+    /// </summary>
+    public int EraSegmentsBeforeCompact { get; set; }
+
+    /// <summary>自动压缩耗时（毫秒）；未压缩为 0。<c>durationMs - eraCompactMs</c> 即构建本体耗时。</summary>
+    public long EraCompactMs { get; set; }
+
+    /// <summary>
+    /// 全量构建后是否执行过空间整理（<see cref="EraStore.Defragmenter"/>，A2）：
+    /// 只在自动压缩真的留下 >20% 活数据的垃圾时发生；增量构建恒为 false。
+    /// </summary>
+    public bool EraDefragged { get; set; }
+
+    /// <summary>空间整理耗时（毫秒）；未整理为 0。整理后 <c>eraFileBytesAfter</c> 即 CURRENT 文件大小。</summary>
+    public long EraDefragMs { get; set; }
+
+    /// <summary>整理后的 EraStore CURRENT 文件字节数；未整理为 0（Dart 目前不消费，仅诊断）。</summary>
+    public long EraFileBytesAfter { get; set; }
+
+    /// <summary>提交后的 EraStore 活文档数。</summary>
+    public int EraLiveDocs { get; set; }
+
+    /// <summary>本次增量标记为死亡的旧文档数（改写 + 删除）。</summary>
+    public int EraDeadDocs { get; set; }
+
+    /// <summary>
+    /// 被 V6 护栏截断的（曲目, 歌词层）数：<see cref="LyricsPreprocess.MaxUniqueLines"/> /
+    /// <see cref="LyricsPreprocess.MaxUtf8Bytes"/> 任一触发即计一次（原文 / 译文 / 音译独立）。
+    /// 0 表示全部歌词层都在护栏内（真实曲库的常态）。
+    /// </summary>
+    public int LyricsTruncatedLayers { get; set; }
+
+    /// <summary>被截断影响的曲目数（同一曲多层只计一次）；Dart 目前不消费，仅诊断。</summary>
+    public int LyricsTruncatedTracks { get; set; }
+
+    /// <summary>
+    /// 因超过 EraFormat.MaxTermBytes（255B）被跳过的词条数（超长无分隔拉丁词 / 首字母串）。
+    /// 只跳过该词条，不影响其余字段与整库构建；Dart 目前不消费，仅诊断。
+    /// </summary>
+    public int OversizeTokens { get; set; }
 }
 
 /// <summary>
@@ -137,6 +191,8 @@ internal static class IndexerJson
         w.WriteNumber("indexed", p.Indexed);
         w.WriteNumber("deleted", p.Deleted);
         w.WriteString("current", p.Current);
+        w.WriteNumber("lyricsTruncatedLayers", p.LyricsTruncatedLayers);
+        w.WriteNumber("lyricsTruncatedTracks", p.LyricsTruncatedTracks);
         w.WriteEndObject();
     });
 
@@ -151,8 +207,21 @@ internal static class IndexerJson
         w.WriteBoolean("full", r.Full);
         w.WriteNumber("generation", r.Generation);
         w.WriteNumber("durationMs", r.DurationMs);
-        w.WriteBoolean("merged", r.Merged);
-        w.WriteNumber("updatesSinceMerge", r.UpdatesSinceMerge);
+        w.WriteBoolean("eraWritten", r.EraWritten);
+        w.WriteBoolean("eraIncremental", r.EraIncremental);
+        w.WriteBoolean("eraMerged", r.EraMerged);
+        w.WriteNumber("eraSegments", r.EraSegments);
+        w.WriteBoolean("eraCompacted", r.EraCompacted);
+        w.WriteNumber("eraSegmentsBeforeCompact", r.EraSegmentsBeforeCompact);
+        w.WriteNumber("eraCompactMs", r.EraCompactMs);
+        w.WriteBoolean("eraDefragged", r.EraDefragged);
+        w.WriteNumber("eraDefragMs", r.EraDefragMs);
+        w.WriteNumber("eraFileBytesAfter", r.EraFileBytesAfter);
+        w.WriteNumber("eraLiveDocs", r.EraLiveDocs);
+        w.WriteNumber("eraDeadDocs", r.EraDeadDocs);
+        w.WriteNumber("lyricsTruncatedLayers", r.LyricsTruncatedLayers);
+        w.WriteNumber("lyricsTruncatedTracks", r.LyricsTruncatedTracks);
+        w.WriteNumber("oversizeTokens", r.OversizeTokens);
         w.WriteEndObject();
     });
 
@@ -165,6 +234,7 @@ internal static class IndexerJson
         w.WriteStartObject();
         w.WriteString("type", "result");
         w.WriteNumber("count", result.Items.Count);
+        w.WriteString("scheme", result.SchemeId);
         w.WritePropertyName("items");
         w.WriteStartArray();
         foreach (var hit in result.Items)
@@ -174,6 +244,22 @@ internal static class IndexerJson
             w.WriteNumber("score", hit.Score);
             // 命中原由归因（精度审计 §6.3）：Dart 侧据此区分「字面命中」与「兜底命中」。
             w.WriteString("pass", hit.Pass);
+            if (result.Explanations.TryGetValue(hit.TrackId, out var explanation))
+            {
+                w.WritePropertyName("explain");
+                SearchApiJson.WriteExplain(w, explanation);
+            }
+            if (result.Highlights.TryGetValue(hit.TrackId, out var highlight))
+            {
+                w.WritePropertyName("highlight");
+                SearchApiJson.WriteHighlight(w, highlight);
+                w.WriteBoolean("highlightTruncated", highlight.Truncated);
+            }
+            if (result.Snippets.TryGetValue(hit.TrackId, out var snippet))
+            {
+                w.WritePropertyName("snippet");
+                SearchApiJson.WriteSnippet(w, snippet);
+            }
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -185,8 +271,23 @@ internal static class IndexerJson
         w.WriteNumber("crossLingual", result.Passes.CrossLingual);
         w.WriteNumber("fuzzy", result.Passes.Fuzzy);
         w.WriteNumber("cjkFuzzy", result.Passes.CjkFuzzy);
-        w.WriteNumber("dropTokens", result.Passes.DropTokens);
         w.WriteEndObject();
+        if (result.Trace is not null)
+        {
+            w.WritePropertyName("trace");
+            SearchApiJson.WriteTrace(w, result.Trace);
+        }
+        w.WriteNumber("total", result.Total);
+        w.WriteBoolean("totalExact", result.TotalExact);
+        w.WriteBoolean("restart", result.Restart);
+        if (result.Next is null)
+        {
+            w.WriteNull("next");
+        }
+        else
+        {
+            w.WriteString("next", result.Next);
+        }
         w.WriteEndObject();
     });
 

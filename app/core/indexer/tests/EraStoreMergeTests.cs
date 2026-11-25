@@ -307,7 +307,7 @@ internal static class EraStoreMergeTests
         }
     }
 
-    /// <summary>7. ShouldMerge：段数 ≥8、死行 ≥20% 触发；健康小索引不触发。</summary>
+    /// <summary>7. ShouldMerge：段数达阈值、死行 ≥20% 触发；健康小索引不触发。</summary>
     private static void MergeTriggers()
     {
         var dir = NewDir();
@@ -321,7 +321,7 @@ internal static class EraStoreMergeTests
 
             Program.Check("触发: 健康小索引（3 段）不触发",
                 !Merger.ShouldMerge(healthyManifest, 3));
-            Program.Check("触发: 8 段触发", Merger.ShouldMerge(healthyManifest, 8));
+            Program.Check("触发: 达到段数阈值触发", Merger.ShouldMerge(healthyManifest, Merger.MergeTriggerSegments));
             Program.Check("触发: DeadRatio 健康为 0", Merger.DeadRatio(healthyManifest) == 0);
 
             var dirty = Path.Combine(dir, "search-2.eraindex");

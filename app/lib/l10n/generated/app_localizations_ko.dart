@@ -4510,6 +4510,13 @@ class AppLocalizationsKo extends AppLocalizations {
       '음역이 없는 일본어 가사에 로마자를 자동 생성해 로마자로 검색할 수 있습니다(색인 크기 약 2배)';
 
   @override
+  String get settingsSearchIndexInitials => '가사 머리글자 색인';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '가사를 병음 머리글자(예: wanzg)로도 검색합니다. 끄면 색인이 작아집니다(변경 시 재구축 필요)';
+
+  @override
   String get settingsSearchIndexNote =>
       '인덱스는 파생 데이터입니다: 기본값은 꺼짐이며 비용이 없습니다. 켜면 최초 구축에 시간과 디스크(1만 곡 기준 수백 MB)를 사용하며, 실패하면 자동으로 기본 검색으로 폴백합니다.';
 

@@ -8,6 +8,7 @@
     <AssemblyName>EraStoreBench</AssemblyName>
     <RootNamespace>Archoera.Indexer.Bench</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +23,9 @@
     <!-- 只测存储层：链接 EraStore 源码（不含 CLI 的 Program.cs 与 tests/），
          与索引器共用同一份实现，避免基准与生产分叉。 -->
     <Compile Include="../../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- QueryEngine 的依赖（读音分档 / 日志）。 -->
+    <Compile Include="../../ReadingRanker.cs" Link="ReadingRanker.cs" />
+    <Compile Include="../../Log.cs" Link="Log.cs" />
   </ItemGroup>
 
 </Project>

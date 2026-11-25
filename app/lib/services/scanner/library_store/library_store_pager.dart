@@ -48,7 +48,8 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
   /// 搜索路径二选一（设计文档 §2.4 / §9.3）：
   /// - **总开关关闭 / 查询为空 / 失败**：既有 `LIKE`（`db.listTracks`）——等价现状；
   /// - **总开关开启 + 查询非空 + 索引就绪**：`SearchService` 命中的**有序 id**
-  ///   → 按排行切片取行（`db.listTracksByIds`），`totalCount` = 命中的 id 数。
+  ///   → 按排行切片取行（`db.listTracksByIds`），`totalCount` = 命中的 id 数；
+  ///   索引未就绪时 `SearchService` 内部改走 C# `era_search_fallback`（T2.12）。
   Future<void> _reloadTracks() async {
     _pagerEpoch++;
     _pageRecency.clear();
@@ -81,13 +82,16 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
         count = db.countTracks(query: query);
       }
       final stats = db.stats();
-      // 歌词命中片段：仅索引排行路径 + 查询非空时计算（查询空 / LIKE 路径零成本）。
-      // 在页加载异步路径用同一连接批量取歌词（见 search_lyric_snippet.dart）。
-      final snippets = ranked != null
-          ? buildLyricSnippets(tracks, query, loadLyrics: db.lyricsByIds)
-          : const <String, String>{};
       db.close();
       if (epoch != _pagerEpoch) return; // 期间又发生一次 reload：本次作废
+      // 高亮 / 歌词片段：仅索引排行路径 + 查询非空时由 C# 装饰（不重跑排名）。
+      final decorations = ranked != null && tracks.isNotEmpty
+          ? await SearchService.instance.decorate(
+              query,
+              [for (final track in tracks) track.id],
+            )
+          : null;
+      if (epoch != _pagerEpoch) return; // 装饰期间又发生一次 reload：本次作废
       final pages = <int, List<TrackRow>>{};
       if (tracks.isNotEmpty) {
         pages[0] = tracks;
@@ -98,7 +102,8 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
         totalCount: count,
         rankedIds: ranked ?? const [],
         searchIndexActive: ranked != null,
-        lyricSnippets: snippets,
+        lyricSnippets: decorations?.snippets ?? const {},
+        searchHighlights: decorations?.highlights ?? const {},
         totalSizeBytes: stats.totalSize,
         totalDurationMs: stats.totalDurationMs,
         hasMore: pages.length < _pageCount(count),
@@ -116,6 +121,7 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
         rankedIds: const [],
         searchIndexActive: false,
         lyricSnippets: const {},
+        searchHighlights: const {},
         totalSizeBytes: 0,
         totalDurationMs: 0,
         hasMore: false,
@@ -192,39 +198,42 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
     // 微任务/直接调用时已离开 build：可安全置加载态（尾部加载指示用）。
     if (!state.loadingMore) state = state.copyWith(loadingMore: true);
     List<TrackRow>? rows;
-    Map<String, String> snippets = const {};
+    final active = state.searchIndexActive;
+    final query = state.searchQuery;
     try {
       final db = TracksDb.open();
-      if (state.searchIndexActive) {
+      if (active) {
         // 索引排行路径：按排名切片（[rankedIds] 为已剔重 / 已存在的有序 id）。
         final ids = state.rankedIds;
         final start = page * pageSize;
-        final List<TrackRow> pageRows;
         if (start >= ids.length) {
-          pageRows = const [];
+          rows = const [];
         } else {
-          pageRows = db.listTracksByIds(
+          rows = db.listTracksByIds(
             ids.sublist(start, min(start + pageSize, ids.length)),
           );
         }
-        rows = pageRows;
-        // 歌词命中片段：同一只读连接批量取歌词（仅排行路径；非排行路径不计算）。
-        snippets = buildLyricSnippets(
-          pageRows,
-          state.searchQuery,
-          loadLyrics: db.lyricsByIds,
-        );
       } else {
         rows = db.listTracks(
           limit: pageSize,
           offset: page * pageSize,
-          query: state.searchQuery,
+          query: query,
         );
       }
       db.close();
     } catch (_) {
       rows = null;
-      snippets = const {};
+    }
+    // 高亮 / 歌词片段：本页行拿到后由 C# 装饰（只读 library.db，不重跑排名）。
+    SearchDecorations decorations = SearchDecorations.empty;
+    if (active && rows != null && rows.isNotEmpty) {
+      final pageRows = rows;
+      decorations =
+          await SearchService.instance.decorate(
+            query,
+            [for (final row in pageRows) row.id],
+          ) ??
+          SearchDecorations.empty;
     }
     if (_inFlight[page] == epoch) _inFlight.remove(page);
     // 期间 searchQuery / 曲库已变（epoch 自增）：丢弃过期结果。
@@ -237,17 +246,17 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
       state = state.copyWith(loadingMore: _hasInFlight);
       return;
     }
-    _insertPage(page, rows, snippets);
+    _insertPage(page, rows, decorations);
   }
 
   /// 插入一页；驻留超限时按 LRU 淘汰最久未用页（刚插入页不参与淘汰）。
   ///
-  /// [snippets] 为本页的歌词命中片段（非排行路径为空）；与既有片段合并后**裁剪
-  /// 到仍在驻留页的行**，避免随滚动无界增长。
+  /// [decorations] 为本页的高亮 / 歌词片段（非排行路径为空）；与既有内容合并后
+  /// **裁剪到仍在驻留页的行**，避免随滚动无界增长。
   void _insertPage(
     int page,
     List<TrackRow> rows,
-    Map<String, String> snippets,
+    SearchDecorations decorations,
   ) {
     final next = Map<int, List<TrackRow>>.of(state.trackPages);
     _failedPages.remove(page);
@@ -268,10 +277,18 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
       next.remove(victim);
       _pageRecency.remove(victim);
     }
-    final mergedSnippets = _mergeSnippets(next, snippets);
+    final resident = <String>{};
+    for (final pageRows in next.values) {
+      for (final row in pageRows) {
+        resident.add(row.id);
+      }
+    }
+    final mergedSnippets = _mergeSnippets(resident, decorations.snippets);
+    final mergedHighlights = _mergeHighlights(resident, decorations.highlights);
     state = state.copyWith(
       trackPages: next,
       lyricSnippets: mergedSnippets,
+      searchHighlights: mergedHighlights,
       hasMore: next.length < _pageCount(state.totalCount),
       loadingMore: _hasInFlight,
       error: null,
@@ -280,21 +297,29 @@ mixin _LibraryStorePager on Notifier<LibraryState> {
 
   /// 合并本页片段并裁剪到驻留页行（无片段且既有为空时零分配）。
   Map<String, String> _mergeSnippets(
-    Map<int, List<TrackRow>> pages,
+    Set<String> resident,
     Map<String, String> snippets,
   ) {
     final existing = state.lyricSnippets;
     if (existing.isEmpty && snippets.isEmpty) return const {};
-    final resident = <String>{};
-    for (final rows in pages.values) {
-      for (final row in rows) {
-        resident.add(row.id);
-      }
-    }
     return {
       for (final entry in existing.entries)
         if (resident.contains(entry.key)) entry.key: entry.value,
       ...snippets,
+    };
+  }
+
+  /// 合并本页高亮并裁剪到驻留页行（无高亮且既有为空时零分配）。
+  Map<String, LocalTrackHighlight> _mergeHighlights(
+    Set<String> resident,
+    Map<String, LocalTrackHighlight> highlights,
+  ) {
+    final existing = state.searchHighlights;
+    if (existing.isEmpty && highlights.isEmpty) return const {};
+    return {
+      for (final entry in existing.entries)
+        if (resident.contains(entry.key)) entry.key: entry.value,
+      ...highlights,
     };
   }
 }

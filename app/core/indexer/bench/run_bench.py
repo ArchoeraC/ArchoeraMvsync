@@ -5,15 +5,15 @@
 #
 # 本地曲库搜索索引器 P5 性能 harness —— 跑测编排器。
 #
-# 用**真实产物**（app/core/indexer C# FTS5 索引器）量化：
+# 用**真实产物**（app/core/indexer，EraStore 索引器）量化：
 #   - 全量构建耗时 / 峰值 RSS / 写入字节（A 组含拼音；B 组 --no-pinyin）；
-#   - search.db 体积；
+#   - `search.era/` 体积（live / file / 段数 / 分节）；
 #   - 增量（改 K 首 file_mtime）耗时（K=20 与 K=200，验证与 K 成正比）；
 #   - 查询延迟 P50 / P95（同一进程内循环，排除 dotnet 启动；A/B 两组各一次）；
 # 并对照设计文档 §2.2 预算，判定 P5（§5.5 自研段引擎）是否触发，产出 bench/REPORT.md。
 #
 # 依赖：Python 标准库 + 本机 .NET 10 SDK。不新增第三方依赖。
-# 生成物（library.db / search.db / qbench bin/obj）落 bench/.work（已 gitignore），不入库。
+# 生成物（library.db / search.era / qbench bin/obj）落 bench/.work（已 gitignore），不入库。
 
 from __future__ import annotations
 
@@ -191,53 +191,52 @@ def run_measured(cmd: list[str], tag: str, work: str) -> dict:
     }
 
 
-def db_size_bytes(path: str) -> int:
-    total = 0
-    for suffix in ("", "-wal", "-shm"):
-        p = path + suffix
-        if os.path.exists(p):
-            total += os.path.getsize(p)
-    return total
+def era_dir_for(index_path: str) -> str:
+    """`<index 所在目录>/search.era/`——T3.13 起唯一查询库（`search.db` 只是目录锚点）。"""
+    return os.path.join(os.path.dirname(os.path.abspath(index_path)), "search.era")
 
 
-def size_breakdown(path: str) -> dict | None:
-    """用 dbstat 定位 search.db 体积构成（元数据表 vs FTS 倒排），并统计元数据体量。
-
-    v2 contentless：`search_docs` 仅保留元数据（无 token 文本列），体积主要来自 FTS 倒排
-    （`search_fts_data` / `_idx` / `_docsize`）。
-    """
-    if not os.path.exists(path):
+def era_stats(cli: str, index_path: str) -> dict | None:
+    """跑 `indexer stats --index <search.era/>` 取 EraStore 的 JSON（文档数 / 段数 / 体积 / 分节）。"""
+    era = era_dir_for(index_path)
+    if not os.path.isdir(era):
         return None
     try:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-        try:
-            pages = dict(conn.execute("SELECT name, SUM(pgsize) FROM dbstat GROUP BY name").fetchall())
-            docs = conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(LENGTH(track_id)), 0) FROM search_docs").fetchone()
-            return {
-                "search_docs": pages.get("search_docs", 0),
-                "search_fts_data": pages.get("search_fts_data", 0),
-                "search_fts_idx": pages.get("search_fts_idx", 0),
-                "search_fts_docsize": pages.get("search_fts_docsize", 0),
-                "search_fts_config": pages.get("search_fts_config", 0),
-                "search_meta": pages.get("search_meta", 0),
-                "total_pages": sum(pages.values()),
-                "docs": docs[0] or 0,
-                "track_id_bytes": docs[1] or 0,
-            }
-        finally:
-            conn.close()
-    except sqlite3.Error:
+        proc = subprocess.run(
+            ["dotnet", cli, "stats", "--index", era],
+            capture_output=True, text=True, timeout=180,
+        )
+    except Exception:
         return None
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                return None
+    return None
 
 
-def sqlite_scalar(path: str, sql: str):
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    try:
-        row = conn.execute(sql).fetchone()
-        return row[0] if row else None
-    finally:
-        conn.close()
+# EraStore 分节 kind → 名称（EraStore/Format.cs 的 SectionKind）。
+ERA_SECTION_NAMES = {1: "docstore", 2: "dict", 3: "dict_index", 4: "postings", 5: "positions"}
+
+
+def era_breakdown(stats: dict | None) -> dict | None:
+    """把 `stats.sections` 按 kind 汇总，并带上 live / file / overhead 与段数。"""
+    if not stats:
+        return None
+    out = {
+        "live": stats.get("liveBytes", 0),
+        "file": stats.get("fileBytes", 0),
+        "overhead": stats.get("overheadBytes", 0),
+        "segments": stats.get("segments", 0),
+        "docs": stats.get("docs", 0),
+    }
+    for sec in stats.get("sections", []):
+        name = ERA_SECTION_NAMES.get(sec.get("kind"), f"kind{sec.get('kind')}")
+        out[name] = out.get(name, 0) + sec.get("bytes", 0)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -359,29 +358,30 @@ def main(argv: list[str] | None = None) -> int:
         if not os.path.exists(p):
             raise SystemExit(f"构建产物缺失: {p}")
 
-    index_a = os.path.join(work, "search_a.db")
-    index_b = os.path.join(work, "search_b.db")
-    index_c = os.path.join(work, "search_c_lrc.db")
+    # A / B / C 各自一个目录：EraStore 目录固定为 `<index 所在目录>/search.era/`，
+    # 三个配置若共用一个 work 根，后建的会覆盖前一个的查询库（T3.13 起 search.era 是
+    # 唯一查询路径，覆盖即等于「A 的延迟 / 召回其实量的是 B」）。
+    index_a = os.path.join(work, "A", "search.db")
+    index_b = os.path.join(work, "B", "search.db")
+    index_c = os.path.join(work, "C", "search.db")
+    for p in (index_a, index_b, index_c):
+        os.makedirs(os.path.dirname(p), exist_ok=True)
 
     def full_round(label: str, index: str, extra: list[str], rnd: int):
         cmd = ["dotnet", cli, "build", "--full", "--db", library, "--index", index] + extra
         print(f"-- 全量 {label} 轮 {rnd}: {' '.join(x for x in cmd[3:])}")
         r = run_measured(cmd, f"full_{label}_r{rnd}", work)
         r["round"] = rnd
-        r["db_bytes"] = db_size_bytes(index) if os.path.exists(index) else 0
-        r["docs"] = sqlite_scalar(index, "SELECT COUNT(*) FROM search_docs") if os.path.exists(index) else None
-        piny = sqlite_scalar(index, "SELECT value FROM search_meta WHERE key='pinyin'") if os.path.exists(index) else None
-        r["meta_pinyin"] = piny
-        r["meta_lrc"] = sqlite_scalar(index, "SELECT value FROM search_meta WHERE key='index_lrc'") \
-            if os.path.exists(index) else None
-        r["meta_schema"] = sqlite_scalar(index, "SELECT value FROM search_meta WHERE key='schema_version'") \
-            if os.path.exists(index) else None
-        r["meta_analyzer"] = sqlite_scalar(index, "SELECT value FROM search_meta WHERE key='analyzer_version'") \
-            if os.path.exists(index) else None
+        st = era_stats(cli, index)
+        r["db_bytes"] = (st or {}).get("fileBytes", 0)
+        r["live_bytes"] = (st or {}).get("liveBytes", 0)
+        r["segments"] = (st or {}).get("segments")
+        r["docs"] = (st or {}).get("docs")
         d = r["result"] or {}
         print(f"   wall={r['wall_ms']:.0f}ms durationMs={d.get('durationMs')} "
               f"rss={r['rss_mb']:.0f}MB write={r['write_mb']:.0f}MB "
-              f"db={r['db_bytes']/1048576:.0f}MB docs={r['docs']} pinyin={piny}")
+              f"file={r['db_bytes']/1048576:.0f}MB live={r['live_bytes']/1048576:.0f}MB "
+              f"segments={r['segments']} docs={r['docs']} compact={d.get('eraCompacted')}")
         return r
 
     full_runs = []
@@ -396,9 +396,12 @@ def main(argv: list[str] | None = None) -> int:
                               **full_round("C(含 .lrc)", index_c, ["--index-lrc"], 1)))
 
     # 索引体积构成（在增量改写 A 之前量取）
-    breakdown = {"A": size_breakdown(index_a), "B": size_breakdown(index_b)}
+    breakdown = {
+        "A": era_breakdown(era_stats(cli, index_a)),
+        "B": era_breakdown(era_stats(cli, index_b)),
+    }
     if a.with_lrc:
-        breakdown["C"] = size_breakdown(index_c)
+        breakdown["C"] = era_breakdown(era_stats(cli, index_c))
 
     # 查询延迟（在刚全量并 optimize 过的索引上；A/B 各按 limit 逐档）
     limits = [int(x) for x in str(a.query_limits).split(",") if x.strip()]
@@ -537,8 +540,10 @@ def write_report(m: dict) -> None:
     bd_a, bd_b = bd.get("A") or {}, bd.get("B") or {}
     write_unavailable = all((r.get("write_mb") or 0) == 0 for r in full)
     write_amp = (a_best["write_mb"] / idx_a_mb) if (a_best and idx_a_mb > 0) else 0.0
-    meta_analyzer = (a_best or {}).get("meta_analyzer")
-    meta_schema = (a_best or {}).get("meta_schema")
+    # EraStore 的 analyzer / meta 版本锚在 Manifest 里；`stats` 不输出它们，
+    # 这里不再伪造（报告以 live/file 字节与段数为主）。
+    meta_analyzer = None
+    meta_schema = None
 
     inc = {x["k"]: x for x in m["incremental"]}
     noop, inc20, inc200 = inc.get(0, {}), inc.get(20, {}), inc.get(200, {})
@@ -580,7 +585,10 @@ def write_report(m: dict) -> None:
     L: list[str] = []
     L.append(f"# 本地曲库搜索索引器 性能实测报告（P5）（{env['date']}）")
     L.append("")
-    L.append("> 对象：**真实产物** `app/core/indexer`（C# FTS5 索引器，`FtsStore` + `Analyzer` + `IndexerEngine`）。")
+    L.append("> 对象：**真实产物** `app/core/indexer`（C# **EraStore** 索引器，`Analyzer` + `IndexerEngine` + `EraStore`）。")
+    L.append("> ")
+    L.append("> ⚠ 本文件后续若出现 FTS5 / `search.db` / `dbstat` 的‘根因定位’段落，均写于 v7 时代，"
+             "只作沿革；现状以 `docs/local-search-indexer-t314-gate.md` 为准。")
     L.append("> harness：`app/core/indexer/bench/`（确定性语料生成器 + 跑测编排 + 进程内查询 harness，"
              "MATCH 构造与生产查询编译器 `app/core/indexer/SearchQuery.cs` 同构）。")
     L.append("> 判定依据：设计文档 `docs/local-search-index-plan.md` §2.2（预算）/ §5.5（条件触发）/ §7.3–7.4 / §8 / §10（P0/P5）。")
@@ -642,34 +650,36 @@ def write_report(m: dict) -> None:
     L.append("")
     L.append("## 3. 全量构建（A 含拼音 / B 无拼音" + (" / C 含 .lrc" if with_lrc else "") + "）")
     L.append("")
-    L.append("| 配置 | 轮 | wall ms | durationMs | 峰值 RSS MB | write_bytes MB | search.db MB | docs | pinyin | .lrc | schema | analyzer | rc |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    L.append("| 配置 | 轮 | wall ms | durationMs | 峰值 RSS MB | write_bytes MB | fileBytes MB | liveBytes MB | 段数 | docs | compact | rc |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in full:
         d = r["result"] or {}
         label = {"A": "A(拼音)", "B": "B(无拼音)", "C": "C(拼音+.lrc)"}[r["config"]]
         L.append(f"| {label} | {r.get('round', '')} | "
                  f"{r['wall_ms']:.0f} | {d.get('durationMs')} | {r['rss_mb']:.0f} | {r['write_mb']:.0f} | "
-                 f"{r['db_bytes']/1048576:.1f} | {r['docs']} | {r.get('meta_pinyin')} | {r.get('meta_lrc')} | "
-                 f"{r.get('meta_schema')} | {r.get('meta_analyzer')} | {r['rc']} |")
+                 f"{r['db_bytes']/1048576:.1f} | {r['live_bytes']/1048576:.1f} | {r['segments']} | "
+                 f"{r['docs']} | {d.get('eraCompacted')} | {r['rc']} |")
     L.append("")
     L.append("### 索引体积")
     L.append("")
-    L.append(f"- A（含拼音）search.db = **{idx_a_mb:.1f} MiB** @ {n} 曲 → 外推 @{budget['extrapolate_n']} 曲 ≈ "
+    L.append(f"- A（含拼音）search.era fileBytes = **{idx_a_mb:.1f} MiB** @ {n} 曲 → 外推 @{budget['extrapolate_n']} 曲 ≈ "
              f"**{idx25k_mb:.0f} MiB**（§2.2 预算 {budget['index_min_mb']:.0f}–{budget['index_max_mb']:.0f} MB）{ok(idx_ok)}")
-    L.append(f"- B（无拼音）search.db = **{idx_b_mb:.1f} MiB** @ {n} 曲 → 外推 ≈ **{idx_b_mb*scale:.0f} MiB**")
+    L.append(f"- B（无拼音）search.era fileBytes = **{idx_b_mb:.1f} MiB** @ {n} 曲 → 外推 ≈ **{idx_b_mb*scale:.0f} MiB**")
     if with_lrc:
-        L.append(f"- C（拼音 + .lrc 侧车层）search.db = **{idx_c_mb:.1f} MiB** @ {n} 曲"
+        L.append(f"- C（拼音 + .lrc 侧车层）search.era fileBytes = **{idx_c_mb:.1f} MiB** @ {n} 曲"
                  f"（比 A 多 {idx_c_mb-idx_a_mb:.1f} MiB，即 .lrc 三层文本的倒排开销）")
     if bd_a:
-        L.append(f"- A 体积构成（`dbstat`）：元数据表 `search_docs` {bd_a['search_docs']/1048576:.1f} MiB + "
-                 f"FTS 倒排（`search_fts_data` {bd_a['search_fts_data']/1048576:.1f} MiB + "
-                 f"`_idx` {bd_a['search_fts_idx']/1048576:.1f} MiB + "
-                 f"`_docsize` {bd_a['search_fts_docsize']/1048576:.1f} MiB）；"
-                 f"`track_id` 文本合计仅 {bd_a['track_id_bytes']/1048576:.1f} MiB。")
-        L.append(f"  B（无拼音）构成：元数据表 {bd_b.get('search_docs',0)/1048576:.1f} MiB + 倒排 "
-                 f"`search_fts_data` {bd_b.get('search_fts_data',0)/1048576:.1f} MiB —— 拼音列令 A 比 B 多 {idx_a_mb-idx_b_mb:.0f} MiB。")
-    L.append("- contentless v2：`search_fts` 以 `content=''` + `contentless_delete=1` 建表，"
-             "倒排只存 postings / 位置，**不再把 token 文本另存一份**。")
+        L.append(f"- A 体积构成（EraStore sections）：liveBytes **{bd_a['live']/1048576:.1f} MiB**、"
+                 f"fileBytes {bd_a['file']/1048576:.1f} MiB（overhead {bd_a['overhead']/1048576:.1f} MiB，"
+                 f"来自构建收尾压缩把旧段留在同一 generation 文件）；"
+                 f"DocStore {bd_a.get('docstore',0)/1048576:.1f} MiB + 词典 "
+                 f"{bd_a.get('dict',0)/1048576:.1f} MiB + 词条索引 {bd_a.get('dict_index',0)/1048576:.1f} MiB + "
+                 f"倒排 {bd_a.get('postings',0)/1048576:.1f} MiB + 位置 {bd_a.get('positions',0)/1048576:.1f} MiB，"
+                 f"共 {bd_a['segments']} 段。")
+        L.append(f"  B（无拼音）liveBytes {bd_b.get('live',0)/1048576:.1f} MiB（倒排 "
+                 f"{bd_b.get('postings',0)/1048576:.1f} MiB）——拼音列令 A 比 B 多 {idx_a_mb-idx_b_mb:.0f} MiB（fileBytes）。")
+    L.append("- EraStore 的倒排只存 postings / 位置，token 文本不另存；"
+             "`search.db` 已不再由生产构建产生（T3.13b 起 v7 写入器已删除）。")
     L.append("")
     L.append("### 耗时 / 内存 / 写入量")
     L.append("")
@@ -950,7 +960,7 @@ def write_report(m: dict) -> None:
              "召回质量不在本报告范围。")
     L.append("7. **峰值内存**：`VmHWM` 轮询（20 ms）可能略低估瞬时峰值；索引器为 run-to-completion 同步模型，"
              "无等待式竞态判定（符合 AGENTS.md）。")
-    L.append(f"8. **版本锚点**：本报告数据对应 `schema_version={meta_schema}` / `analyzer_version={meta_analyzer}`、"
+    L.append(f"8. **版本锚点**：本报告数据来自 EraStore（Manifest metaVersion 见 `stats`）、"
              "代码 `" + env["git_head"] + "`；分析器 / schema 版本变动会令旧库全量重建，"
              "届时性能数字需重跑（本报告不含历史版本的对比数据）。")
     L.append(f"9. **跨机器基线不可直接比较**：机器环境随本次实测记录于 §1（{env['cores']} 逻辑核 / "

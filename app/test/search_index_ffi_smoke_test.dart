@@ -94,12 +94,21 @@ void main() {
         IndexerRunResult.fromJson(jsonDecode(resultText) as Map<String, dynamic>);
     expect(result.indexed, 1);
     expect(result.generation, 7);
-    expect(File(searchDb).existsSync(), isTrue);
+    // T3.13：生产路径只写 EraStore，不再生成 v7 的 search.db。
+    expect(File(searchDb).existsSync(), isFalse,
+        reason: '生产索引路径不应写 search.db');
+    final eraCurrent = File(
+      '${File(searchDb).parent.path}${Platform.pathSeparator}search.era'
+      '${Platform.pathSeparator}CURRENT',
+    );
+    expect(eraCurrent.existsSync(), isTrue, reason: 'EraStore CURRENT 应存在');
 
-    // 只读打开 search.db，经原生分析器查询。
+    // 只读打开 EraStore（`search.db` 仅作目录锚点），经原生分析器查询。
     final index = SearchIndex.open(searchDb, lib: lib);
     expect(index, isNotNull);
     addTearDown(index!.close);
+    expect(index.available, isTrue,
+        reason: 'EraStore 就绪后 available 必须为 true（不能再看 search.db）');
 
     // 中文子串（歌词 / 标题）。
     final cn = index.search('中国');
@@ -321,6 +330,165 @@ void main() {
     expect(index.search('ni hao').map((h) => h.trackId), contains('tL'));
     // 中文原文仍命中（原文不回退）。
     expect(index.search('你好').map((h) => h.trackId), contains('tL'));
+  }, skip: skip);
+
+  test('era_search_fallback：参数化 LIKE + 字段权重（T2.12）', () async {
+    final lib = IndexerLibrary.load(soPath: soPath);
+    final tmp = await Directory.systemTemp.createTemp('indexer_fallback');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+
+    final libraryDb = '${tmp.path}/library.db';
+    final db = sqlite3.open(libraryDb);
+    db.execute('''
+      CREATE TABLE tracks (
+        id TEXT PRIMARY KEY, path TEXT, title TEXT, artists TEXT,
+        album TEXT, lyrics TEXT, file_mtime INTEGER
+      )
+    ''');
+    const rows = [
+      ('f1', '晴天', '[{"name":"周杰伦"}]', '{"name":"叶惠美"}'),
+      ('f2', '七里香', '[{"name":"晴天乐队"}]', null),
+      ('f3', '稻香', '[{"name":"周杰伦"}]', '{"name":"晴天合集"}'),
+      ('f4', '无关', '[{"name":"无关"}]', null),
+    ];
+    for (final (id, title, artists, album) in rows) {
+      db.execute(
+        'INSERT INTO tracks (id, path, title, artists, album, lyrics, file_mtime) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, '${tmp.path}/$id.mp3', title, artists, album, null, 1],
+      );
+    }
+    db.close();
+
+    final (code, text) = lib.fallbackSearch(
+      libraryDb,
+      jsonEncode({'api': 2, 'query': '晴天', 'scope': 'metadata', 'limit': 300}),
+    );
+    expect(code, 0, reason: 'era_search_fallback 应返回 0，实际: $text');
+    final root = jsonDecode(text) as Map<String, dynamic>;
+    expect(root['api'], 2);
+    expect(root['scheme'], 'fallback@1');
+    expect(root['total'], 3);
+    expect(root['next'], isNull);
+    // title(3) > artist(2) > album(1)。
+    expect(
+      (root['items'] as List).map((e) => (e as Map)['trackId']).toList(),
+      ['f1', 'f2', 'f3'],
+    );
+
+    // 空结果 vs 失败：无关查询是真实空列表（Dart 不回退 LIKE）。
+    final (emptyCode, emptyText) = lib.fallbackSearch(
+      libraryDb,
+      jsonEncode({'api': 2, 'query': '不存在', 'limit': 300}),
+    );
+    expect(emptyCode, 0);
+    final empty = jsonDecode(emptyText) as Map<String, dynamic>;
+    expect((empty['items'] as List), isEmpty);
+    expect(empty['total'], 0);
+
+    // 库缺失 → 码 2（调用方据此回退 Dart LIKE）。
+    final (missingCode, _) = lib.fallbackSearch(
+      '${tmp.path}/missing.db',
+      jsonEncode({'api': 2, 'query': '晴天'}),
+    );
+    expect(missingCode, 2);
+  }, skip: skip);
+
+  test('era_search_decorate：按 trackId 补高亮 / 片段（T2.11）', () async {
+    final lib = IndexerLibrary.load(soPath: soPath);
+    final tmp = await Directory.systemTemp.createTemp('indexer_decorate');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+
+    const id = '0123456789abcdef0123456789abcdef';
+    final libraryDb = '${tmp.path}/library.db';
+    final db = sqlite3.open(libraryDb);
+    db.execute('''
+      CREATE TABLE tracks (
+        id TEXT PRIMARY KEY, path TEXT, title TEXT, artists TEXT,
+        album TEXT, lyrics TEXT, file_mtime INTEGER
+      )
+    ''');
+    db.execute(
+      'INSERT INTO tracks (id, path, title, artists, album, lyrics, file_mtime) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        id,
+        '${tmp.path}/decorate.mp3',
+        '晴天',
+        jsonEncode([{'name': 'A'}, {'name': 'B'}]),
+        jsonEncode({'name': '专辑'}),
+        '今天晴天适合听歌',
+        1,
+      ],
+    );
+    db.close();
+
+    final (code, text) = lib.decorateSearch(
+      libraryDb,
+      jsonEncode({
+        'api': 2,
+        'query': '晴天',
+        'trackIds': [id],
+        'snippet': true,
+      }),
+    );
+    expect(code, 0, reason: 'era_search_decorate 应返回 0，实际: $text');
+    final root = jsonDecode(text) as Map<String, dynamic>;
+    expect(root['api'], 2);
+    final highlight = (root['highlights'] as Map)[id] as List;
+    expect(
+      highlight.any(
+        (r) => (r as Map)['field'] == 'title' && r['start'] == 0 && r['end'] == 2,
+      ),
+      isTrue,
+    );
+    final snippet = (root['snippets'] as Map)[id] as Map;
+    expect(snippet['text'], contains('晴天'));
+
+    // 多歌手展示文本按 " / " 连接：B 在 [4,5)。
+    final (artistCode, artistText) = lib.decorateSearch(
+      libraryDb,
+      jsonEncode({
+        'api': 2,
+        'query': 'B',
+        'trackIds': [id],
+      }),
+    );
+    expect(artistCode, 0);
+    final artist = jsonDecode(artistText) as Map<String, dynamic>;
+    expect(
+      ((artist['highlights'] as Map)[id] as List).any(
+        (r) => (r as Map)['field'] == 'artist' && r['start'] == 4 && r['end'] == 5,
+      ),
+      isTrue,
+    );
+
+    // 非法 / 超限 / 库缺失。
+    expect(
+      lib.decorateSearch(
+        libraryDb,
+        jsonEncode({'api': 2, 'query': '晴天', 'trackIds': ['f1']}),
+      ).$1,
+      1,
+    );
+    expect(
+      lib.decorateSearch(
+        libraryDb,
+        jsonEncode({
+          'api': 2,
+          'query': '晴天',
+          'trackIds': List.filled(301, id),
+        }),
+      ).$1,
+      1,
+    );
+    expect(
+      lib.decorateSearch(
+        '${tmp.path}/missing.db',
+        jsonEncode({'api': 2, 'query': '晴天', 'trackIds': [id]}),
+      ).$1,
+      2,
+    );
   }, skip: skip);
 }
 

@@ -119,8 +119,16 @@ internal static class Replay
             }
         }
 
-        if (indexPath is null || !File.Exists(indexPath))
+        if (indexPath is null)
             return Fail($"索引不存在: {indexPath ?? "(未指定 --index)"}");
+        var eraDir = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(indexPath)) ?? ".", IndexerEngine.EraStoreDirName);
+        var eraName = EraStore.CurrentPointer.Read(eraDir);
+        if (eraName is null)
+            return Fail($"索引不存在（EraStore CURRENT 缺失）: {indexPath}");
+        var eraPath = Path.Combine(eraDir, eraName);
+        if (!File.Exists(eraPath))
+            return Fail($"索引不存在: {indexPath}");
         if (queriesPath is null)
             return Fail("缺少 --queries <queries.jsonl>");
         if (!File.Exists(queriesPath))
@@ -209,14 +217,14 @@ internal static class Replay
 
             w.WritePropertyName("options");
             w.WriteStartObject();
-            w.WriteString("scheme", "v7");
+            w.WriteString("scheme", "erastore");
             w.WriteBoolean("lyricsPinyin", true);
             w.WriteBoolean("lyricsInitials", false);
             w.WriteEndObject();
 
             w.WritePropertyName("index");
             w.WriteStartObject();
-            w.WriteNumber("fileBytes", new FileInfo(indexPath).Length);
+            w.WriteNumber("fileBytes", new FileInfo(eraPath).Length);
             w.WriteNumber("liveBytes", 0);
             w.WriteNumber("buildMs", 0);
             w.WriteNumber("openMs", 0);
@@ -553,7 +561,7 @@ internal static class Replay
     private static IEnumerable<string> DeriveQueries(string libraryPath, bool includeLyrics)
     {
         var rows = new List<DerivedRow>();
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(libraryPath, readOnly: true));
+        using var conn = new SqliteConnection(LibraryDb.ConnectionString(libraryPath, readOnly: true));
         conn.Open();
         using (var cmd = conn.CreateCommand())
         {
@@ -888,7 +896,7 @@ internal static class Replay
     private static List<string> ReadTrackIds(string libraryPath)
     {
         var ids = new List<string>();
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(libraryPath, readOnly: true));
+        using var conn = new SqliteConnection(LibraryDb.ConnectionString(libraryPath, readOnly: true));
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT id FROM tracks";
@@ -905,7 +913,7 @@ internal static class Replay
     /// <summary>取原库 <c>CREATE TABLE tracks</c> 的 DDL（不复制索引 / 触发器）。</summary>
     private static string ReadTracksDdl(string libraryPath)
     {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(libraryPath, readOnly: true));
+        using var conn = new SqliteConnection(LibraryDb.ConnectionString(libraryPath, readOnly: true));
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tracks'";
@@ -930,7 +938,7 @@ internal static class Replay
         // 只保留列定义部分，表名统一为 tracks（新建的独立库，无需前缀）。
         var createSql = "CREATE TABLE tracks " + sourceDdl[openParen..];
 
-        using var outConn = new SqliteConnection(FtsStore.ConnectionString(outPath));
+        using var outConn = new SqliteConnection(LibraryDb.ConnectionString(outPath));
         outConn.Open();
         using (var create = outConn.CreateCommand())
         {
@@ -938,7 +946,7 @@ internal static class Replay
             create.ExecuteNonQuery();
         }
 
-        using var srcConn = new SqliteConnection(FtsStore.ConnectionString(libraryPath, readOnly: true));
+        using var srcConn = new SqliteConnection(LibraryDb.ConnectionString(libraryPath, readOnly: true));
         srcConn.Open();
 
         // 列名取自源库 tracks；SELECT * 的列序与 pragma_table_info 的 cid 序一致。

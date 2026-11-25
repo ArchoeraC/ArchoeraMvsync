@@ -31,6 +31,9 @@ internal readonly struct TermInfo
     /// <summary>词条标志（has_positions 等）。</summary>
     public byte Flags { get; }
 
+    /// <summary>该词条是否带位置块（无位置字段的短语会降级为纯交集）。</summary>
+    public bool HasPositions => (Flags & 0x01) != 0;
+
     /// <summary>字段族。</summary>
     public FieldId Field => (FieldId)Key[0];
 
@@ -256,6 +259,26 @@ internal sealed class TermDictReader
             }
         }
         return results;
+    }
+
+    /// <summary>流式枚举全部词条（合并热路径：不把整段词典物化进 List）。</summary>
+    public IEnumerable<TermInfo> Enumerate()
+    {
+        for (var b = 0; b < BlockCount; b++)
+        {
+            var body = OpenBlock(b, out var count);
+            // ByteReader 是 ref struct，不能跨 yield；先解出本块再逐条产出。
+            var block = new List<TermInfo>(count);
+            var reader = new ByteReader(body, BlockHeaderSize);
+            var keyBuf = new byte[256];
+            var keyLen = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var (df, postOff, flags) = ReadEntry(ref reader, keyBuf, ref keyLen);
+                block.Add(new TermInfo(keyBuf.AsSpan(0, keyLen).ToArray(), df, postOff, flags));
+            }
+            foreach (var term in block) yield return term;
+        }
     }
 
     /// <summary>按字节序枚举全部词条（dump / 差分测试）。</summary>

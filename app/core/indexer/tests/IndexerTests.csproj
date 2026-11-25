@@ -27,9 +27,13 @@
     <Compile Include="../Pinyin.cs" Link="Pinyin.cs" />
     <Compile Include="../PinyinSegmenter.cs" Link="PinyinSegmenter.cs" />
     <Compile Include="../HanziData.cs" Link="HanziData.cs" />
+    <Compile Include="../LexiconCross.cs" Link="LexiconCross.cs" />
+    <!-- 搜索数据包（T4.3）：manifest / data_pack_id / 能力降级。 -->
+    <Compile Include="../DataPack.cs" Link="DataPack.cs" />
     <Compile Include="../Log.cs" Link="Log.cs" />
+    <Compile Include="../MemoryTrim.cs" Link="MemoryTrim.cs" />
     <Compile Include="../IndexStore.cs" Link="IndexStore.cs" />
-    <Compile Include="../FtsStore.cs" Link="FtsStore.cs" />
+    <Compile Include="../LibraryDb.cs" Link="LibraryDb.cs" />
     <Compile Include="../IndexerEngine.cs" Link="IndexerEngine.cs" />
     <Compile Include="../IndexerJson.cs" Link="IndexerJson.cs" />
     <Compile Include="../SearchQuery.cs" Link="SearchQuery.cs" />
@@ -40,6 +44,20 @@
     <Compile Include="../SearchPolicy.cs" Link="SearchPolicy.cs" />
     <Compile Include="../SearchPlan.cs" Link="SearchPlan.cs" />
     <Compile Include="../SearchPlanCompiler.cs" Link="SearchPlanCompiler.cs" />
+    <!-- S2 方案注册表（T2.4）：matchers / 能力协商 / 降级链。 -->
+    <Compile Include="../SearchScheme.cs" Link="SearchScheme.cs" />
+    <!-- S2 桶序（SearchSession 的唯一排序入口；与 CLI 同源）。 -->
+    <Compile Include="../SearchRanker.cs" Link="SearchRanker.cs" />
+    <!-- S2 explain / trace（T2.3 / T2.5 / T2.7 的诊断归因）。 -->
+    <Compile Include="../SearchExplain.cs" Link="SearchExplain.cs" />
+    <!-- S2 歌词片段（T2.8）：查询期只读 library.db 截取。 -->
+    <Compile Include="../SearchSnippet.cs" Link="SearchSnippet.cs" />
+    <!-- S2 结果高亮（T2.7）：字面 / 读音 / 首字母 UTF-16 区间。 -->
+    <Compile Include="../SearchHighlight.cs" Link="SearchHighlight.cs" />
+    <!-- S2 分页与 total（T2.10）：32B 游标编解码 + none/capped/exact。 -->
+    <Compile Include="../SearchPaging.cs" Link="SearchPaging.cs" />
+    <!-- 无索引时的 LIKE 降级检索（T2.12）：era_search_fallback。 -->
+    <Compile Include="../SearchFallback.cs" Link="SearchFallback.cs" />
     <!-- C ABI v2：请求 / 响应 v2（SearchApi）与导出层（Ffi）。
          导出层以同源编译进测试程序集，SearchApiTests 直接调托管入口验证句柄 / 错误码。 -->
     <Compile Include="../SearchApi.cs" Link="SearchApi.cs" />
@@ -77,8 +95,15 @@
     <EmbeddedResource Include="../data/def_en2hanzi.tsv" Link="data/def_en2hanzi.tsv">
       <LogicalName>Archoera.Indexer.data.def_en2hanzi.tsv</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="../data/lexicon_cross.tsv" Link="data/lexicon_cross.tsv">
+      <LogicalName>Archoera.Indexer.data.lexicon_cross.tsv</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="../data/def_hanzi2en.tsv" Link="data/def_hanzi2en.tsv">
       <LogicalName>Archoera.Indexer.data.def_hanzi2en.tsv</LogicalName>
+    </EmbeddedResource>
+    <!-- 数据包清单（T4.3）：与 CLI / FFI 同一份，健康检查按它比对 id。 -->
+    <EmbeddedResource Include="../data/manifest.json" Link="data/manifest.json">
+      <LogicalName>Archoera.Indexer.data.manifest.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
@@ -86,6 +111,8 @@
     <!-- 测试向量随输出复制（运行器优先在输出目录旁查找）。 -->
     <None Include="vectors/*.tsv" CopyToOutputDirectory="PreserveNewest" />
     <None Include="vectors/plan/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="vectors/rank/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="vectors/scheme/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

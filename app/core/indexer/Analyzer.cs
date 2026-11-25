@@ -23,7 +23,7 @@ public enum Field
     Filename = 6,
 }
 
-/// <summary>索引侧分析结果（词元 / 全拼 / 首字母三列，均为空格分隔串）。</summary>
+/// <summary>索引侧分析结果（词元 / 全拼 / 首字母 / 读音列，均为空格分隔串）。</summary>
 public sealed class AnalysisResult
 {
     public string Tokens { get; }
@@ -37,14 +37,28 @@ public sealed class AnalysisResult
     /// </summary>
     public string Readings { get; }
 
+    /// <summary>
+    /// **人类可读**的每段首字母串（空格分隔；拉丁 / 数字段不产出）。
+    /// 查询侧与首字母高亮 / explain 使用这一列，永远不是 bigram。
+    /// </summary>
     public string PinyinInitials { get; }
 
-    public AnalysisResult(string tokens, string pinyin, string pinyinInitials, string readings)
+    /// <summary>
+    /// 首字母倒排列的**索引词元**（T3.9 bigram）：每个 CJK 段内相邻首字母两两成词
+    /// （<c>wanzg</c> → <c>wa an nz zg</c>），段与段之间用
+    /// <see cref="Analyzer.InitialsBoundaryToken"/> 隔开，保证短语查询不会跨段命中。
+    /// </summary>
+    public string InitialsBigrams { get; }
+
+    public AnalysisResult(
+        string tokens, string pinyin, string pinyinInitials, string readings,
+        string initialsBigrams = "")
     {
         Tokens = tokens;
         Pinyin = pinyin;
         PinyinInitials = pinyinInitials;
         Readings = readings;
+        InitialsBigrams = initialsBigrams;
     }
 }
 
@@ -136,11 +150,62 @@ public static class Analyzer
     /// 的结构性根源。去掉中间字后，单字查询改走前缀 <c>字*</c>（命中以该字开头的 bigram）。
     /// 末尾字必须保留：它只作为某个 bigram 的第二个字符存在，不留 unigram 将彻底查不到。
     /// 索引内容变化，必须全量重建。
+    /// v14：**字面歌词层不再产出 unigram**（T3.7）——歌词原文 / 译文 / 音译只入 bigram
+    /// （拉丁 / 数字整词不变），单字不再进这三个列。单字歌词查询本就被查询侧列门控
+    /// 排除（<c>RequireMetadataForSingleChar</c>），故召回不变、倒排显著变小。
+    /// 同时歌词层在分析前经 <see cref="LyricsPreprocess"/> 归一化去重 + V6 护栏截断
+    /// （T3.5 / T3.8）：歌词列内容变化，必须全量重建。
+    /// v15：**首字母列改为 bigram**（T3.9）——每个 CJK 段的首字母串由「整段一个 token」
+    /// 改为「相邻首字母两两成词」（<c>wanzg</c> → <c>wa an nz zg</c>），使段中间的首字母
+    /// 也能命中；拉丁 / 数字段不再写入首字母列（设计文档 §4.2：只有汉字有拼音首字母）。
+    /// 段 / 字段之间插入 <see cref="InitialsBoundaryToken"/>，短语查询不会跨段误命中。
+    /// 首字母列内容变化，必须全量重建。
     /// </summary>
-    public const int AnalyzerVersion = 13;
+    public const int AnalyzerVersion = 15;
+
+    /// <summary>
+    /// 首字母 bigram 能力（<c>initials_bigram</c>）的最低分析器版本：v15 起首字母列才是
+    /// bigram，之前是整段一个 token。能力推导据此声明，避免旧索引谎报可中间匹配。
+    /// </summary>
+    public const int InitialsBigramMinVersion = 15;
+
+    /// <summary>
+    /// 首字母倒排列的**段边界词元**（T3.9）。首字母 bigram 只在同一 CJK 段内生成；
+    /// 段与段、字段与字段之间插入该词元占一个位置，于是相邻差 ≥2，短语查询
+    /// （<c>"an zg"</c>）无法跨段 / 跨字段拼出「假相邻」命中。
+    ///
+    /// 选择 <c>#</c>：首字母 bigram 恒为两个 ASCII 小写字母，<c>#</c> 既不可能与真实词条
+    /// 冲突，也只占 1 字节倒排键；查询侧永不产生该词元。
+    /// </summary>
+    public const string InitialsBoundaryToken = "#";
 
     /// <summary>查询侧跨语言候选（<see cref="QueryTokens.CrossLingual"/>）合并去重后的总预算。</summary>
     public const int CrossLingualBudget = 32;
+
+    /// <summary>
+    /// 单段首字母串 → 相邻两两 bigram（空格分隔）。长度 &lt;2 时无 bigram（返回空串）：
+    /// 首字母单字母过于稠密，不产出 unigram。索引侧与查询侧共用这一份规则，
+    /// 保证两侧的 bigram 空间逐字一致。
+    /// </summary>
+    public static string InitialsToBigrams(string initials)
+    {
+        if (initials.Length < 2) return string.Empty;
+        var builder = new StringBuilder(initials.Length * 3 - 1);
+        for (var i = 0; i + 1 < initials.Length; i++)
+        {
+            if (i > 0) builder.Append(' ');
+            builder.Append(initials[i]);
+            builder.Append(initials[i + 1]);
+        }
+        return builder.ToString();
+    }
+
+    /// <summary>把各段的 bigram 组用 <see cref="InitialsBoundaryToken"/> 连接成倒排列。</summary>
+    private static string JoinInitialsBigrams(IReadOnlyList<string> groups)
+    {
+        if (groups.Count == 0) return string.Empty;
+        return string.Join($" {InitialsBoundaryToken} ", groups);
+    }
 
     private enum ScriptKind
     {
@@ -171,15 +236,22 @@ public static class Analyzer
     ///
     /// [includeReadings] 为真表示调用方判定**整首曲目是日文**（任一源含假名）——此时连
     /// 纯汉字段（如纯汉字歌手名 米津玄師）也查 Unihan 读音表；为假时只有含假名的源才产出读音。
+    ///
+    /// [includeUnigrams] 为假时**不产出 CJK / 假名 / 谚文的 unigram**（只留 bigram；拉丁 /
+    /// 数字整词不受影响）。字面歌词层（原文 / 译文 / 音译）传 <c>false</c>：单字歌词查询
+    /// 已被查询侧列门控排除，unigram 只占倒排、不带来召回（见 <see cref="AnalyzerVersion"/> v14）。
+    /// 拼音 / 首字母 bigram / 读音列始终按**完整文本**生成，不受该开关影响。
     /// </summary>
-    public static AnalysisResult Analyze(string text, bool includeReadings = false)
+    public static AnalysisResult Analyze(
+        string text, bool includeReadings = false, bool includeUnigrams = true)
     {
-        var parts = AnalyzeCore(text);
+        var parts = AnalyzeCore(text, includeUnigrams);
         return new AnalysisResult(
             string.Join(' ', parts.Tokens),
             string.Join(' ', parts.Pinyin),
             string.Join(' ', parts.Initials),
-            Japanese.ReadingBigrams(text, includeReadings));
+            Japanese.ReadingBigrams(text, includeReadings),
+            JoinInitialsBigrams(parts.InitialsBigrams));
     }
 
     /// <summary>
@@ -194,7 +266,8 @@ public static class Analyzer
     /// </summary>
     public static QueryTokens AnalyzeQuery(string text)
     {
-        var parts = AnalyzeCore(text);
+        // 查询侧恒产 unigram：单字 / 中间字要靠它改写为前缀 <c>字*</c>。
+        var parts = AnalyzeCore(text, includeUnigrams: true);
         var query = new QueryTokens();
         query.Lexical.AddRange(parts.Tokens);
 
@@ -237,6 +310,8 @@ public static class Analyzer
     ///   <item>拉丁 / 数字段 → <c>def_en2hanzi</c> 查该整词，取候选汉字**码点**转为字符
     ///         （每词生成表侧已 ≤ 8）；</item>
     ///   <item>CJK 段内的每个字 → <c>def_hanzi2en</c> 查该字码点，取英文释义词。</item>
+    ///   <item>T4.1：整个查询归一形命中策展词表 <c>lexicon_cross</c> 时，先加入其目标 token
+    ///         短语（专名高置信，占预算最前）。</item>
     /// </list>
     /// 拉丁候选优先于 CJK 候选（按分段出现顺序），二者汇入同一预算池。
     /// 输入经 <see cref="Normalize"/>（NFKC + 小写 + 繁转简）后按脚本切分，与索引侧同源。
@@ -254,7 +329,12 @@ public static class Analyzer
             result.Add(term);
         }
 
-        foreach (var segment in SplitSegments(Normalize(text)))
+        var normalized = Normalize(text);
+
+        // T4.1：策展专名词表优先（高置信，按 weight 降序；目标已在加载期切成 token 短语）。
+        foreach (var curated in LexiconCross.Expand(normalized)) Add(curated);
+
+        foreach (var segment in SplitSegments(normalized))
         {
             if (segment.Kind == ScriptKind.Cjk)
             {
@@ -281,7 +361,16 @@ public static class Analyzer
     {
         public readonly List<string> Tokens = new();
         public readonly List<string> Pinyin = new();
+
+        /// <summary>每段人类可读首字母串（查询侧 / 诊断用，非 bigram）。</summary>
         public readonly List<string> Initials = new();
+
+        /// <summary>
+        /// 每段首字母 bigram 组（<c>wa an nz zg</c>）。注意这里按段分组保存，
+        /// 源内多段 / 多字段之间的边界由 <see cref="JoinInitialsBigrams"/> 与
+        /// <c>IndexerEngine.CombineInitials</c> 插入 <see cref="InitialsBoundaryToken"/>。
+        /// </summary>
+        public readonly List<string> InitialsBigrams = new();
         public bool HasCjk;
         public int CjkCharCount;
         public int PinyinSyllableCount;
@@ -289,7 +378,7 @@ public static class Analyzer
         public bool HasNonIndexedLetterOrDigit;
     }
 
-    private static Parts AnalyzeCore(string text)
+    private static Parts AnalyzeCore(string text, bool includeUnigrams)
     {
         var parts = new Parts();
         if (string.IsNullOrEmpty(text)) return parts;
@@ -300,20 +389,21 @@ public static class Analyzer
             if (segment.Kind == ScriptKind.Cjk)
             {
                 parts.HasCjk = true;
-                AddCjkSegment(segment.Text, parts);
+                AddCjkSegment(segment.Text, parts, includeUnigrams);
             }
             else if (segment.Kind == ScriptKind.Substring)
             {
                 // 假名 / 谚文：只做子串索引（bigram + 首尾 unigram），不进拼音 / 首字母列。
-                AddSubstringSegment(segment.Text, parts);
+                AddSubstringSegment(segment.Text, parts, includeUnigrams);
             }
             else
             {
-                // 拉丁 / 数字段：整词原样进入三列。
+                // 拉丁 / 数字段：整词进入词法 / 拼音列；**不进首字母列**（设计文档 §4.2：
+                // 首字母是拼音派生列，只有汉字有拼音）。旧实现把整词塞进首字母列，
+                // 令 ASCII 标题也能被首字母支命中（T3.9 修正）。
                 parts.HasNonIndexedLetterOrDigit = true;
                 parts.Tokens.Add(segment.Text);
                 parts.Pinyin.Add(segment.Text);
-                parts.Initials.Add(segment.Text);
             }
         }
         return parts;
@@ -330,13 +420,17 @@ public static class Analyzer
     /// <summary>
     /// CJK 段分词：先按序输出 bigram（相邻二字，位置连续便于短语），再输出**首尾**
     /// unigram（中间字由 bigram 覆盖，见 <see cref="AnalyzerVersion"/> v13）；拼音列按
-    /// **整段**词级消歧取音节，首字母列合并为一个 token。
+    /// **整段**词级消歧取音节；首字母列按段输出相邻两两 bigram（v15），不再产整段 token。
     ///
     /// 首尾 unigram 的取舍：末字只作为某个 bigram 的第二个字符存在，不留 unigram 会
     /// 彻底查不到；首字保证段首检索不受影响。中间字查询在编译器侧改写为前缀
     /// <c>字*</c>（命中以该字开头的 bigram），命中集合不缩小。
+    ///
+    /// <paramref name="includeUnigrams"/>=false（字面歌词层）时只输出 bigram；单字段
+    /// 因此不产任何词元——查询侧单字不扫歌词列，这条路径不可达。
+    /// 拼音 / 首字母 bigram 仍按完整文本生成，不受该开关影响。
     /// </summary>
-    private static void AddCjkSegment(string segment, Parts parts)
+    private static void AddCjkSegment(string segment, Parts parts, bool includeUnigrams)
     {
         var runes = segment.EnumerateRunes().ToArray();
         parts.CjkCharCount += runes.Length;
@@ -344,10 +438,13 @@ public static class Analyzer
         {
             for (int i = 0; i + 1 < runes.Length; i++)
                 parts.Tokens.Add(runes[i].ToString() + runes[i + 1].ToString());
-            parts.Tokens.Add(runes[0].ToString());
-            parts.Tokens.Add(runes[^1].ToString());
+            if (includeUnigrams)
+            {
+                parts.Tokens.Add(runes[0].ToString());
+                parts.Tokens.Add(runes[^1].ToString());
+            }
         }
-        else if (runes.Length == 1)
+        else if (runes.Length == 1 && includeUnigrams)
         {
             parts.Tokens.Add(runes[0].ToString());
         }
@@ -356,8 +453,16 @@ public static class Analyzer
         var pinyin = Pinyin.FromCjkRun(segment);
         parts.Pinyin.AddRange(pinyin);
         parts.PinyinSyllableCount += pinyin.Count;
+
+        // 首字母：人类可读的整段串 + 索引用的相邻 bigram（T3.9）。单字段（1 个首字母）
+        // 没有 bigram，只保留人类可读串——单字母 token 过于稠密，不入倒排。
         var initials = Pinyin.Initials(segment);
-        if (initials.Length > 0) parts.Initials.Add(initials);
+        if (initials.Length > 0)
+        {
+            parts.Initials.Add(initials);
+            var bigrams = InitialsToBigrams(initials);
+            if (bigrams.Length > 0) parts.InitialsBigrams.Add(bigrams);
+        }
     }
 
     /// <summary>
@@ -368,18 +473,22 @@ public static class Analyzer
     /// （真实库实测：`くらりん` ⊂ `きゅうくらりん`，命中 0）。N-gram 取 2 与汉字一致，
     /// 查询侧同一套 <c>bigram</c> 组合即可（见 Dart <c>_isCjkBigram</c> 的对应实现）。
     /// 首尾 unigram 规则与 CJK 相同（v13）：单字查询走前缀，避免全库高频单字倒排。
+    /// <paramref name="includeUnigrams"/>=false 时只输出 bigram（字面歌词层，v14）。
     /// </summary>
-    private static void AddSubstringSegment(string segment, Parts parts)
+    private static void AddSubstringSegment(string segment, Parts parts, bool includeUnigrams)
     {
         var runes = segment.EnumerateRunes().ToArray();
         if (runes.Length >= 2)
         {
             for (int i = 0; i + 1 < runes.Length; i++)
                 parts.Tokens.Add(runes[i].ToString() + runes[i + 1].ToString());
-            parts.Tokens.Add(runes[0].ToString());
-            parts.Tokens.Add(runes[^1].ToString());
+            if (includeUnigrams)
+            {
+                parts.Tokens.Add(runes[0].ToString());
+                parts.Tokens.Add(runes[^1].ToString());
+            }
         }
-        else if (runes.Length == 1)
+        else if (runes.Length == 1 && includeUnigrams)
         {
             parts.Tokens.Add(runes[0].ToString());
         }
@@ -417,8 +526,12 @@ public static class Analyzer
     ///
     /// 近似：NFKC 表**仅逐字符应用**——跨字符规范化组合（如 base + combining 合成）不做，
     /// 这与 NFKC 完整语义存在已知偏差（见 <c>tools/gen_tables</c> 与报告）。
+    ///
+    /// **internal 共享**：<see cref="LyricsPreprocess"/> 用它生成歌词行的去重键，保证
+    /// 「去重判定」与「词元归一」是同一套语义（大小写 / 全半角 / 异体 / 繁简收敛一致），
+    /// 不得另写第二份归一化。
     /// </summary>
-    private static string Normalize(string text)
+    internal static string Normalize(string text)
     {
         if (text.Length == 0) return text;
         var compat = new StringBuilder(text.Length);
@@ -444,6 +557,52 @@ public static class Analyzer
         }
 
         return WordsHelper.ToSimplifiedChinese(folded.ToString().ToLowerInvariant(), 0);
+    }
+
+    /// <summary>
+    /// 元数据归一形（DocStore v3 的 <c>title_norm</c> / <c>artist_norm</c> / <c>album_norm</c>），
+    /// <b>唯一生成入口</b>（T3.11，RP §3.6.3 的 exactness 复核）。
+    ///
+    /// <para>规则 = <see cref="Normalize"/>（NFKC 兼容折叠 → 去音符号 → 异体补齐 → 小写 → 繁转简）
+    /// → <b>空白折叠</b>：所有 Unicode 空白连续段压成一个 ASCII 空格，并去掉首尾空白。
+    /// 不额外删标点 / 不做分词——归一语义只有 <see cref="Normalize"/> 一份。</para>
+    ///
+    /// <para>为什么保留单个空格：exactness 的拉丁多词字段需要<b>词级</b>覆盖
+    /// （命中词数 / 查询词数），空格就是词边界；CJK 覆盖按码点计算，空格天然不参与
+    /// （查询侧 <c>q</c> 去空白后做相等 / 前缀 / 包含判定）。因此列里只留「词间单空格」，
+    /// 不保留源串的换行 / 制表 / 全角空格 / 连续空格。</para>
+    ///
+    /// <para>源字段为空（或全是空白）返回空串；调用方不需要再判空。</para>
+    /// </summary>
+    internal static string NormalizeMetadata(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        var normalized = Normalize(text);
+        // 快路径：无任何空白时直接返回（大多数 CJK / 单词元数据），免去两次缓冲分配。
+        var hasWhitespace = false;
+        foreach (var ch in normalized)
+            if (char.IsWhiteSpace(ch)) { hasWhitespace = true; break; }
+        if (!hasWhitespace) return normalized;
+
+        var builder = new StringBuilder(normalized.Length);
+        var pendingSpace = false;
+        foreach (var rune in normalized.EnumerateRunes())
+        {
+            if (Rune.IsWhiteSpace(rune))
+            {
+                // 首部空白直接丢弃；词间连续空白只记一个待写空格。
+                if (builder.Length > 0) pendingSpace = true;
+                continue;
+            }
+            if (pendingSpace)
+            {
+                builder.Append(' ');
+                pendingSpace = false;
+            }
+            builder.Append(rune.ToString());
+        }
+        return builder.ToString();
     }
 
     /// <summary>脚本切分：连续 CJK / 连续拉丁 / 连续数字各成段；其余（标点等）丢弃并断段。</summary>

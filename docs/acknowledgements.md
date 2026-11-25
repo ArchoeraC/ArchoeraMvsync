@@ -56,6 +56,7 @@
 **本地曲库搜索索引（indexer）依赖与设计参考**（许可逐项见 `app/core/indexer/THIRD-PARTY-LICENSES.md`）：
 
 - **[ToolGood.Words](https://github.com/toolgood/ToolGood.Words)（Apache-2.0）** —— 汉字转拼音（含**词级多音字消歧**）、繁简互换、全角半角互换；索引器**直接依赖**
+- **策展跨语言专名词表 `app/core/indexer/data/lexicon_cross.tsv`（Archoera 自建，CC0-1.0）** —— 公开艺人 / 乐队名称的事实性对照（seed，待人工复核）
 - **Unicode [Unihan](https://www.unicode.org/reports/tr38/) 数据库 `kDefinition` / `kJapanese` / `kSimplifiedVariant` + `kJapaneseOldVariant`（Unicode License）** —— 跨语言检索「汉字 ↔ 英文释义」查询扩展、日文音训读、异体字折叠的数据来源
 - **Unicode NFD 规范分解（Unicode License）** —— 拉丁去音符号折叠表 `data/accent_fold.tsv`
 - **[SQLite FTS5](https://www.sqlite.org/fts5.html)（公有领域）** —— 全文索引 / `bm25()` 排序的存储引擎

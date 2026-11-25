@@ -21,6 +21,7 @@ internal static class SearchPlanTests
         LyricsScope();
         ReadingProfile();
         SingleAndMultiWord();
+        LongQueryContraction();
         DropOrdering();
         EmptyDropExpression();
         FuzzyPlan();
@@ -47,11 +48,12 @@ internal static class SearchPlanTests
         Program.Check("policy: CrossLingualCap==300", policy.CrossLingualCap == 300, policy.CrossLingualCap.ToString());
         Program.Check("policy: TypoCap==300", policy.TypoCap == 300, policy.TypoCap.ToString());
 
-        Program.Check("policy: SchemeId", SearchPolicy.SchemeId == "s1-compat@1", SearchPolicy.SchemeId);
+        Program.Check("policy: SchemeId", SearchPolicy.SchemeId == SchemeIds.Default, SearchPolicy.SchemeId);
         Program.Check("policy: 常量快照 == SearchQuery",
             policy.DefaultMaxFuzzyVariants == SearchQuery.DefaultMaxFuzzyVariants
             && policy.DefaultMaxCjkVariants == SearchQuery.DefaultMaxCjkVariants
             && policy.MaxCjkQueryLength == SearchQuery.MaxCjkQueryLength
+            && policy.MaxPlanQueryCodePoints == SearchQuery.MaxPlanQueryCodePoints
             && policy.MinCjkFuzzyLength == SearchQuery.MinCjkFuzzyLength
             && policy.MinFuzzyWordLength == SearchQuery.MinFuzzyWordLength
             && policy.MinInitialsBranchLength == SearchQuery.MinInitialsBranchLength
@@ -60,7 +62,6 @@ internal static class SearchPlanTests
             && policy.MaxPinyinVariantsPerSyllable == SearchQuery.MaxPinyinVariantsPerSyllable
             && policy.ReadingBranchMinCjkLength == SearchQuery.ReadingBranchMinCjkLength
             && policy.MinPrefixTokenLength == SearchQuery.MinPrefixTokenLength
-            && policy.MinInitialsPrefixLength == SearchQuery.MinInitialsPrefixLength
             && policy.PairExactWithPrefix == SearchQuery.PairExactWithPrefix
             && policy.RequireMetadataForSingleChar == SearchQuery.RequireMetadataForSingleChar
             && policy.FirstCharTypoCostsTwo == SearchQuery.FirstCharTypoCostsTwo);
@@ -90,8 +91,9 @@ internal static class SearchPlanTests
         var fresh = Analyzer.AnalyzeQuery("我爱你");
         Program.Check("plan: lexical 表达式同源",
             lexical.Expression == SearchQuery.CompileMatch(fresh, metadata: false));
+        // T2.5：连续 bigram 段 = 位置连续的短语（我爱你 → "我爱 爱你"）→ Phrase。
         Program.Check("plan: lexical kind/family/op",
-            lexical.Kind == MatchKind.Exact && lexical.Family == FieldFamily.Mixed && lexical.Op == MatchOp.And);
+            lexical.Kind == MatchKind.Phrase && lexical.Family == FieldFamily.Mixed && lexical.Op == MatchOp.And);
         Program.Check("plan: lexical gate 无条件", !lexical.Gate.RequiresMainMiss && !lexical.Gate.RequiresFuzzy);
 
         var pinyin = plan.Steps.FirstOrDefault(step => step.Pass == SearchPassNames.PinyinLoose);
@@ -100,7 +102,7 @@ internal static class SearchPlanTests
             pinyin?.Expression == SearchQuery.CompilePinyinLoose(fresh, metadata: false));
         Program.Check("plan: 拼音宽松 kind/family/gate",
             pinyin is not null
-            && pinyin.Kind == MatchKind.PinyinExact
+            && pinyin.Kind == MatchKind.PinyinPhrase
             && pinyin.Family == FieldFamily.Pinyin
             && pinyin.Op == MatchOp.And
             && pinyin.Gate.RequiresMainMiss
@@ -165,7 +167,7 @@ internal static class SearchPlanTests
 
         var lyricsLexical = multi.Steps.First(step => step.Pass == SearchPassNames.Lexical);
         Program.Check("plan: lyrics lexical kind/family/op",
-            lyricsLexical.Kind == MatchKind.Exact
+            lyricsLexical.Kind == MatchKind.Phrase
             && lyricsLexical.Family == FieldFamily.Lyrics
             && lyricsLexical.Op == MatchOp.And);
         Program.Check("plan: lyrics lexical 表达式 == 主趟 + 外过滤",
@@ -222,6 +224,7 @@ internal static class SearchPlanTests
             ? null
             : SearchPlanCompiler.ResolveDeferredExpression(
                 fuzzyStep, Analyzer.AnalyzeQuery("helo"), metadata: false, lyrics: true,
+                lyricsInitials: meta.InitialsLyrics,
                 loadVocabulary: () => Array.Empty<string>());
         Program.Check("plan: lyrics fuzzy 解析后带外过滤",
             resolved?.StartsWith(LyricsPrefix, StringComparison.Ordinal) == true
@@ -304,6 +307,53 @@ internal static class SearchPlanTests
                 && !step.Gate.RequiresFuzzy));
     }
 
+    /// <summary>
+    /// N15 / U4：计划期收缩门槛（RP §3.5.7）。查询可见码点数 ≥
+    /// <see cref="SearchQuery.MaxPlanQueryCodePoints"/> 时只生成字面主趟——
+    /// 不生成丢词 / 拼音 / 读音 / 跨语言 / 容错 step，且不改写查询文本。
+    /// </summary>
+    private static void LongQueryContraction()
+    {
+        var meta = Profile(false, false);
+        var threshold = SearchQuery.MaxPlanQueryCodePoints;
+
+        var latin = new string('a', 200);
+        var longLatin = SearchPlanCompiler.Compile(
+            new SearchRequest { Query = latin, Fuzzy = true },
+            Analyzer.AnalyzeQuery(latin), meta, SearchPolicy.Default);
+        Program.Check("plan: 200 码点只生成字面主趟",
+            longLatin.Steps.Count == 1 && longLatin.Steps[0].Id == "lexical@1",
+            string.Join(',', longLatin.Steps.Select(step => step.Id)));
+        Program.Check("plan: 200 码点无丢词候选", longLatin.DropCandidates.Count == 0,
+            longLatin.DropCandidates.Count.ToString());
+
+        // 门槛是「≥」：threshold-1 个可见码点仍走常规计划（可能生成模糊趟）。
+        var below = new string('a', threshold - 1);
+        var belowPlan = SearchPlanCompiler.Compile(
+            new SearchRequest { Query = below, Fuzzy = true },
+            Analyzer.AnalyzeQuery(below), meta, SearchPolicy.Default);
+        Program.Check($"plan: {threshold - 1} 码点仍生成模糊趟",
+            belowPlan.Steps.Any(step => step.Pass == SearchPassNames.Fuzzy),
+            string.Join(',', belowPlan.Steps.Select(step => step.Id)));
+
+        // 多词 / CJK 超长：同样只保留字面主趟（丢词子集与 CJK 变体都按长度增长）。
+        var words = string.Join(' ', Enumerable.Repeat("晴天", 40));
+        var longWords = SearchPlanCompiler.Compile(
+            new SearchRequest { Query = words, Fuzzy = true },
+            Analyzer.AnalyzeQuery(words), meta, SearchPolicy.Default);
+        Program.Check("plan: 多词超长只生成字面主趟",
+            longWords.Steps.Count == 1 && longWords.DropCandidates.Count == 0,
+            string.Join(',', longWords.Steps.Select(step => step.Id)));
+
+        var cjk = new string('爱', threshold);
+        var longCjk = SearchPlanCompiler.Compile(
+            new SearchRequest { Query = cjk, Fuzzy = true },
+            Analyzer.AnalyzeQuery(cjk), meta, SearchPolicy.Default);
+        Program.Check($"plan: {threshold} 个 CJK 字只生成字面主趟",
+            longCjk.Steps.Count == 1 && longCjk.Steps[0].Pass == SearchPassNames.Lexical,
+            string.Join(',', longCjk.Steps.Select(step => step.Id)));
+    }
+
     private static void DropOrdering()
     {
         var meta = Profile(false, false);
@@ -372,6 +422,7 @@ internal static class SearchPlanTests
             ? null
             : SearchPlanCompiler.ResolveDeferredExpression(
                 step, Analyzer.AnalyzeQuery("helo"), metadata: false, lyrics: false,
+                lyricsInitials: meta.InitialsLyrics,
                 loadVocabulary: () => Array.Empty<string>());
         Program.Check("plan: 空词表仍能解析 fuzzy 表达式",
             resolved is not null && resolved.Contains("helo", StringComparison.Ordinal), resolved ?? "(null)");
@@ -433,11 +484,11 @@ internal static class SearchPlanTests
         Program.Check("plan: JSON 含 Steps", json.Contains("\"Steps\"", StringComparison.Ordinal));
         Program.Check("plan: JSON 含 SchemeId", json.Contains("\"SchemeId\"", StringComparison.Ordinal));
         Program.Check("plan: JSON 含 scheme 值",
-            json.Contains("s1-compat@1", StringComparison.Ordinal));
+            json.Contains(SchemeIds.Default, StringComparison.Ordinal));
     }
 
     /* ------------------------------------------------------------------ */
-    /* T1.4 端到端等价（期望值录自改动前 v7）                              */
+    /* T1.4 端到端等价（期望值随 analyzer v15 重录：首字母 bigram 改变字段长度）  */
     /* ------------------------------------------------------------------ */
 
     private static void EndToEndEquivalence()
@@ -636,8 +687,11 @@ internal static class SearchPlanTests
     private static StoreMeta Profile(bool hasJapanese, bool hasKorean)
         => new()
         {
-            SchemaVersion = FtsStore.SchemaVersionValue,
+            SchemaVersion = EraStore.Manifest.CurrentMetaVersion,
             AnalyzerVersion = Analyzer.AnalyzerVersion,
+            // 这些计划结构断言沿用「v14 full」口径（歌词首字母可用），
+            // 默认关闭路径由 EndToEnd 的 InitialsLyricsOption 覆盖。
+            InitialsLyrics = true,
             HasJapanese = hasJapanese,
             HasKorean = hasKorean,
             HasHan = true,
@@ -654,55 +708,58 @@ internal static class SearchPlanTests
     {
         new("我爱你", false, false, new[]
         {
-            new ExpectedHit("c1", "lexical", -3.3367325755269),
-            new ExpectedHit("c3", "lexical", -2.99104495707557),
-            new ExpectedHit("p1", "lexical", -1.1129621839105517),
+            // T4.2：内嵌原文带 +3 基线后为「中置信」，仍参与 scope=all；
+            // 低置信（损坏 / 可疑）才被歌词列掩码排除。bm25 因 layer_conf 参与 rev 与
+            // df 口径变化而重排（重录于 v4 DocStore + 中置信基线的最终实现）。
+            new ExpectedHit("c1", "lexical", -1.5194613539697288),
+            new ExpectedHit("p1", "lexical", -1.4121169382316834),
+            new ExpectedHit("c3", "lexical", -0.3891403477208586),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
         new("晴天", false, false, new[]
         {
-            new ExpectedHit("c1", "lexical", -16.03927397402711),
+            new ExpectedHit("c1", "lexical", -16.234855922155567),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
         new("周杰伦 晴天", false, false, new[]
         {
-            new ExpectedHit("c1", "dropTokens", -16.03927397402711),
+            new ExpectedHit("c1", "dropTokens", -16.234855922155567),
         }, new[] { 1, 0, 0, 0, 0, 0 }),
         new("woaini", false, false, new[]
         {
-            new ExpectedHit("c1", "lexical", -0.23774344915373724),
-            new ExpectedHit("c3", "lexical", -0.1894370112778783),
-            new ExpectedHit("p1", "lexical", -0.1275447688593011),
+            new ExpectedHit("c1", "lexical", -0.23450826217914902),
+            new ExpectedHit("c3", "lexical", -0.1945701738604293),
+            new ExpectedHit("p1", "lexical", -0.11364766494203321),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
         new("helo", false, true, new[]
         {
-            new ExpectedHit("e1", "fuzzy", -2.8418025445912054),
+            new ExpectedHit("e1", "fuzzy", -2.787473935883563),
         }, new[] { 0, 1, 1, 0, 1, 0 }),
         new("伦周杰", false, true, new[]
         {
-            new ExpectedHit("c2", "pinyinLoose", -6.38261441907323),
+            new ExpectedHit("c2", "pinyinLoose", -6.143227047853662),
         }, new[] { 0, 1, 0, 0, 0, 0 }),
         new("周杰伦啊", false, true, new[]
         {
-            new ExpectedHit("c2", "cjkFuzzy", -18.734593483450396),
+            new ExpectedHit("c2", "cjkFuzzy", -16.12867556856548),
         }, new[] { 0, 1, 0, 1, 0, 1 }),
         new("love", false, false, new[]
         {
-            new ExpectedHit("c3", "crossLingual", -2.6019317553642805),
+            new ExpectedHit("c3", "crossLingual", -2.622288763832019),
         }, new[] { 0, 0, 1, 1, 0, 0 }),
         new("zongguo", false, false, new[]
         {
-            new ExpectedHit("c1", "pinyinLoose", -1.3586213566771856),
+            new ExpectedHit("c1", "pinyinLoose", -1.3351572513715717),
         }, new[] { 0, 1, 0, 0, 0, 0 }),
         new("kurarin", false, false, new[]
         {
-            new ExpectedHit("j1", "reading", -1.9259352545346506),
+            new ExpectedHit("j1", "reading", -2.0038721039870278),
         }, new[] { 0, 0, 1, 0, 0, 0 }),
         new("晴天", true, false, new[]
         {
-            new ExpectedHit("c1", "lexical", -18.279533202582506),
+            new ExpectedHit("c1", "lexical", -16.234855922155567),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
         new("사랑해", false, false, new[]
         {
-            new ExpectedHit("k1", "lexical", -13.54474863302609),
+            new ExpectedHit("k1", "lexical", -13.579634685672177),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
     };
 }

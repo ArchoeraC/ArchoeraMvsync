@@ -20,7 +20,11 @@ internal readonly record struct AnalyzedDoc(
     IReadOnlyDictionary<FieldId, string[]> Tokens,
     string Title,
     string Artist,
-    string Album);
+    string Album,
+    long Mtime = 0,
+    long LrcMtime = 0,
+    long LrcSize = 0,
+    byte LayerConf = 0);
 
 /// <summary>
 /// 全量构建参数。<see cref="FileUuid"/> / <see cref="CreatedMs"/> / <see cref="Gen"/> 固定时，
@@ -58,8 +62,31 @@ internal sealed class BuildOptions
     /// <summary>normalizer 版本锚。</summary>
     public int NormalizerVersion = 1;
 
-    /// <summary>tokenizer 版本锚。</summary>
-    public int TokenizerVersion = 2;
+    /// <summary>
+    /// tokenizer 版本锚。
+    ///
+    /// v3：字面歌词层去 unigram（T3.7）+ 歌词层归一化去重 / V6 护栏截断（T3.5 / T3.8）。
+    /// v4：首字母列由「整段一个 token」改为段内相邻两两 bigram，并在段 / 字段之间插入
+    /// 边界词元（T3.9）；拉丁 / 数字段不再进首字母列。切分产物变化，按 RP §3.8.1 递增。
+    /// v5：LRC 分层置信度（T4.2）改变进入倒排的歌词文本（同层取高置信一份、译文 / 音译配对）。
+    /// 运行期不按本锚做门禁，全量重建由 <c>AnalyzerVersion</c>（14→15）触发。
+    /// </summary>
+    public int TokenizerVersion = 5;
+
+    /// <summary>分析器版本锚（T3.12，写入 Manifest）。</summary>
+    public int AnalyzerVersion;
+
+    /// <summary>
+    /// 数据包 id（<c>data_pack_id</c>，§5.5.1）；构建期写入
+    /// <c>anchors.dataPackId</c>，运行期只比对这个字符串。缺省空串 = 未接数据包（旧测试）。
+    /// </summary>
+    public string DataPackId = "";
+
+    /// <summary>构建选项位（<see cref="ManifestOptionsBits"/>，T3.12）。</summary>
+    public int OptionsBits;
+
+    /// <summary>能力名集合（T3.12）；为空时查询侧按 <see cref="StoreMeta"/> 兜底推导。</summary>
+    public IReadOnlyList<string> Capabilities = Array.Empty<string>();
 
     /// <summary>进度回调（分析 / 写段）；异常向上抛，由调用方实现取消。</summary>
     public Action<BuildProgress>? Progress = null;
@@ -164,20 +191,77 @@ internal static class IndexBuilder
         var manifest = new Manifest
         {
             Gen = opt.Gen,
+            MetaVersion = Manifest.CurrentMetaVersion,
             DocCount = (uint)total,
             LiveBytes = liveBytes,
+            OptionsBits = opt.OptionsBits,
             Anchors = new ManifestAnchors
             {
                 NormalizerVersion = opt.NormalizerVersion,
                 TokenizerVersion = opt.TokenizerVersion,
+                AnalyzerVersion = opt.AnalyzerVersion,
+                DataPackId = opt.DataPackId ?? "",
             },
         };
+        manifest.Capabilities.AddRange(opt.Capabilities);
         manifest.Sections.AddRange(sections);
         FillFileBytes(manifest, EraFormat.DataStart + manifest.LiveBytes);
         file.Commit(manifest);
         CurrentPointer.Write(directory, fileName);
 
         return new BuildResult { Path = path, Manifest = manifest, SegmentCount = segmentId };
+    }
+
+    /// <summary>
+    /// 增量写入：把一批 <see cref="AnalyzedDoc"/> 从 <paramref name="firstSegmentId"/> 起
+    /// 写成 1..N 个新段，返回 (段数, 追加字节数)。段号由调用方保证不与既有段冲突。
+    /// </summary>
+    internal static (int Segments, long Bytes) WriteDocs(
+        IndexFile file,
+        IReadOnlyList<AnalyzedDoc> docs,
+        int firstSegmentId,
+        int docsPerSegment,
+        long maxSegmentBytes,
+        HashSet<FieldId> noPositionFields,
+        List<SectionRef> sections)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(docs);
+        ArgumentNullException.ThrowIfNull(noPositionFields);
+        ArgumentNullException.ThrowIfNull(sections);
+        if (docsPerSegment < 1 || docsPerSegment > 1_000_000)
+            throw new ArgumentOutOfRangeException(nameof(docsPerSegment), "DocsPerSegment 必须在 1..1000000");
+        if (maxSegmentBytes < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxSegmentBytes), "MaxSegmentBytes 必须大于 0");
+
+        var records = new List<DocRecord>(Math.Min(docsPerSegment, 4096));
+        var accumulator = new SegmentAccumulator();
+        var segmentId = firstSegmentId;
+        var segments = 0;
+        long bytes = 0;
+
+        foreach (var doc in docs)
+        {
+            records.Add(MakeRecord(doc));
+            accumulator.Add(records.Count - 1, doc.Tokens, noPositionFields);
+            if (records.Count >= docsPerSegment || accumulator.EstimatedBytes >= maxSegmentBytes)
+                Flush();
+        }
+        Flush();
+        return (segments, bytes);
+
+        void Flush()
+        {
+            if (records.Count == 0) return;
+            if (segmentId > ushort.MaxValue)
+                throw new InvalidOperationException("段号超过 ushort 上限，需全量重建");
+            bytes += WriteSegment(file, records, accumulator.SortedTerms(), (ushort)segmentId, sections);
+            records.Clear();
+            accumulator.Reset();
+            segmentId++;
+            segments++;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: true, compacting: false);
+        }
     }
 
     private static void Report(BuildOptions options, string phase, int docsDone, int segmentId) =>
@@ -226,6 +310,20 @@ internal static class IndexBuilder
             }
         }, segmentId, sections);
     }
+
+    /// <summary>
+    /// 流式词条写入（合并路径）：<paramref name="writeTerms"/> 逐词条写 postings / 词典，
+    /// 调用方无需先物化「全部词条 → 全部 posting」的大字典（T3.10 合并 RSS）。
+    /// </summary>
+    internal static long WriteSegmentStreaming(
+        IndexFile file,
+        IReadOnlyList<DocRecord> docs,
+        ushort segmentId,
+        Action<TermDictBuilder, ByteWriter, ByteWriter, PostingsWriter> writeTerms,
+        List<SectionRef> sections)
+        => WriteSegmentCore(
+            file, docs, termCount: 4096, postingCount: 65_536, positionCount: 131_072,
+            writeTerms, segmentId, sections);
 
     /// <summary>并行数组形式的段写入（全量构建热路径，避免每条 posting 一个数组对象）。</summary>
     private static long WriteSegment(
@@ -337,9 +435,18 @@ internal static class IndexBuilder
             Rev = doc.Rev,
             ScriptBits = doc.ScriptBits,
             Flags = doc.Flags,
+            LayerConf = doc.LayerConf,
             Title = doc.Title ?? string.Empty,
             Artist = doc.Artist ?? string.Empty,
             Album = doc.Album ?? string.Empty,
+            // v3 归一列的唯一生成点（全量构建与增量 WriteDocs 都走这里）。
+            // 合并路径不重新归一：Merger 从旧段原样拷贝三列，保证合并字节稳定。
+            TitleNorm = Analyzer.NormalizeMetadata(doc.Title),
+            ArtistNorm = Analyzer.NormalizeMetadata(doc.Artist),
+            AlbumNorm = Analyzer.NormalizeMetadata(doc.Album),
+            Mtime = doc.Mtime,
+            LrcMtime = doc.LrcMtime,
+            LrcSize = doc.LrcSize,
         };
 
         foreach (var (field, raw) in doc.Tokens)

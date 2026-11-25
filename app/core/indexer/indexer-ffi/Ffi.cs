@@ -13,7 +13,7 @@ namespace Archoera.Indexer.Ffi;
 /// <summary>
 /// NativeAOT 导出层：供 Flutter 通过 FFI 直接调用本地曲库搜索索引器（C ABI v2）。
 ///
-/// 与 CLI（Program.cs）共用同一套 IndexerEngine / FtsStore / SearchSession 源码，
+/// 与 CLI（Program.cs）共用同一套 IndexerEngine / SearchSession / EraStore 源码，
 /// 差异仅在进度上报（CLI=stdout JSON，FFI=回调函数指针）与取消
 /// （CLI=SIGINT，FFI=era_index_cancel）。
 ///
@@ -22,6 +22,10 @@ namespace Archoera.Indexer.Ffi;
 /// int32_t era_search_api_version(void);                 // 2，启动握手
 /// int32_t era_search_open(const char* index_path, const char* options_json, void** out);
 /// int32_t era_search_run(void* h, const char* request_json, char** out_json, int32_t* out_len);
+/// int32_t era_search_fallback(const char* library_path, const char* request_json,
+///                             char** out_json, int32_t* out_len);   // 无索引时的 LIKE 降级
+/// int32_t era_search_decorate(const char* library_path, const char* request_json,
+///                             char** out_json, int32_t* out_len);   // 按 trackId 补高亮 / 片段
 /// void    era_search_free(char* ptr);                   // run / health / index_run / analyze 的输出都归它
 /// void    era_search_close(void* h);                    // 空句柄 / 重复调用安全
 /// int32_t era_search_health(const char* index_dir, char** out_json, int32_t* out_len);
@@ -72,6 +76,28 @@ public static unsafe class IndexerFfi
     [UnmanagedCallersOnly(EntryPoint = "era_search_api_version")]
     public static int ApiVersionExport() => ApiVersion();
 
+    /// <summary>
+    /// 只读当前 EraStore Manifest（查询 / 健康检查共用）。
+    /// T3.13：查询打开不再依赖 <c>search.db</c> 的 v7 元数据表；索引是否存在由
+    /// <c>search.era/CURRENT</c> 判定。
+    /// </summary>
+    internal static EraStore.Manifest? ReadEraManifest(string indexDbPath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(indexDbPath)) ?? ".";
+        var eraDir = Path.Combine(directory, IndexerEngine.EraStoreDirName);
+        var name = EraStore.CurrentPointer.Read(eraDir);
+        return name is null ? null : EraStore.StoreReader.TryReadManifest(Path.Combine(eraDir, name));
+    }
+
+    /// <summary>CURRENT 指向的 EraStore 文件绝对路径（不存在 / 无指针返回 <c>null</c>）。</summary>
+    private static string? EraFilePath(string indexDbPath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(indexDbPath)) ?? ".";
+        var eraDir = Path.Combine(directory, IndexerEngine.EraStoreDirName);
+        var name = EraStore.CurrentPointer.Read(eraDir);
+        return name is null ? null : Path.Combine(eraDir, name);
+    }
+
     /* ------------------------------------------------------------------ */
     /* 查询句柄                                                            */
     /* ------------------------------------------------------------------ */
@@ -79,13 +105,13 @@ public static unsafe class IndexerFfi
     /// <summary>
     /// 打开只读查询句柄。
     ///
-    /// <para>返回码：0=成功；1=参数 / options_json 非法；2=索引不存在或没有
-    /// <c>search_meta</c>（未就绪）；3=<c>schema_version != 7</c>（版本不符，须重建）；
-    /// 8=内部错误。失败时 <c>*outHandle</c> 恒为 NULL。</para>
+    /// <para>返回码：0=成功；1=参数 / options_json 非法；2=EraStore 索引不存在或没有
+    /// 有效提交（未就绪）；3=Manifest 元数据版本过旧（须重建）；8=内部错误。
+    /// 失败时 <c>*outHandle</c> 恒为 NULL。</para>
     ///
-    /// <para><c>options_json</c> 可空 / 对象：S1 只做语法校验（非法 JSON 或非对象 → 1），
-    /// 未知键一律忽略（内部接口不做严格 schema 拒绝）。scheme / cache 容量 / mmap 的
-    /// 真正语义随 S3 的 per-handle 缓存落地。</para>
+    /// <para><c>options_json</c> 可空 / 对象：未知键一律忽略（内部接口不做严格 schema 拒绝）。
+    /// <c>libraryDb</c>（字符串）为源曲库路径，用于查询期过滤已删除曲目（T2.9）；
+    /// 库不可读时失败开放（不过滤）。scheme / cache 容量 / mmap 的真正语义随 S3 落地。</para>
     /// </summary>
     public static int Open(byte* indexPath, byte* optionsJson, void** outHandle)
     {
@@ -96,13 +122,40 @@ public static unsafe class IndexerFfi
         {
             var path = PtrToString(indexPath);
             if (string.IsNullOrWhiteSpace(path)) return SearchApiCodes.InvalidRequest;
-            if (!TryValidateOpenOptions(optionsJson)) return SearchApiCodes.InvalidRequest;
+            if (!TryReadOpenOptions(optionsJson, out var libraryDbPath)) return SearchApiCodes.InvalidRequest;
 
-            var meta = FtsStore.PeekMeta(path!);
-            if (meta is null) return SearchApiCodes.NotReady;
-            if (meta.SchemaVersion != FtsStore.SchemaVersionValue) return SearchApiCodes.VersionMismatch;
+            // T3.13：查询打开只看 EraStore Manifest（v7 的 search.db 元数据表不再是门禁）。
+            var manifest = ReadEraManifest(path!);
+            if (manifest is null) return SearchApiCodes.NotReady;
+            if (manifest.MetaVersion < EraStore.Manifest.CurrentMetaVersion)
+                return SearchApiCodes.VersionMismatch;
 
-            var apiHandle = new SearchApiHandle(Path.GetFullPath(path!), meta);
+            // T4.3 数据包门禁（§5.5.3 运行期）：
+            // - 包缺失 → 未就绪（Dart 回退 LIKE；不读旧索引）；
+            // - 基础归一化表缺失 / 索引记录的 id 与当前包不同 → 版本不符（须重建）。
+            var dataPack = DataPack.Current;
+            if (!dataPack.Present)
+            {
+                Log.LogWarn("indexer", dataPack.FoundationError);
+                return SearchApiCodes.NotReady;
+            }
+            if (!dataPack.FoundationOk)
+            {
+                Log.LogWarn("indexer", dataPack.FoundationError);
+                return SearchApiCodes.VersionMismatch;
+            }
+            if (!string.Equals(manifest.Anchors.DataPackId, dataPack.Id, StringComparison.Ordinal))
+            {
+                Log.LogWarn("indexer",
+                    $"索引数据包 id 不匹配（索引 {manifest.Anchors.DataPackId} / 当前 {dataPack.Id}）："
+                    + "索引作废，下次构建将全量重建");
+                return SearchApiCodes.VersionMismatch;
+            }
+
+            var apiHandle = new SearchApiHandle(
+                Path.GetFullPath(path!),
+                SearchSession.MetaFromManifest(manifest),
+                string.IsNullOrWhiteSpace(libraryDbPath) ? null : Path.GetFullPath(libraryDbPath!));
             var gcHandle = GCHandle.Alloc(apiHandle, GCHandleType.Normal);
             var pointer = (void*)GCHandle.ToIntPtr(gcHandle);
             LiveHandles[(nint)pointer] = 0;
@@ -158,24 +211,49 @@ public static unsafe class IndexerFfi
                 requestError ?? SearchApiError.Invalid("请求解析失败", "invalid_request"));
         }
 
-        // 索引在 open 之后被删除 / 替换：按「未就绪」而非内部错误上报，调用方可触发重建。
-        if (!File.Exists(apiHandle.IndexPath))
+        // T3.13：查询只依赖 EraStore。open 之后 CURRENT 被删除 / 替换时按「未就绪」上报，
+        // 不再检查 v7 的 search.db（生产路径本就不写它）。
+        var eraDir = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(apiHandle.IndexPath)) ?? ".",
+            IndexerEngine.EraStoreDirName);
+        if (EraStore.CurrentPointer.Read(eraDir) is null)
         {
-            return FailJson(outJson, outLen, SearchApiError.NotReady("索引文件不存在"));
+            return FailJson(outJson, outLen, SearchApiError.NotReady("EraStore 索引不存在"));
         }
 
         try
         {
-            var result = SearchSession.Run(apiHandle.IndexPath, request.Request);
+            var result = SearchSession.Run(
+                apiHandle.IndexPath, request.Request, apiHandle.LibraryDbPath);
             var items = ApplyTrackFilter(result.Items, request.FilterTrackIds);
-            SetUtf8(outJson, outLen, SearchApiJson.Success(
+            var outJsonPtr = (nint)outJson;
+            var outLenPtr = (nint)outLen;
+            SearchApiJson.Success(
                 items,
                 result.Passes,
                 apiHandle.Generation,
-                request.Scheme,
+                result.SchemeId,
                 request.SchemeRequested,
                 request.Clamped,
-                request.QueryTruncated));
+                request.QueryTruncated,
+                result.Explanations.Count == 0 ? null : result.Explanations,
+                result.Trace,
+                result.Snippets.Count == 0 ? null : result.Snippets,
+                result.Highlights.Count == 0 ? null : result.Highlights,
+                result.Total,
+                result.TotalExact,
+                result.Restart,
+                result.Next,
+                sink: bytes =>
+                {
+                    SetUtf8((byte**)outJsonPtr, (int*)outLenPtr, bytes);
+                    // 宽结果集（≥1 MB）会留下候选 / 结果对象的 LOH；一次压缩回收把
+                    // 进程匿名 RSS 拉回基线（只在真正的大响应上付 ≈8 ms）。
+                    if (bytes.Length >= 128 * 1024) MemoryTrim.Request();
+                });
+            // 本查询若首次加载了拼音 / 释义词库（≈40 MB 活对象 + 暂存堆），响应已拷到
+            // 非托管缓冲，此时做一次压缩回收，避免进程长期保留 ≈100 MB 匿名 RSS（T3.14）。
+            MemoryTrim.AfterQuery();
             return SearchApiCodes.Ok;
         }
         catch (OperationCanceledException)
@@ -208,6 +286,190 @@ public static unsafe class IndexerFfi
     [UnmanagedCallersOnly(EntryPoint = "era_search_run")]
     public static int RunExport(void* handle, byte* requestJson, byte** outJson, int* outLen)
         => Run(handle, requestJson, outJson, outLen);
+
+    /// <summary>
+    /// 索引关闭 / 未就绪时的降级检索（T2.12）：只读 <c>library.db</c>，参数化 LIKE。
+    ///
+    /// <para>响应与 <see cref="Run"/> 同构（<c>api:2</c>），<c>scheme</c> 固定
+    /// <c>fallback@1</c>，不产出 <c>explain</c> / <c>trace</c>；<c>highlight</c> /
+    /// <c>snippet</c> 与正式路径共用同一实现。</para>
+    ///
+    /// <para>返回码：0=成功；1=参数 / request_json 非法；2=源曲库不存在；
+    /// 5=IO / SQLite；6=内存不足；8=内部错误。</para>
+    /// </summary>
+    public static int Fallback(byte* libraryPath, byte* requestJson, byte** outJson, int* outLen)
+    {
+        if (outJson != null) *outJson = null;
+        if (outLen != null) *outLen = 0;
+        if (outJson == null || outLen == null) return SearchApiCodes.InvalidRequest;
+
+        var path = PtrToString(libraryPath);
+        if (string.IsNullOrWhiteSpace(path))
+            return FailJson(outJson, outLen, SearchApiError.Invalid(
+                "library_path 为空", "invalid_argument", "library_path"));
+
+        var requestStr = PtrToString(requestJson);
+        if (string.IsNullOrWhiteSpace(requestStr))
+            return FailJson(outJson, outLen, SearchApiError.Invalid(
+                "request_json 为空", "empty_request"));
+
+        var (request, requestError) = SearchApiRequest.Parse(requestStr!);
+        if (requestError is not null || request is null)
+        {
+            return FailJson(outJson, outLen,
+                requestError ?? SearchApiError.Invalid("请求解析失败", "invalid_request"));
+        }
+
+        if (!File.Exists(path))
+            return FailJson(outJson, outLen, SearchApiError.NotReady("源曲库不存在"));
+
+        try
+        {
+            var result = SearchFallback.Execute(path!, request.Request);
+            var outJsonPtr = (nint)outJson;
+            var outLenPtr = (nint)outLen;
+            SearchApiJson.Fallback(
+                result.Items,
+                request.SchemeRequested,
+                request.Clamped,
+                request.QueryTruncated,
+                result.Total,
+                result.Snippets.Count == 0 ? null : result.Snippets,
+                result.Highlights.Count == 0 ? null : result.Highlights,
+                sink: bytes =>
+                {
+                    SetUtf8((byte**)outJsonPtr, (int*)outLenPtr, bytes);
+                    // 宽结果集（≥1 MB）会留下候选 / 结果对象的 LOH；一次压缩回收把
+                    // 进程匿名 RSS 拉回基线（只在真正的大响应上付 ≈8 ms）。
+                    if (bytes.Length >= 128 * 1024) MemoryTrim.Request();
+                });
+            return SearchApiCodes.Ok;
+        }
+        catch (OutOfMemoryException)
+        {
+            return FailJson(outJson, outLen, SearchApiError.OutOfMemory());
+        }
+        catch (SqliteException ex)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Io(ex.Message));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Io(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Internal(ex.Message));
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "era_search_fallback")]
+    public static int FallbackExport(byte* libraryPath, byte* requestJson, byte** outJson, int* outLen)
+        => Fallback(libraryPath, requestJson, outJson, outLen);
+
+    /// <summary>
+    /// 按 trackId 批量补高亮 / 片段（T2.11）：只读 <c>library.db</c>，不重跑排名。
+    ///
+    /// <para>请求：<c>{api:2, query, trackIds:[...], snippet:bool}</c>，<c>trackIds</c>
+    /// 最多 <see cref="SearchDecorations.MaxIds"/> 项且每项为 32 位十六进制。响应：
+    /// <c>{api:2, highlights:{trackId:[...]}, snippets:{trackId:{...}}}</c>。</para>
+    ///
+    /// <para>返回码与 <see cref="Fallback"/> 一致；库不存在 / 不可读时失败开放为空集合。</para>
+    /// </summary>
+    public static int Decorate(byte* libraryPath, byte* requestJson, byte** outJson, int* outLen)
+    {
+        if (outJson != null) *outJson = null;
+        if (outLen != null) *outLen = 0;
+        if (outJson == null || outLen == null) return SearchApiCodes.InvalidRequest;
+
+        var path = PtrToString(libraryPath);
+        if (string.IsNullOrWhiteSpace(path))
+            return FailJson(outJson, outLen, SearchApiError.Invalid(
+                "library_path 为空", "invalid_argument", "library_path"));
+
+        var requestStr = PtrToString(requestJson);
+        if (string.IsNullOrWhiteSpace(requestStr))
+            return FailJson(outJson, outLen, SearchApiError.Invalid(
+                "request_json 为空", "empty_request"));
+
+        string query;
+        bool snippet;
+        List<string> trackIds;
+        try
+        {
+            using var doc = JsonDocument.Parse(requestStr);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return FailJson(outJson, outLen, SearchApiError.Invalid(
+                    "request_json 必须是 JSON 对象", "invalid_request"));
+
+            query = root.TryGetProperty("query", out var q) && q.ValueKind == JsonValueKind.String
+                ? q.GetString() ?? ""
+                : "";
+            snippet = root.TryGetProperty("snippet", out var s)
+                && s.ValueKind is JsonValueKind.True;
+
+            if (!root.TryGetProperty("trackIds", out var idsElement)
+                || idsElement.ValueKind != JsonValueKind.Array)
+            {
+                return FailJson(outJson, outLen, SearchApiError.Invalid(
+                    "trackIds 必须是字符串数组", "invalid_request", "trackIds"));
+            }
+            if (idsElement.GetArrayLength() > SearchDecorations.MaxIds)
+            {
+                return FailJson(outJson, outLen, SearchApiError.Invalid(
+                    $"trackIds 超过 {SearchDecorations.MaxIds} 项上限", "too_many_ids", "trackIds"));
+            }
+
+            trackIds = new List<string>(idsElement.GetArrayLength());
+            foreach (var element in idsElement.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.String)
+                    return FailJson(outJson, outLen, SearchApiError.Invalid(
+                        "trackIds 的元素必须是字符串", "invalid_request", "trackIds"));
+                var id = element.GetString() ?? "";
+                if (!SearchApiRequest.IsHex32(id))
+                    return FailJson(outJson, outLen, SearchApiError.Invalid(
+                        "trackIds 的元素必须是 32 位十六进制", "invalid_request", "trackIds"));
+                trackIds.Add(id);
+            }
+        }
+        catch (JsonException ex)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Invalid(
+                "request_json 不是合法 JSON: " + ex.Message, "invalid_json"));
+        }
+
+        if (!File.Exists(path))
+            return FailJson(outJson, outLen, SearchApiError.NotReady("源曲库不存在"));
+
+        try
+        {
+            var result = SearchDecorations.Build(path!, query, trackIds, snippet);
+            SetUtf8(outJson, outLen, SearchApiJson.Decorate(result.Highlights, result.Snippets));
+            return SearchApiCodes.Ok;
+        }
+        catch (OutOfMemoryException)
+        {
+            return FailJson(outJson, outLen, SearchApiError.OutOfMemory());
+        }
+        catch (SqliteException ex)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Io(ex.Message));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Io(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return FailJson(outJson, outLen, SearchApiError.Internal(ex.Message));
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "era_search_decorate")]
+    public static int DecorateExport(byte* libraryPath, byte* requestJson, byte** outJson, int* outLen)
+        => Decorate(libraryPath, requestJson, outJson, outLen);
 
     /// <summary>
     /// 关闭查询句柄：释放 GCHandle，并丢弃 <see cref="SearchSession"/> 的**静态**只读会话缓存。
@@ -248,10 +510,10 @@ public static unsafe class IndexerFfi
 
     /// <summary>
     /// 只读健康检查（设置页与 CLI 共用）。参数是 `search.db` 的路径（D.1 写作
-    /// <c>index_dir</c>，S1 索引是单文件）。
+    /// <c>index_dir</c>，索引实际位于同目录的 <c>search.era/</c>）。
     ///
     /// <para>返回码：0=就绪，JSON 含 <c>gen</c> / <c>schemaVersion</c> / <c>analyzerVersion</c>；
-    /// 2=meta 缺失（JSON 为 <c>{"api":2,"ready":false}</c>）；3=schema 版本不符
+    /// 2=EraStore 缺失（JSON 为 <c>{"api":2,"ready":false}</c>）；3=Manifest 元数据版本过旧
     /// （同样是 ready:false）；1=参数非法。**不返回绝对路径**（D.4「detail 不放路径」）。</para>
     /// </summary>
     public static int Health(byte* indexPath, byte** outJson, int* outLen)
@@ -268,19 +530,22 @@ public static unsafe class IndexerFfi
                 return FailJson(outJson, outLen, SearchApiError.Invalid("index_path 为空", "invalid_argument"));
             }
 
-            var meta = FtsStore.PeekMeta(path!);
-            if (meta is null)
+            // T3.13：健康检查只读 EraStore Manifest，不碰 v7 的 search_meta。
+            var manifest = ReadEraManifest(path!);
+            var dataPack = DataPack.Current.Health(manifest?.Anchors.DataPackId ?? "");
+            if (manifest is null)
             {
-                SetUtf8(outJson, outLen, SearchApiJson.HealthNotReady());
+                SetUtf8(outJson, outLen, SearchApiJson.HealthNotReady(dataPack));
                 return SearchApiCodes.NotReady;
             }
-            if (meta.SchemaVersion != FtsStore.SchemaVersionValue)
+            if (manifest.MetaVersion < EraStore.Manifest.CurrentMetaVersion)
             {
-                SetUtf8(outJson, outLen, SearchApiJson.HealthNotReady());
+                SetUtf8(outJson, outLen, SearchApiJson.HealthNotReady(dataPack));
                 return SearchApiCodes.VersionMismatch;
             }
 
-            SetUtf8(outJson, outLen, SearchApiJson.HealthReady(meta));
+            SetUtf8(outJson, outLen, SearchApiJson.HealthReady(
+                SearchSession.MetaFromManifest(manifest), CollectConfidence(path!), dataPack));
             return SearchApiCodes.Ok;
         }
         catch (Exception ex)
@@ -292,6 +557,23 @@ public static unsafe class IndexerFfi
     [UnmanagedCallersOnly(EntryPoint = "era_search_health")]
     public static int HealthExport(byte* indexPath, byte** outJson, int* outLen)
         => Health(indexPath, outJson, outLen);
+
+    /// <summary>
+    /// 健康页的置信度分布（T4.2）。失败开放：统计失败只少一个诊断字段，不让健康检查报错。
+    /// </summary>
+    private static EraStore.LayerConfidenceCounts? CollectConfidence(string indexDbPath)
+    {
+        try
+        {
+            var file = EraFilePath(indexDbPath);
+            return file is null ? null : EraStore.LayerConfidenceStats.Collect(file);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarn("indexer", $"健康页置信度统计跳过: {ex.Message}");
+            return null;
+        }
+    }
 
     /* ------------------------------------------------------------------ */
     /* 索引构建（S3 前保持同步）                                            */
@@ -332,11 +614,10 @@ public static unsafe class IndexerFfi
                 return FailJson(outResult, outLen, SearchApiError.Invalid(error, "invalid_options"));
 
             // 重建 / 增量写入前必须释放只读查询会话：Windows 下打开的只读句柄会阻塞
-            // search.db 的原子替换（File.Move overwrite）。
+            // 旧 EraStore 世代文件的清理。
             SearchSession.CloseCached();
 
-            using var store = new FtsStore();
-            var engine = new IndexerEngine(store, onProgress != null
+            var engine = new IndexerEngine(onProgress != null
                 ? p => FireProgress(onProgress, p)
                 : null);
 
@@ -346,6 +627,8 @@ public static unsafe class IndexerFfi
             {
                 var result = engine.Run(dbPathStr, indexPathStr, full != 0, options, cts.Token);
                 SetUtf8(outResult, outLen, IndexerJson.Result(result));
+                // 构建期分析 30k 曲后词库与暂存对象已无用；归还堆段（一次性，≈10 ms）。
+                MemoryTrim.TrimOnce();
                 return SearchApiCodes.Ok;
             }
             finally
@@ -502,15 +785,28 @@ public static unsafe class IndexerFfi
     /// 解析 <c>era_search_open</c> 的 options_json：只校验「是 JSON 对象 / null」，
     /// 未知键忽略（内部接口不做严格 schema 拒绝）。null 指针 / 空白 / JSON null 视为全部缺省。
     /// </summary>
-    private static bool TryValidateOpenOptions(byte* optionsJson)
+    /// <summary>
+    /// 校验并读取查询句柄选项：对象 / null；未知键忽略。
+    /// 支持 <c>libraryDb</c>（字符串，可空）：源曲库路径，用于查询期过滤已删除曲目（T2.9）。
+    /// </summary>
+    private static bool TryReadOpenOptions(byte* optionsJson, out string? libraryDbPath)
     {
+        libraryDbPath = null;
         if (optionsJson == null) return true;
         var raw = PtrToString(optionsJson);
         if (string.IsNullOrWhiteSpace(raw)) return true;
         try
         {
             using var doc = JsonDocument.Parse(raw);
-            return doc.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Null;
+            if (doc.RootElement.ValueKind == JsonValueKind.Null) return true;
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            if (doc.RootElement.TryGetProperty("libraryDb", out var value)
+                && value.ValueKind != JsonValueKind.Null)
+            {
+                if (value.ValueKind != JsonValueKind.String) return false;
+                libraryDbPath = value.GetString();
+            }
+            return true;
         }
         catch (JsonException)
         {
@@ -520,9 +816,10 @@ public static unsafe class IndexerFfi
 
     /// <summary>
     /// 解析 <c>options_json</c>：未知键忽略；非法 JSON 返回 <c>false</c> 与错误文本。
-    /// 缺省：index_lrc=false、pinyin=true、batch=0。
+    /// 缺省：index_lrc=false、pinyin=true、romaji_lyrics=false、initialsLyrics=false、batch=0。
+    /// 歌词首字母键同时接受 <c>initialsLyrics</c>（Dart 现行）与 <c>initials_lyrics</c>（旧写法）。
     /// </summary>
-    private static bool TryParseOptions(byte* optionsJson, out IndexerOptions options, out string error)
+    internal static bool TryParseOptions(byte* optionsJson, out IndexerOptions options, out string error)
     {
         options = new IndexerOptions();
         error = "";
@@ -549,12 +846,13 @@ public static unsafe class IndexerFfi
             if (root.TryGetProperty("romaji_lyrics", out var romaji)
                 && (romaji.ValueKind == JsonValueKind.True || romaji.ValueKind == JsonValueKind.False))
                 options.RomajiLyrics = romaji.GetBoolean();
+            if ((root.TryGetProperty("initialsLyrics", out var initialsLyrics)
+                    || root.TryGetProperty("initials_lyrics", out initialsLyrics))
+                && (initialsLyrics.ValueKind == JsonValueKind.True
+                    || initialsLyrics.ValueKind == JsonValueKind.False))
+                options.InitialsLyrics = initialsLyrics.GetBoolean();
             if (root.TryGetProperty("batch", out var batch) && batch.ValueKind == JsonValueKind.Number)
                 options.Batch = batch.GetInt32();
-            if (root.TryGetProperty("merge_every_updates", out var merge)
-                && merge.ValueKind == JsonValueKind.Number
-                && merge.TryGetInt32(out var mergeEvery) && mergeEvery > 0)
-                options.MergeEveryUpdates = mergeEvery;
             return true;
         }
         catch (JsonException ex)
@@ -583,9 +881,23 @@ public static unsafe class IndexerFfi
 
     private static void SetUtf8(byte** dst, int* len, string s)
     {
-        var bytes = Encoding.UTF8.GetBytes(s);
+        // 直接编码到非托管缓冲，避免 UTF-8 大数组再进一次 LOH。
+        var count = Encoding.UTF8.GetByteCount(s);
+        var ptr = (byte*)NativeMemory.Alloc((nuint)count + 1);
+        Encoding.UTF8.GetBytes(s, new Span<byte>(ptr, count));
+        ptr[count] = 0;
+        *dst = ptr;
+        *len = count;
+    }
+
+    /// <summary>
+    /// 由 <see cref="SearchApiJson"/> 的复用缓冲直接落盘到非托管内存：
+    /// 大结果集不再产生「JSON string + byte[]」两次 LOH 分配（T3.14 rss_query）。
+    /// </summary>
+    private static void SetUtf8(byte** dst, int* len, ReadOnlySpan<byte> bytes)
+    {
         var ptr = (byte*)NativeMemory.Alloc((nuint)bytes.Length + 1);
-        Marshal.Copy(bytes, 0, (IntPtr)ptr, bytes.Length);
+        bytes.CopyTo(new Span<byte>(ptr, bytes.Length));
         ptr[bytes.Length] = 0;
         *dst = ptr;
         *len = bytes.Length;

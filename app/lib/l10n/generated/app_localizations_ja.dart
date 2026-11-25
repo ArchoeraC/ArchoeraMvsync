@@ -4505,6 +4505,13 @@ class AppLocalizationsJa extends AppLocalizations {
       '音訳のない日本語歌詞からローマ字を自動生成し、ローマ字で検索できるようにします（索引サイズは約2倍）';
 
   @override
+  String get settingsSearchIndexInitials => '歌詞の頭文字索引';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌詞をピンイン頭文字（例: wanzg）でも検索できます。オフにすると索引が小さくなります（変更時は再構築が必要）';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引は派生データです：既定はオフでコストゼロ。有効化すると初回構築に時間とディスク（1万曲で数百 MB 程度）を使用し、失敗時は自動で基本検索にフォールバックします。';
 

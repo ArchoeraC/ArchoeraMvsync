@@ -25,6 +25,7 @@ internal static class SearchApiTests
     {
         ApiVersionHandshake();
         RequestParsing();
+        OptionsJson();
         ScopeMapping();
         ResponseShape();
         ErrorShape();
@@ -38,6 +39,40 @@ internal static class SearchApiTests
     private static void ApiVersionHandshake()
         => Program.Check("ABI: era_search_api_version()==2", IndexerFfi.ApiVersion() == 2,
             IndexerFfi.ApiVersion().ToString());
+
+    /* ------------------------------------------------------------------ */
+    /* era_index_run options_json（T3.4 V4）                               */
+    /* ------------------------------------------------------------------ */
+
+    private static unsafe void OptionsJson()
+    {
+        var defaults = ParseOptions("{}");
+        Program.Check("options: 缺省 initialsLyrics=false",
+            defaults is { InitialsLyrics: false, Pinyin: true }, DescribeOptions(defaults));
+        Program.Check("options: 缺键 → initialsLyrics=false（向后兼容）",
+            ParseOptions("""{"index_lrc":true,"pinyin":false}""") is
+                { InitialsLyrics: false, IndexLrc: true, Pinyin: false });
+        Program.Check("options: initialsLyrics=true 生效",
+            ParseOptions("""{"initialsLyrics":true}""") is { InitialsLyrics: true });
+        Program.Check("options: initialsLyrics=false 生效",
+            ParseOptions("""{"initialsLyrics":false}""") is { InitialsLyrics: false });
+        Program.Check("options: initials_lyrics 兼容写法",
+            ParseOptions("""{"initials_lyrics":true}""") is { InitialsLyrics: true });
+        Program.Check("options: 非布尔 initialsLyrics 忽略（保持缺省）",
+            ParseOptions("""{"initialsLyrics":"yes"}""") is { InitialsLyrics: false });
+        Program.Check("options: 非法 JSON → 解析失败", ParseOptions("{not json") is null);
+
+        static string DescribeOptions(IndexerOptions? options)
+            => options is null ? "(null)" : $"initials={options.InitialsLyrics} pinyin={options.Pinyin}";
+    }
+
+    private static unsafe IndexerOptions? ParseOptions(string json)
+    {
+        fixed (byte* p = Utf8Z(json))
+        {
+            return IndexerFfi.TryParseOptions(p, out var options, out _) ? options : null;
+        }
+    }
 
     /* ------------------------------------------------------------------ */
     /* 请求解析（D.2）                                                     */
@@ -67,9 +102,9 @@ internal static class SearchApiTests
             request?.Request.Fuzzy == true && request.Request.MinExact == 1,
             $"{request?.Request.Fuzzy}/{request?.Request.MinExact}");
         Program.Check("请求: CandidateCap 取默认（S1 不暴露）",
-            request?.Request.CandidateCap == FtsStore.DefaultCandidateCap,
+            request?.Request.CandidateCap == SearchRequest.DefaultCandidateCap,
             request?.Request.CandidateCap.ToString());
-        Program.Check("请求: scheme 缺省 = s1-compat@1",
+        Program.Check("请求: scheme 缺省 = default@1",
             request?.SchemeRequested == SearchPolicy.SchemeId && request.Scheme == SearchPolicy.SchemeId,
             request?.SchemeRequested ?? "(null)");
         Program.Check("请求: 未给 filter 时 FilterTrackIds==null", request?.FilterTrackIds is null);
@@ -160,20 +195,22 @@ internal static class SearchApiTests
         Program.Check("请求: cursor=null 允许", error is null && request is not null, error?.Message);
 
         (request, error) = Parse("""{"api":2,"query":"爱","total":"capped"}""");
-        Program.Check("请求: total=capped → 码 1",
-            request is null && error?.Code == 1 && error.Field == "total", error?.Message);
+        Program.Check("请求: total=capped 允许并透传（T2.10）",
+            error is null && request?.Request.TotalMode == SearchTotalMode.Capped, error?.Message);
 
         (request, error) = Parse("""{"api":2,"query":"爱","total":"none"}""");
         Program.Check("请求: total=none 允许", error is null && request is not null, error?.Message);
 
         (request, error) = Parse("""{"api":2,"query":"爱","scheme":"bogus@9"}""");
-        Program.Check("请求: 未知 scheme 原样回显、执行仍用 s1-compat@1",
+        Program.Check("请求: 未知 scheme 原样回显、执行仍用 default@1",
             request?.SchemeRequested == "bogus@9" && request.Scheme == SearchPolicy.SchemeId,
             request?.SchemeRequested ?? "(null)");
 
         (request, error) = Parse("""{"api":2,"query":"爱","explain":true,"highlight":true,"snippet":true}""");
-        Program.Check("请求: explain/highlight/snippet 接受但 S1 不产出",
-            error is null && request is { Explain: true, Highlight: true, Snippet: true },
+        Program.Check("请求: explain/highlight/snippet 解析并透传执行层",
+            error is null
+            && request is { Explain: true, Highlight: true, Snippet: true }
+            && request.Request is { Explain: true, Highlight: true, Snippet: true },
             error?.Message ?? "(no error)");
 
         (request, error) = Parse("""{"api":2,"query":"爱","unknownField":1}""");
@@ -231,6 +268,18 @@ internal static class SearchApiTests
             clamped: false, queryTruncated: true);
         var root = Root(json);
 
+        // T3.14：FFI 走 sink 直写（跳过 JSON string + byte[] 两次 LOH），
+        // 必须与 string 路径字节完全一致。
+        byte[]? sunk = null;
+        var direct = SearchApiJson.Success(
+            result.Items, result.Passes, gen: 12, SearchPolicy.SchemeId, "default@1",
+            clamped: false, queryTruncated: true,
+            sink: span => sunk = span.ToArray());
+        Program.Check("响应: sink 直写与 string 字节一致",
+            direct.Length == 0 && sunk is not null
+            && Encoding.UTF8.GetString(sunk) == json,
+            $"{sunk?.Length}/{Encoding.UTF8.GetByteCount(json)}");
+
         Program.Check("响应: api==2", Int(root, "api") == 2, json);
         Program.Check("响应: gen 来自句柄 meta", Int(root, "gen") == 12, json);
         Program.Check("响应: scheme / schemeRequested",
@@ -262,6 +311,66 @@ internal static class SearchApiTests
             Bool(root, "restart") == false
             && root.GetProperty("next").ValueKind == JsonValueKind.Null
             && root.GetProperty("trace").ValueKind == JsonValueKind.Null, json);
+
+        // T2.8：snippet 只写在有片段的条目上，空条目不构造对象。
+        var snippets = new Dictionary<string, LyricSnippet>(StringComparer.Ordinal)
+        {
+            ["0123456789abcdef0123456789abcdef"] = new LyricSnippet
+            {
+                Field = "lyrics",
+                Text = "…今天晴天…",
+                Ranges = new[] { new SnippetRange(3, 5) },
+                Truncated = false,
+            },
+        };
+        var withSnippet = Root(SearchApiJson.Success(
+            result.Items, result.Passes, gen: 12, SearchPolicy.SchemeId, "default@1",
+            clamped: false, queryTruncated: false,
+            explanations: null, trace: null, snippets: snippets));
+        var snippetItems = withSnippet.GetProperty("items");
+        var itemSnippet = snippetItems[0].GetProperty("snippet");
+        var range = itemSnippet.GetProperty("ranges")[0];
+        Program.Check("响应: snippet 形状 field/text/ranges/truncated",
+            Str(itemSnippet, "field") == "lyrics"
+            && Str(itemSnippet, "text") == "…今天晴天…"
+            && Int(range, "start") == 3 && Int(range, "end") == 5
+            && Bool(itemSnippet, "truncated") == false,
+            withSnippet.ToString());
+        Program.Check("响应: 无片段条目不构造 snippet",
+            !snippetItems[1].TryGetProperty("snippet", out _), withSnippet.ToString());
+
+        // T2.7：highlight 只写在有区间的条目上，元素为 field/start/end/mode。
+        var highlights = new Dictionary<string, TrackHighlight>(StringComparer.Ordinal)
+        {
+            ["0123456789abcdef0123456789abcdef"] = new TrackHighlight
+            {
+                Ranges = new[]
+                {
+                    new HighlightRange("title", 0, 2, "literal"),
+                    new HighlightRange("artist", 0, 3, "reading"),
+                },
+                Truncated = true,
+            },
+        };
+        var withHighlight = Root(SearchApiJson.Success(
+            result.Items, result.Passes, gen: 12, SearchPolicy.SchemeId, "default@1",
+            clamped: false, queryTruncated: false,
+            explanations: null, trace: null, snippets: null, highlights: highlights));
+        var highlightItems = withHighlight.GetProperty("items");
+        var highlight = highlightItems[0].GetProperty("highlight");
+        Program.Check("响应: highlight 形状 field/start/end/mode + truncated",
+            highlight.GetArrayLength() == 2
+            && Str(highlight[0], "field") == "title"
+            && Int(highlight[0], "start") == 0 && Int(highlight[0], "end") == 2
+            && Str(highlight[0], "mode") == "literal"
+            && Str(highlight[1], "field") == "artist"
+            && Str(highlight[1], "mode") == "reading"
+            && Bool(highlightItems[0], "highlightTruncated") == true,
+            withHighlight.ToString());
+        Program.Check("响应: 无高亮条目不构造 highlight",
+            !highlightItems[1].TryGetProperty("highlight", out _)
+            && !highlightItems[1].TryGetProperty("highlightTruncated", out _),
+            withHighlight.ToString());
     }
 
     private static void ErrorShape()
@@ -336,8 +445,16 @@ internal static class SearchApiTests
             }
             EndToEnd.RunEngine(db, index, full: true, lrc: false);
 
+            var eraDir = Path.Combine(root, IndexerEngine.EraStoreDirName);
+            var eraName = EraStore.CurrentPointer.Read(eraDir)!;
+            var expectedGen = (int)(EraStore.StoreReader.TryReadManifest(Path.Combine(eraDir, eraName))?.Gen ?? 0);
+
             // ---- 未就绪 / 参数错误 ----
-            var code = Open(Path.Combine(root, "missing.db"), out var handle);
+            // EraStore 按目录定位（<dir>/search.era）；缺失用例必须换一个空目录，
+            // 否则会命中和 index 同目录的 era 索引。
+            var emptyDir = Path.Combine(root, "no-index");
+            Directory.CreateDirectory(emptyDir);
+            var code = Open(Path.Combine(emptyDir, "search.db"), out var handle);
             Program.Check("句柄: 缺失索引 Open→2 且 out=NULL", code == 2 && handle == null, code.ToString());
 
             var badOptions = Open(index, out var badHandle, "{not json");
@@ -356,7 +473,7 @@ internal static class SearchApiTests
             IndexerFfi.Close(nullOptionsHandle);
 
             // ---- 健康检查 ----
-            var (missingHealthCode, missingHealthJson) = Health(Path.Combine(root, "missing.db"));
+            var (missingHealthCode, missingHealthJson) = Health(Path.Combine(emptyDir, "search.db"));
             var missingHealth = Root(missingHealthJson);
             Program.Check("健康: 缺失索引 → 码 2 + ready=false",
                 missingHealthCode == 2 && Int(missingHealth, "api") == 2 && Bool(missingHealth, "ready") == false,
@@ -366,7 +483,7 @@ internal static class SearchApiTests
             var health = Root(healthJson);
             Program.Check("健康: 就绪 → api/gen/schemaVersion/analyzerVersion",
                 healthCode == 0 && Int(health, "api") == 2 && Bool(health, "ready")
-                && Int(health, "gen") == 7 && Int(health, "schemaVersion") == FtsStore.SchemaVersionValue
+                && Int(health, "gen") == expectedGen && Int(health, "schemaVersion") == EraStore.Manifest.CurrentMetaVersion
                 && Int(health, "analyzerVersion") == Analyzer.AnalyzerVersion, healthJson);
             Program.Check("健康: 不泄露绝对路径",
                 !healthJson.Contains(root, StringComparison.Ordinal), healthJson);
@@ -381,7 +498,7 @@ internal static class SearchApiTests
             Program.Check("查询: Run→0", runCode == 0, runJson);
             Program.Check("查询: 「爱」命中 2 条", items.GetArrayLength() == 2, runJson);
             Program.Check("查询: api / gen / scheme 来自句柄",
-                Int(run, "api") == 2 && Int(run, "gen") == 7
+                Int(run, "api") == 2 && Int(run, "gen") == expectedGen
                 && Str(run, "scheme") == SearchPolicy.SchemeId
                 && Str(run, "schemeRequested") == SearchPolicy.SchemeId, runJson);
             Program.Check("查询: 命中 trackId 与顺序无关地属于集合",
@@ -445,30 +562,24 @@ internal static class SearchApiTests
                 && Root(closedJson).GetProperty("error").GetProperty("detail")
                     .GetProperty("reason").GetString() == "invalid_handle", closedJson);
 
-            // ---- schema 版本不符 → Open 3 ----
-            SearchSession.CloseCached();
-            using (var conn = EndToEnd.Open(index))
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = "UPDATE search_meta SET value='999' WHERE key='schema_version'";
-                cmd.ExecuteNonQuery();
-            }
-            var schemaCode = Open(index, out var schemaHandle);
-            Program.Check("句柄: schema=999 → Open→3 且 out=NULL",
-                schemaCode == 3 && schemaHandle == null, schemaCode.ToString());
+            // ---- T3.13：不写 v7 的 search.db，查询 / 健康检查只依赖 EraStore ----
+            Program.Check("索引: 不写 v7 search.db + EraStore CURRENT 存在",
+                !File.Exists(index) && EraStore.CurrentPointer.Read(eraDir) is not null,
+                $"search.db={File.Exists(index)} current={EraStore.CurrentPointer.Read(eraDir) ?? "(null)"}");
 
-            var (badHealthCode, badHealthJson) = Health(index);
-            Program.Check("健康: schema=999 → 码 3 + ready=false",
-                badHealthCode == 3 && Bool(Root(badHealthJson), "ready") == false, badHealthJson);
+            // ---- EraStore Manifest 元数据版本过旧 → Open 3 ----
+            var eraPath = Path.Combine(eraDir, eraName);
+            SetEraMetaVersion(eraPath, 0);
+            var oldMetaCode = Open(index, out var oldMetaHandle);
+            Program.Check("句柄: Manifest metaVersion=0 → Open→3 且 out=NULL",
+                oldMetaCode == 3 && oldMetaHandle == null, oldMetaCode.ToString());
+            var (oldMetaHealthCode, oldMetaHealthJson) = Health(index);
+            Program.Check("健康: Manifest metaVersion=0 → 码 3 + ready=false",
+                oldMetaHealthCode == 3 && Bool(Root(oldMetaHealthJson), "ready") == false, oldMetaHealthJson);
 
-            using (var conn = EndToEnd.Open(index))
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = "UPDATE search_meta SET value='7' WHERE key='schema_version'";
-                cmd.ExecuteNonQuery();
-            }
+            SetEraMetaVersion(eraPath, EraStore.Manifest.CurrentMetaVersion);
             var restoredCode = Open(index, out var restoredHandle);
-            Program.Check("句柄: schema 还原 7 后 Open→0", restoredCode == 0 && restoredHandle != null,
+            Program.Check("句柄: metaVersion 还原后 Open→0", restoredCode == 0 && restoredHandle != null,
                 restoredCode.ToString());
             IndexerFfi.Close(restoredHandle);
         }
@@ -541,6 +652,17 @@ internal static class SearchApiTests
     }
 
     private static JsonElement Root(string json) => JsonDocument.Parse(json).RootElement;
+
+    /// <summary>改写当前 EraStore Manifest 的 metaVersion 并提交新世代（模拟旧格式文件）。</summary>
+    private static void SetEraMetaVersion(string eraPath, int metaVersion)
+    {
+        using var file = EraStore.IndexFile.Open(eraPath);
+        var manifest = file.Current ?? throw new InvalidOperationException("EraStore 夹具无有效提交");
+        manifest.MetaVersion = metaVersion;
+        manifest.Gen = file.Gen + 1;
+        EraStore.IndexBuilder.FillFileBytes(manifest, file.Length);
+        file.Commit(manifest);
+    }
 
     private static long Int(JsonElement parent, string name)
         => parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number

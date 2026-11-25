@@ -8234,6 +8234,18 @@ abstract class AppLocalizations {
   /// **'日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）'**
   String get settingsSearchIndexRomajiDesc;
 
+  /// No description provided for @settingsSearchIndexInitials.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引歌词首字母'**
+  String get settingsSearchIndexInitials;
+
+  /// No description provided for @settingsSearchIndexInitialsDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）'**
+  String get settingsSearchIndexInitialsDesc;
+
   /// No description provided for @settingsSearchIndexNote.
   ///
   /// In zh_CN, this message translates to:

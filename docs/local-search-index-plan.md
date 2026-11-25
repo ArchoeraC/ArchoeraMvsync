@@ -1,7 +1,11 @@
 # 本地曲库搜索索引：歌词模糊搜索设计（Local Library Search Index）
 
-> 状态：**已实施（P0–P5 落地）** 设计稿 2026-10-13，实现随分支演进持续更新
-> （schema v7 / `AnalyzerVersion` 13；查询层已整体下沉 C# 索引器，见 §9.3）。
+> **⚠ 历史设计稿（v7 / FTS5 时代）**：本文描述的 `search.db` / `search_fts` /
+> `schema_version=7` 已在 S3 被 EraStore 取代，v7 写入器已于 T3.13b 整体删除。
+> 当前实现、门禁与实测见 `docs/local-search-indexer-rewrite-plan.md` 与
+> `docs/local-search-indexer-t314-gate.md`；本文只保留当年的设计与验收基线作沿革。
+>
+> 状态：~~已实施（P0–P5 落地）~~ 设计稿 2026-10-13（v7 时代）。
 > 范围：为本地曲库增加索引能力，支持**歌词 / 元数据的模糊搜索**（中文优先），
 > 重点是 **拼音搜索**与**多语言歌词层（原文 / 译文 / 音译）搜索**；
 > `.lrc` 侧车歌词**可选索引（子开关，默认关闭）**。

@@ -128,6 +128,23 @@ class IndexerLibrary {
       .lookupFunction<_SearchNative, _SearchDart>('era_search_run');
   late final _CloseSearchDart _closeSearchFn = _lib
       .lookupFunction<_CloseSearchNative, _CloseSearchDart>('era_search_close');
+  late final _FallbackDart _fallbackFn = _lib
+      .lookupFunction<_FallbackNative, _FallbackDart>('era_search_fallback');
+  late final _HealthDart _healthFn = _lib
+      .lookupFunction<_HealthNative, _HealthDart>('era_search_health');
+
+  /// `era_search_decorate`（T2.11）：旧库可能没有该符号，缺失时返回 null。
+  late final _DecorateDart? _decorateFn = _lookupDecorate();
+
+  _DecorateDart? _lookupDecorate() {
+    try {
+      return _lib.lookupFunction<_DecorateNative, _DecorateDart>(
+        'era_search_decorate',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// 同步阻塞执行构建 / 增量（须在子 isolate 调用，避免阻塞 UI 线程）。
   ///
@@ -247,7 +264,7 @@ class IndexerLibrary {
   ///
   /// [optionsJson] 为句柄选项（scheme / 缓存 / mmap / 日志级别），空串表示
   /// 全部用 C# 侧缺省。句柄须由 [closeSearch] 释放（重建 / 删除索引前必须
-  /// 关闭，Windows 上残留只读句柄会阻塞 `search.db` 的替换）。
+  /// 关闭，Windows 上残留只读句柄会阻塞索引文件的替换）。
   Pointer<Void> openSearch(String indexPath, {String optionsJson = ''}) {
     final index = indexPath.toNativeUtf8();
     final opts = optionsJson.toNativeUtf8();
@@ -295,6 +312,86 @@ class IndexerLibrary {
   void closeSearch(Pointer<Void> handle) {
     if (handle == nullptr) return;
     _closeSearchFn(handle);
+  }
+
+  /// 只读健康检查（`era_search_health`，T4.3）：返回解析后的 JSON，失败返回 null。
+  ///
+  /// 参数是 `search.db` 路径（索引实际位于同目录的 `search.era/`）。健康 JSON 含
+  /// `dataPack.{id,match,present,missing[],corrupt[],degradedCapabilities[]}`，
+  /// Dart 用 `dataPack.id` 与编译期常量 `dataPackId` 比对（见 `data_pack_check.dart`）。
+  /// 返回码非 0 时仍尝试解析（`ready:false` 也是合法载荷）；解析失败 / 空串返回 null。
+  Map<String, dynamic>? health(String indexPath) {
+    final index = indexPath.toNativeUtf8();
+    final out = calloc<Pointer<Utf8>>();
+    final outLen = calloc<Int32>();
+    try {
+      _healthFn(index, out, outLen);
+      final resultPtr = out.value;
+      if (resultPtr == nullptr) return null;
+      String text;
+      try {
+        text = resultPtr.cast<Utf8>().toDartString(length: outLen.value);
+      } finally {
+        _free(resultPtr.cast());
+      }
+      if (text.isEmpty) return null;
+      final decoded = jsonDecode(text);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    } finally {
+      calloc.free(index);
+      calloc.free(out);
+      calloc.free(outLen);
+    }
+  }
+
+  /// 无索引时的降级检索（`era_search_fallback`）：只读 [libraryPath]（`library.db`），
+  /// 参数化 LIKE + 字段权重。返回 `(exitCode, resultText)`，内存释放约定同 [search]。
+  (int, String) fallbackSearch(String libraryPath, String requestJson) {
+    final path = libraryPath.toNativeUtf8();
+    final request = requestJson.toNativeUtf8();
+    final out = calloc<Pointer<Utf8>>();
+    final outLen = calloc<Int32>();
+    try {
+      final code = _fallbackFn(path, request, out, outLen);
+      final resultPtr = out.value;
+      final text = resultPtr == nullptr
+          ? ''
+          : resultPtr.cast<Utf8>().toDartString(length: outLen.value);
+      if (resultPtr != nullptr) _free(resultPtr.cast());
+      return (code, text);
+    } finally {
+      calloc.free(path);
+      calloc.free(request);
+      calloc.free(out);
+      calloc.free(outLen);
+    }
+  }
+
+  /// 按 trackId 批量补高亮 / 片段（`era_search_decorate`）：只读 [libraryPath]，
+  /// 不重跑排名。返回 `(exitCode, resultText)`；符号缺失返回 `(-1, '')`。
+  (int, String) decorateSearch(String libraryPath, String requestJson) {
+    final fn = _decorateFn;
+    if (fn == null) return (-1, '');
+    final path = libraryPath.toNativeUtf8();
+    final request = requestJson.toNativeUtf8();
+    final out = calloc<Pointer<Utf8>>();
+    final outLen = calloc<Int32>();
+    try {
+      final code = fn(path, request, out, outLen);
+      final resultPtr = out.value;
+      final text = resultPtr == nullptr
+          ? ''
+          : resultPtr.cast<Utf8>().toDartString(length: outLen.value);
+      if (resultPtr != nullptr) _free(resultPtr.cast());
+      return (code, text);
+    } finally {
+      calloc.free(path);
+      calloc.free(request);
+      calloc.free(out);
+      calloc.free(outLen);
+    }
   }
 
   /// 释放 indexer-ffi 侧（NativeMemory.Alloc）分配的内存。
@@ -386,6 +483,49 @@ typedef _SearchDart =
 
 typedef _CloseSearchNative = Void Function(Pointer<Void>);
 typedef _CloseSearchDart = void Function(Pointer<Void>);
+
+typedef _FallbackNative =
+    Int32 Function(
+      Pointer<Utf8> libraryPath,
+      Pointer<Utf8> requestJson,
+      Pointer<Pointer<Utf8>> outResult,
+      Pointer<Int32> outLen,
+    );
+typedef _FallbackDart =
+    int Function(
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Int32>,
+    );
+
+typedef _DecorateNative =
+    Int32 Function(
+      Pointer<Utf8> libraryPath,
+      Pointer<Utf8> requestJson,
+      Pointer<Pointer<Utf8>> outResult,
+      Pointer<Int32> outLen,
+    );
+typedef _DecorateDart =
+    int Function(
+      Pointer<Utf8>,
+      Pointer<Utf8>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Int32>,
+    );
+
+typedef _HealthNative =
+    Int32 Function(
+      Pointer<Utf8> indexPath,
+      Pointer<Pointer<Utf8>> outJson,
+      Pointer<Int32> outLen,
+    );
+typedef _HealthDart =
+    int Function(
+      Pointer<Utf8>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Int32>,
+    );
 
 typedef _SetLogSinkNative =
     Void Function(Pointer<NativeFunction<LogWriteNative>> fn, Int32 minLevel);

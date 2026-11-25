@@ -122,7 +122,7 @@ internal static class EraStoreManifestTests
             Program.Check("重开 gen1: 锚默认值",
                 manifest.Format == EraFormat.FormatVersion
                 && manifest.Anchors.IndexFormat == 1
-                && manifest.Anchors.TokenizerVersion == 2,
+                && manifest.Anchors.TokenizerVersion == 5,
                 $"{manifest.Format}/{manifest.Anchors.IndexFormat}/{manifest.Anchors.TokenizerVersion}");
 
             var bytes = File.ReadAllBytes(path);
@@ -262,7 +262,7 @@ internal static class EraStoreManifestTests
             $"{parsed.Gen}/{parsed.DocCount}/{parsed.LiveBytes}/{parsed.FileBytes}");
         Program.Check("Manifest 往返: 锚与段",
             parsed.Anchors.DataPackId == "pack"
-            && parsed.Anchors.TokenizerVersion == 2
+            && parsed.Anchors.TokenizerVersion == 5
             && parsed.Sections.Count == 1
             && parsed.Sections[0].Kind == SectionKind.Postings
             && parsed.Sections[0].Offset == 256
@@ -283,7 +283,7 @@ internal static class EraStoreManifestTests
                 Docs = 0,
             });
         }
-        Program.Check("Manifest sections 超 64 抛异常",
+        Program.Check("Manifest sections 超上限抛异常",
             ThrowsInvalidData(() => Manifest.Parse(tooMany.ToJsonBytes())));
 
         Program.Check("Manifest gen=0 抛异常",

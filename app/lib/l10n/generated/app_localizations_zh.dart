@@ -4447,6 +4447,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）';
 
   @override
+  String get settingsSearchIndexInitials => '索引歌词首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引是派生数据：默认关闭零成本；开启后首次构建占用时间与磁盘（随曲库增长，约数百 MB @ 万首），构建失败会自动回退基础搜索。';
 
@@ -10615,6 +10622,13 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get settingsSearchIndexRomajiDesc =>
       '日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）';
+
+  @override
+  String get settingsSearchIndexInitials => '索引歌词首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）';
 
   @override
   String get settingsSearchIndexNote =>
@@ -16786,6 +16800,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get settingsSearchIndexRomajiDesc =>
       '日語歌詞沒有音譯時自動產生羅馬音，可用羅馬字搜尋（索引體積約增加一倍）';
+
+  @override
+  String get settingsSearchIndexInitials => '索引歌詞首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌詞也能用拼音首字母搜尋（如 wanzg）；關閉可縮小索引體積（變更後需重建索引）';
 
   @override
   String get settingsSearchIndexNote =>

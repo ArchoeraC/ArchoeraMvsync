@@ -70,7 +70,7 @@ class LocalSearchHit {
   /// 曲目 id（`search_docs.track_id` / `tracks.id`）。
   final String trackId;
 
-  /// BM25 相关度（FTS5 `bm25()` 原始值；越负越相关，升序即最佳在前）。
+  /// BM25 相关度（EraStore 的 `EraBm25` 原始值；越负越相关，升序即最佳在前）。
   final double score;
 
   /// **命中原由**：本命中由哪一趟召回（诊断 / 排障用，见精度审计 §6.3）。
@@ -236,4 +236,108 @@ class LocalSearchStatus {
   @override
   String toString() =>
       'LocalSearchStatus(${state.name}${message.isEmpty ? '' : ': $message'})';
+}
+
+/// 单段高亮区间（UTF-16 code unit，半开 `[start, end)`），字段名对齐 C#：
+/// `title` / `artist` / `album` / `filename` / `lyrics` / `lyricsTr` / `lyricsRom`。
+class LocalHighlightRange {
+  const LocalHighlightRange({
+    required this.field,
+    required this.start,
+    required this.end,
+    this.mode = 'literal',
+  });
+
+  final String field;
+  final int start;
+  final int end;
+
+  /// 命中模式：`literal` / `reading` / `initial`。
+  final String mode;
+
+  /// 宽松解析：缺失 / 非法项返回 null（旧库或部分实现可能不带该字段）。
+  static LocalHighlightRange? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final start = (json['start'] as num?)?.toInt();
+    final end = (json['end'] as num?)?.toInt();
+    if (start == null || end == null || start < 0 || end <= start) return null;
+    return LocalHighlightRange(
+      field: json['field'] as String? ?? '',
+      start: start,
+      end: end,
+      mode: json['mode'] as String? ?? 'literal',
+    );
+  }
+
+  @override
+  String toString() => '$field[$start,$end)/$mode';
+}
+
+/// 单条曲目的高亮集合（`era_search_decorate` 的 `highlights[trackId]`）。
+class LocalTrackHighlight {
+  const LocalTrackHighlight({this.ranges = const [], this.truncated = false});
+
+  final List<LocalHighlightRange> ranges;
+  final bool truncated;
+
+  /// 某一字段的区间（无则为空列表）。
+  List<LocalHighlightRange> rangesFor(String field) =>
+      ranges.where((range) => range.field == field).toList(growable: false);
+
+  /// 是否命中元数据（标题 / 歌手 / 专辑）：命中时 UI 不再展示歌词片段（与旧行为一致）。
+  bool get hasMetadataMatch => ranges.any(
+    (range) =>
+        range.field == 'title' ||
+        range.field == 'artist' ||
+        range.field == 'album',
+  );
+
+  static LocalTrackHighlight? tryParse(Object? json) {
+    if (json is! List) return null;
+    final ranges = <LocalHighlightRange>[];
+    for (final item in json) {
+      final range = LocalHighlightRange.tryParse(item);
+      if (range != null) ranges.add(range);
+    }
+    return LocalTrackHighlight(ranges: ranges);
+  }
+}
+
+/// 歌词片段（`era_search_decorate` 的 `snippets[trackId]`）；UI 只展示 [text]。
+class LocalLyricSnippet {
+  const LocalLyricSnippet({
+    this.field = 'lyrics',
+    required this.text,
+    this.truncated = false,
+  });
+
+  final String field;
+  final String text;
+  final bool truncated;
+
+  static LocalLyricSnippet? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final text = json['text'];
+    if (text is! String || text.isEmpty) return null;
+    return LocalLyricSnippet(
+      field: json['field'] as String? ?? 'lyrics',
+      text: text,
+      truncated: json['truncated'] as bool? ?? false,
+    );
+  }
+}
+
+/// 一页曲目的高亮 / 片段（`era_search_decorate` 响应）。
+class SearchDecorations {
+  const SearchDecorations({
+    this.highlights = const {},
+    this.snippets = const {},
+  });
+
+  final Map<String, LocalTrackHighlight> highlights;
+
+  /// trackId → 片段文本（已按「元数据已命中不展示片段」过滤）。
+  final Map<String, String> snippets;
+
+  static const SearchDecorations empty = SearchDecorations();
 }

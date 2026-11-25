@@ -1365,6 +1365,8 @@
   "settingsSearchIndexLrcDesc": "同时索引与音频同名的 .lrc 歌词（需先启用总开关）",
   "settingsSearchIndexRomaji": "生成歌词罗马音索引",
   "settingsSearchIndexRomajiDesc": "日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）",
+  "settingsSearchIndexInitials": "索引歌词首字母",
+  "settingsSearchIndexInitialsDesc": "歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）",
   "settingsSearchIndexNote": "索引是派生数据：默认关闭零成本；开启后首次构建占用时间与磁盘（随曲库增长，约数百 MB @ 万首），构建失败会自动回退基础搜索。",
   "settingsSectionSearchIndexStatus": "状态与维护",
   "settingsSearchIndexStatusDisabled": "未启用",

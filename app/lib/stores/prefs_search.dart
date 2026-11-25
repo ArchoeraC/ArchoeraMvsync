@@ -16,6 +16,9 @@ const indexLrcKey = 'search.index.lrc';
 /// 歌词罗马音生成键：**默认关**（T2-9 可选增强，仅总开关开启时才有意义）。
 const romajiLyricsKey = 'search.index.romaji_lyrics';
 
+/// 歌词首字母列键：**默认关**（T3.4 V4；仅总开关开启时才有意义）。
+const initialsLyricsKey = 'search.index.initials_lyrics';
+
 /// 搜索历史条数上限（对齐原项目 MAX_SEARCH_HISTORY=20，最新在前）。
 const int maxSearchHistory = 20;
 
@@ -44,17 +47,23 @@ extension SearchPrefs on AppPrefs {
   /// 非法值（非布尔）一律回退默认关。
   bool get romajiLyrics => data[romajiLyricsKey] == true;
 
-  /// 写入本地搜索索引开关（总开关 / `.lrc` / 歌词罗马音子开关）。
+  /// 是否为歌词生成首字母列（默认关；T3.4 V4 可选增强）。
+  /// 非法值（非布尔）一律回退默认关。
+  bool get initialsLyrics => data[initialsLyricsKey] == true;
+
+  /// 写入本地搜索索引开关（总开关 / `.lrc` / 歌词罗马音 / 歌词首字母子开关）。
   AppPrefs copyWithSearchIndex({
     bool? enabled,
     bool? indexLrc,
     bool? romajiLyrics,
+    bool? initialsLyrics,
   }) => AppPrefs(
     initialData: {
       ...data,
       enableLocalSearchIndexKey: ?enabled,
       indexLrcKey: ?indexLrc,
       romajiLyricsKey: ?romajiLyrics,
+      initialsLyricsKey: ?initialsLyrics,
     },
   );
 }

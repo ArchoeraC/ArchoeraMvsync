@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System.Text;
+
 namespace Archoera.Indexer.EraStore;
 
 /// <summary>合并参数（设计文档 §3.8.2.3）。</summary>
@@ -50,14 +52,20 @@ internal sealed class MergeResult
 /// </summary>
 internal static class Merger
 {
-    /// <summary>段数触发阈值；达到即需要合并。</summary>
-    public const int MergeTriggerSegments = 8;
+    /// <summary>
+    /// 段数触发阈值。设计稿写 8，但真实中文歌词按 4 MB 累加器落段时单段约 4k 首；
+    /// 8 段阈值会让每次增量（+1 段）都重写一个 4k 段（实测 1.2–1.4 s）。改 24 后
+    /// 增量先积累小段，到 24 段再一次性归并（死行 ≥20% 仍立即触发，不受此限）。
+    /// 全量构建后的自动压缩（<see cref="BuildCompactor"/>）复用同一阈值：
+    /// 低于 24 段不做额外重写，高于 24 段也只做有界归并。
+    /// </summary>
+    public const int MergeTriggerSegments = 24;
 
     /// <summary>死行比例触发阈值。</summary>
     public const double DeadRatioTrigger = 0.20;
 
-    /// <summary>硬上限：合并后总段数不得超过 64。</summary>
-    public const int MaxSegments = 64;
+    /// <summary>硬上限：合并后总段数（每段最多 5 条 section 引用）。</summary>
+    public const int MaxSegments = Manifest.MaxSections / 5;
 
     /// <summary>
     /// 是否需要压缩：段数 ≥8、超过 <paramref name="maxSegments"/>，或死行比例 ≥20%。
@@ -108,13 +116,14 @@ internal static class Merger
 
         var opt = options ?? new MergeOptions();
         var path = IndexPaths.Resolve(indexPath);
-        var raw = File.ReadAllBytes(path);
 
+        using var reader = new StoreReader(path);
+        var old = reader.Manifest;
         using var file = IndexFile.Open(path);
         if (!file.HasCommit || file.Current is null)
             throw new InvalidDataException("索引没有有效提交");
-
-        var old = file.Current;
+        if (file.Gen != old.Gen)
+            throw new InvalidDataException("索引在打开期间被并发提交");
         var existing = old.Sections.Select(s => (int)s.SegmentId).Distinct().ToArray();
         foreach (var id in requested)
             if (Array.IndexOf(existing, id) < 0)
@@ -137,7 +146,7 @@ internal static class Merger
         var droppedDead = 0;
         foreach (var id in requested.Order())
         {
-            var source = ReadSource(raw, old, (ushort)id);
+            var source = ReadSource(reader, old, (ushort)id);
             droppedDead += source.Dead.Count;
             sources.Add(source);
             var liveSoFar = 0;
@@ -158,12 +167,22 @@ internal static class Merger
             records.Add(MakeRecord(storeBySegment[candidate.Segment], candidate.Doc, candidate.Track));
         }
 
-        var mergedTerms = MergeTerms(sources, newDoc);
         Progress(opt, "write", sources.Count, kept.Count);
 
         var newSegmentId = (ushort)(maxSegment + 1);
         var newSections = new List<SectionRef>();
-        IndexBuilder.WriteSegment(file, records, mergedTerms, newSegmentId, newSections);
+        IndexBuilder.WriteSegmentStreaming(
+            file, records, newSegmentId,
+            (dict, postings, positions, writer) =>
+            {
+                foreach (var (key, entries) in MergeTerms(sources, newDoc))
+                {
+                    var offset = writer.Write(postings, positions, entries);
+                    dict.AddKey((FieldId)key[0], key.AsSpan(1), (uint)entries.Count, offset,
+                        entries[0].Positions is not null ? (byte)0x01 : (byte)0);
+                }
+            },
+            newSections);
 
         var manifest = BuildManifest(old, requested, newGen, newSections);
         IndexBuilder.FillFileBytes(manifest, file.Length);
@@ -200,11 +219,11 @@ internal static class Merger
         public HashSet<int> Dead = new();
     }
 
-    private static Source ReadSource(byte[] raw, Manifest manifest, ushort segmentId)
+    private static Source ReadSource(StoreReader reader, Manifest manifest, ushort segmentId)
     {
         var storeRef = Find(manifest, segmentId, SectionKind.DocStore)
             ?? throw new InvalidDataException($"seg={segmentId} 缺少 DocStore 段");
-        var store = new DocStoreReader(Body(raw, storeRef));
+        var store = new DocStoreReader(reader.GetSectionBody(SectionKind.DocStore, segmentId));
         if (store.Count != storeRef.Docs)
             throw new InvalidDataException($"seg={segmentId} DocStore 文档数与声明不符");
 
@@ -212,20 +231,18 @@ internal static class Merger
         {
             SegmentId = segmentId,
             Store = store,
-            Dict = Body(raw, Find(manifest, segmentId, SectionKind.Dict)
-                ?? throw new InvalidDataException($"seg={segmentId} 缺少 Dict 段")),
-            DictIndex = Body(raw, Find(manifest, segmentId, SectionKind.DictIndex)
-                ?? throw new InvalidDataException($"seg={segmentId} 缺少 DictIndex 段")),
-            Postings = Body(raw, Find(manifest, segmentId, SectionKind.Postings)
-                ?? throw new InvalidDataException($"seg={segmentId} 缺少 Postings 段")),
+            Dict = reader.GetSectionBody(SectionKind.Dict, segmentId),
+            DictIndex = reader.GetSectionBody(SectionKind.DictIndex, segmentId),
+            Postings = reader.GetSectionBody(SectionKind.Postings, segmentId),
         };
 
-        if (Find(manifest, segmentId, SectionKind.Positions) is { } positions)
-            source.Positions = Body(raw, positions);
+        if (Find(manifest, segmentId, SectionKind.Positions) is not null)
+            source.Positions = reader.GetSectionBody(SectionKind.Positions, segmentId);
 
-        if (Find(manifest, segmentId, SectionKind.Tombs) is { } tombs)
+        if (Find(manifest, segmentId, SectionKind.Tombs) is not null)
         {
-            foreach (var doc in Tombstones.Read(Body(raw, tombs), store.Count))
+            foreach (var doc in Tombstones.Read(
+                         reader.GetSectionBody(SectionKind.Tombs, segmentId), store.Count))
                 source.Dead.Add(doc);
         }
         return source;
@@ -268,55 +285,100 @@ internal static class Merger
 
     private static DocRecord MakeRecord(DocStoreReader store, int doc, byte[] track)
     {
+        // v3 归一列从旧段原样拷贝（不调用 Analyzer.NormalizeMetadata）：合并只搬物理数据，
+        // 重复归一既浪费又会在归一规则演进时悄悄改写列内容。
+        var norm = store.NormSpans(doc);
         var record = new DocRecord
         {
             Track = track,
             Rev = store.Rev(doc).ToArray(),
             ScriptBits = store.ScriptBits(doc),
             Flags = store.Flags(doc),
+            LayerConf = store.LayerConf(doc),
             Title = store.Title(doc),
             Artist = store.Artist(doc),
             Album = store.Album(doc),
+            TitleNorm = Encoding.UTF8.GetString(norm.Title),
+            ArtistNorm = Encoding.UTF8.GetString(norm.Artist),
+            AlbumNorm = Encoding.UTF8.GetString(norm.Album),
+            Mtime = store.Mtime(doc),
+            LrcMtime = store.LrcMtime(doc),
+            LrcSize = store.LrcSize(doc),
         };
         for (var field = 1; field <= 12; field++)
             record.DocLen[field - 1] = store.DocLen(doc, (FieldId)field);
         return record;
     }
 
-    /// <summary>按 term 归并各源段倒排，映射到新 doc 并重排；输出按编码键字节序确定。</summary>
-    private static List<(byte[] Key, List<PostingEntry> Entries)> MergeTerms(
+    /// <summary>
+    /// 流式 k 路归并各源段倒排：词典本身按编码键有序，逐词条取同一键的所有 posting，
+    /// 映射到新 doc 后立即交给写出器。内存只与「单个词条的跨段 posting」成正比，
+    /// 不再把全段「term → postings」物化（T3.10 合并 RSS 实测从 ~1.1 GB 降到可控）。
+    /// </summary>
+    private static IEnumerable<(byte[] Key, List<PostingEntry> Entries)> MergeTerms(
         List<Source> sources, Dictionary<(int Segment, int Doc), int> newDoc)
     {
-        var terms = new Dictionary<byte[], List<PostingEntry>>(ByteArrayComparer.Instance);
+        var readers = new List<(Source Source, IEnumerator<TermInfo> Terms, PostingsReader Postings)>();
+        // 段号 → 词典游标：每个词条 pop 后都要重新入队该源的下一个词条，这里必须是 O(1)
+        // 查找。全量构建后的自动压缩会一次归并数百个小段（数百个游标），线性 Find
+        // 会把合并成本推高数倍（T3.15 实测 286 段 × ~50 万词条的 Find 占比明显）。
+        var cursors = new Dictionary<int, IEnumerator<TermInfo>>(sources.Count);
+        var queue = new PriorityQueue<(Source Source, TermInfo Term, PostingsReader Postings), byte[]>(
+            ByteArrayPriorityComparer.Instance);
 
         foreach (var source in sources)
         {
-            var dict = new TermDictReader(source.Dict, source.DictIndex);
+            var terms = new TermDictReader(source.Dict, source.DictIndex).Enumerate().GetEnumerator();
             var postings = new PostingsReader(source.Postings, source.Positions);
-            foreach (var term in dict.ReadAll())
-            {
-                var entries = postings.DecodeAll(term.PostOffset, term.Df);
-                foreach (var entry in entries)
-                {
-                    if (!newDoc.TryGetValue((source.SegmentId, entry.Doc), out var mapped)) continue;
-                    if (!terms.TryGetValue(term.Key, out var target))
-                    {
-                        target = new List<PostingEntry>();
-                        terms[term.Key] = target;
-                    }
-                    target.Add(new PostingEntry(mapped, entry.Tf, entry.Positions));
-                }
-            }
+            if (terms.MoveNext())
+                queue.Enqueue((source, terms.Current, postings), terms.Current.Key);
+            readers.Add((source, terms, postings));
+            cursors[source.SegmentId] = terms;
         }
 
-        var merged = new List<(byte[] Key, List<PostingEntry> Entries)>(terms.Count);
-        foreach (var (key, entries) in terms)
+        try
         {
-            entries.Sort(static (a, b) => a.Doc.CompareTo(b.Doc));
-            merged.Add((key, entries));
+            while (queue.TryPeek(out _, out var key))
+            {
+                var entries = new List<PostingEntry>();
+                while (queue.TryPeek(out _, out var next) && next.AsSpan().SequenceEqual(key))
+                {
+                    var (source, term, postings) = queue.Dequeue();
+                    foreach (var entry in postings.DecodeAll(term.PostOffset, term.Df))
+                    {
+                        if (!newDoc.TryGetValue((source.SegmentId, entry.Doc), out var mapped))
+                            continue;
+                        entries.Add(new PostingEntry(mapped, entry.Tf, entry.Positions));
+                    }
+                    // 该源的下一个词条重新入队。
+                    var enumerator = cursors[source.SegmentId];
+                    if (enumerator.MoveNext())
+                        queue.Enqueue((source, enumerator.Current, postings), enumerator.Current.Key);
+                }
+
+                if (entries.Count == 0) continue; // 该词条只存在于被丢弃的旧副本
+                entries.Sort(static (a, b) => a.Doc.CompareTo(b.Doc));
+                yield return (key, entries);
+            }
         }
-        merged.Sort(static (a, b) => a.Key.AsSpan().SequenceCompareTo(b.Key));
-        return merged;
+        finally
+        {
+            foreach (var (_, terms, _) in readers) terms.Dispose();
+        }
+    }
+
+    /// <summary>byte[] 键的字节序优先队列比较器（键在入队后不再修改）。</summary>
+    private sealed class ByteArrayPriorityComparer : IComparer<byte[]>
+    {
+        public static readonly ByteArrayPriorityComparer Instance = new();
+
+        public int Compare(byte[]? x, byte[]? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return x.AsSpan().SequenceCompareTo(y);
+        }
     }
 
     private static Manifest BuildManifest(
@@ -326,7 +388,12 @@ internal static class Merger
         {
             Gen = gen,
             Format = old.Format,
+            // 合并只搬物理数据，查询元数据（T3.12）必须原样保留；丢失会让下一次增量
+            // 误判「元数据过旧」而整库重建。
+            MetaVersion = old.MetaVersion,
             Anchors = old.Anchors,
+            OptionsBits = old.OptionsBits,
+            Capabilities = new List<string>(old.Capabilities),
         };
 
         long liveBytes = 0;
@@ -358,9 +425,6 @@ internal static class Merger
             if (section.SegmentId == segmentId && section.Kind == kind) return section;
         return null;
     }
-
-    private static ReadOnlyMemory<byte> Body(byte[] raw, SectionRef section) =>
-        raw.AsMemory((int)section.Offset, (int)section.Length);
 
     /// <summary>track_id 内容相等的字典键（HashCode 随机种子不影响输出，输出前显式排序）。</summary>
     private readonly struct TrackKey : IEquatable<TrackKey>

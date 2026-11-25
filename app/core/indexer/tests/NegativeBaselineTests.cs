@@ -18,8 +18,11 @@ namespace Archoera.Indexer.Tests;
 ///         若后续修好，会自动变成 PASS（提示可以删掉缺口标记）。</item>
 /// </list>
 ///
-/// 依赖 `plan` / `explain` / `typo2` 的条目（N8、N10、N11、N18–N20、N22、N23）
-/// 在 S1/S2 之前无法断言归因档位，统一打印 BLOCKED，不伪造期望。
+/// 依赖 `plan` / `explain` / `typo2` 的条目（N10、N11、N18）在当前存储上
+/// 无法断言归因档位，统一打印 BLOCKED，不伪造期望；N8 已在
+/// <see cref="SearchExplainTests"/> 用 explain 归因断言，N19 / N20 分别在
+/// `app/test/search_version_mismatch_fallback_test.dart` 与
+/// <see cref="SearchConcurrencyTests"/> 断言（属 FFI / 并发集成层）。
 /// </summary>
 internal static class NegativeBaselineTests
 {
@@ -32,6 +35,7 @@ internal static class NegativeBaselineTests
             MixedCorpus(root);
             PureEnglishCorpus(root);
             StaleTrack(root);
+            Typo2Negatives();
             Unreachable();
         }
         finally
@@ -145,7 +149,7 @@ internal static class NegativeBaselineTests
         Program.Check("N14 纯空白 → 空且零兜底趟",
             n14.Items.Count == 0 && NoPasses(n14), Count(n14) + " / " + PassSummary(n14));
 
-        // N15：200 码点不得超时 / 抛错；当前实现未截断且会跑模糊趟 → 记为已知缺口。
+        // N15：200 码点不得超时 / 抛错；≥64 码点按计划期收缩只跑字面步（RP §3.5.7）。
         var longQuery = new string('a', 200);
         var watch = Stopwatch.StartNew();
         string? n15Error = null;
@@ -157,8 +161,25 @@ internal static class NegativeBaselineTests
         Program.Check("N15 200 码点不超时（< 5s）", watch.ElapsedMilliseconds < 5000, watch.ElapsedMilliseconds.ToString());
         if (n15 is not null)
         {
-            Program.KnownGap("N15 截断并只跑字面步", n15.Passes.Fuzzy == 0,
-                "当前未截断，实际执行 fuzzy=1（" + watch.ElapsedMilliseconds + " ms）");
+            Program.Check("N15 超长查询只跑字面步（fuzzy/cjk=0）",
+                n15.Passes.Fuzzy == 0 && n15.Passes.CjkFuzzy == 0, PassSummary(n15));
+        }
+
+        // 粘贴整段 CJK 同样受计划期收缩保护（词元数最多，最容易触发表达式膨胀）。
+        var longCjk = new string('爱', 200);
+        var cjkWatch = Stopwatch.StartNew();
+        string? n15CjkError = null;
+        SearchResult? n15Cjk = null;
+        try { n15Cjk = Query(index, longCjk); }
+        catch (Exception ex) { n15CjkError = ex.Message; }
+        cjkWatch.Stop();
+        Program.Check("N15 200 CJK 码点不抛错 / 不超时（< 5s）",
+            n15CjkError is null && cjkWatch.ElapsedMilliseconds < 5000,
+            n15CjkError ?? (cjkWatch.ElapsedMilliseconds.ToString()));
+        if (n15Cjk is not null)
+        {
+            Program.Check("N15 200 CJK 码点只跑字面步（fuzzy/cjk=0）",
+                n15Cjk.Passes.Fuzzy == 0 && n15Cjk.Passes.CjkFuzzy == 0, PassSummary(n15Cjk));
         }
 
         // N16：纯 emoji → 空。
@@ -236,9 +257,56 @@ internal static class NegativeBaselineTests
             cmd.ExecuteNonQuery();
         }
 
-        var ghost = Query(index, "爱");
-        Program.KnownGap("N12 结果侧过滤已删除曲目", !Has(ghost, "s1"),
-            "搜索索引仍返回幽灵 s1（查询期未回查 library.db）");
+        var ghost = Query(index, "爱", libraryDb: db);
+        Program.Check("N12 结果侧过滤已删除曲目", !Has(ghost, "s1"), Hits(ghost));
+        // 缓存命中路径也必须过滤：缓存里保留原始 top-k，过滤在返回时派生。
+        var cached = Query(index, "爱", libraryDb: db);
+        Program.Check("N12 缓存命中仍过滤已删除曲目", !Has(cached, "s1"), Hits(cached));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* typo2（S2 / T2.6）：N22 / N23                                       */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// N22：3 字符词（<c>cat</c>）不得启用 typo2；N23：7+ 字符词允许 2 错，
+    /// 但首字符错仍不生成变体（<c>bmautiful</c> 不出现）。
+    ///
+    /// 这两条只依赖纯函数（词表 + 变体生成），不需要建索引。
+    /// </summary>
+    private static void Typo2Negatives()
+    {
+        // 词表必须字典序（DistanceTwoCandidates 用首字符前缀区间收敛扫描）。
+        var vocabulary = new[]
+        {
+            "beautiful", "beautifxl", "beautifxxl", "bmautiful",
+            "cart", "cat", "cut", "hello", "hlelo",
+        };
+
+        Program.Check("N22 3 字符词不启用 typo2",
+            SearchQuery.CompileTypo2(Analyzer.AnalyzeQuery("cat"), metadata: false, vocabulary) is null);
+        Program.Check("N22 typo2 不生成 cart / cut 变体",
+            SearchQuery.CompileTypo2(Analyzer.AnalyzeQuery("cat"), metadata: false, vocabulary) is null);
+
+        var formula = SearchQuery.CompileTypo2(
+            Analyzer.AnalyzeQuery("beautiful"), metadata: false, vocabulary);
+        Program.Check("N23 7+ 字符词启用 typo2 且允许 2 错",
+            formula is not null && formula.Contains("beautifxxl", StringComparison.Ordinal),
+            formula ?? "null");
+        Program.Check("N23 首字符错不生成变体",
+            formula is not null && !formula.Contains("bmautiful", StringComparison.Ordinal),
+            formula ?? "null");
+        Program.Check("N23 距离 0 / 1 不重复生成",
+            formula is not null
+            && !formula.Contains("beautiful", StringComparison.Ordinal)
+            && !formula.Contains("beautifxl", StringComparison.Ordinal),
+            formula ?? "null");
+
+        Program.Check("typo2 无词表时返回 null",
+            SearchQuery.CompileTypo2(Analyzer.AnalyzeQuery("beautiful"), metadata: false, null) is null);
+        Program.Check("typo2 词表判定距离 2",
+            FuzzyVocabulary.WithinTwo("beautiful", "beautifxxl")
+            && !FuzzyVocabulary.WithinOne("beautiful", "beautifxxl"));
     }
 
     /* ------------------------------------------------------------------ */
@@ -247,15 +315,21 @@ internal static class NegativeBaselineTests
 
     private static void Unreachable()
     {
-        const string prop = "需要 plan / explain / 字段归因";
-        Program.Blocked("N8 「Cover」不当正向词", prop + "（rank 层）");
-        Program.Blocked("N10 日文汉字标题读音归因", prop);
-        Program.Blocked("N11 译文命中必须 field=lyricsTr", prop);
-        Program.Blocked("N18 高频词受预算裁剪", "需要计划层 df 预算");
-        Program.Blocked("N19 索引版本不符降级 LIKE", "属 FFI / Dart 集成层；C# 只看到 schema 抛错");
-        Program.Blocked("N20 构建中读取旧快照", "需并发构建 / 读取集成测试");
-        Program.Blocked("N22 3 字符词不启用 typo2", "typo2 属 S2");
-        Program.Blocked("N23 7+ 字符词允许 2 错", "typo2 属 S2");
+        // N8（「Cover」不当正向词）已由 SearchExplainTests.CoverAttribution 断言（explain 归因）。
+        // N19 已由 app/test/search_version_mismatch_fallback_test.dart 断言（metaVersion 过旧 →
+        //   era_search_open 拒绝 → era_search_fallback / LIKE；C# 侧的码 3 断言见 SearchApiTests）。
+        // N20 已由 SearchConcurrencyTests 断言（构建停在 commit 阶段时查询旧快照；旧 StoreReader
+        //   跨重建仍完整）。
+        Program.Blocked("N10 日文汉字标题读音归因",
+            "DocStore v2 无 per-track 语言字段；Manifest 只有整库 HasJapanese（需曲目内假名），"
+            + "纯汉字日文标题仍按中文拼音读音 → 需 S3 per-track 语言画像");
+        Program.Blocked("N11 译文命中必须 field=lyricsTr",
+            "单字 CJK 查询限定可见文本列（RequireMetadataForSingleChar），译文列不可召回；"
+            + "且 scope=all 混合步复核生效后字段桶只到 lyrics（DocStore 只有 title/artist/album"
+            + " 归一列，歌词子列不再可归因），缺 §3.5 单字歌词语义决策 / S3 歌词列精确度");
+        Program.Blocked("N18 高频词受预算裁剪",
+            "单字高频词已限定可见文本列、不生成 prefix / phonetic 步；仍缺计划期 df 预算"
+            + "（est > 4×cap 不生成 step），需回放校准且编译器要读存储");
     }
 
     /* ------------------------------------------------------------------ */
@@ -265,7 +339,8 @@ internal static class NegativeBaselineTests
     private static string Song(string dir, string name) => Path.Combine(dir, name);
 
     /// <summary>走生产渐进查询路径（fuzzy=true、MinExact=1，与桌面端默认一致）。</summary>
-    private static SearchResult Query(string index, string query, bool lyrics = false)
+    private static SearchResult Query(
+        string index, string query, bool lyrics = false, string? libraryDb = null)
         => SearchSession.Run(index, new SearchRequest
         {
             Query = query,
@@ -273,7 +348,7 @@ internal static class NegativeBaselineTests
             Limit = 200,
             Fuzzy = true,
             MinExact = 1,
-        });
+        }, libraryDb);
 
     private static bool Has(SearchResult result, string trackId)
         => result.Items.Any(hit => string.Equals(hit.TrackId, trackId, StringComparison.Ordinal));

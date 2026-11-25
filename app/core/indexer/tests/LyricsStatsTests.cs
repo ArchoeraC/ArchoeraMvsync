@@ -113,6 +113,12 @@ internal static class LyricsStatsTests
                 && IntAt(json, "layers/original/bytes/p99") == 49
                 && IntAt(json, "layers/original/bytes/max") == 49,
             Str(IntAt(json, "layers/original/bytes/p95")));
+        // 护栏判定用**去重后**字节（A = 29 B，B = 33 B）。
+        Program.Check("original dedupedBytes p50/p95 == 29/33",
+            IntAt(json, "layers/original/dedupedBytes/p50") == 29
+                && IntAt(json, "layers/original/dedupedBytes/p95") == 33,
+            $"{IntAt(json, "layers/original/dedupedBytes/p50")}/"
+                + $"{IntAt(json, "layers/original/dedupedBytes/p95")}");
 
         // ---- translation：只有 B ----
         Program.Check("translation tracksWithLayer == 1",
@@ -245,8 +251,12 @@ internal static class LyricsStatsTests
 
         // 4097 条唯一短行：只触发行数护栏（字节远小于 128 KB）。
         var manyLines = string.Join('\n', Enumerable.Range(0, 4097).Select(i => "L" + i));
-        // 100 行 × 1500 字节：唯一行只有 1 条，字节 150,099 > 131,072，只触发字节护栏。
-        var manyBytes = string.Join('\n', Enumerable.Repeat(new string('A', 1500), 100));
+        // 4096 行 × 34 B（10 汉字 + 4 位序号、每行唯一）：行数正好在护栏内，
+        // 只有去重后字节 143,359 > 131,072，故只触发字节护栏。
+        // 旧夹具用 100 条相同长行，Ordinal 去重后只剩 1 行；索引路径按归一化键去重，
+        // 护栏判定的是去重后大小，故必须用唯一行才能覆盖「去重后仍超字节」的病态输入。
+        var manyBytes = string.Join('\n', Enumerable.Range(0, 4096)
+            .Select(i => new string('歌', 10) + i.ToString("D4")));
 
         CreateLibrary(db, withLrc: true);
         using (var conn = Open(db))
@@ -275,13 +285,20 @@ internal static class LyricsStatsTests
             $"{IntAt(json, "layers/combined/guardTriggers/lines")}/"
                 + $"{IntAt(json, "layers/combined/guardTriggers/bytes")}/"
                 + $"{IntAt(json, "layers/combined/guardTriggers/any")}");
-        Program.Check("护栏 rawTotal/uniqueTotal == 4197/4098",
-            IntAt(json, "layers/original/rawTotal") == 4197
-                && IntAt(json, "layers/original/uniqueTotal") == 4098,
+        Program.Check("护栏 rawTotal/uniqueTotal == 8193/8193",
+            IntAt(json, "layers/original/rawTotal") == 8193
+                && IntAt(json, "layers/original/uniqueTotal") == 8193,
             $"{IntAt(json, "layers/original/rawTotal")}/{IntAt(json, "layers/original/uniqueTotal")}");
-        // nearest-rank：[100, 4097] → p50 = 100，p95 = 4097。
-        Program.Check("护栏 lines p50 == 100 / p95 == 4097",
-            IntAt(json, "layers/original/lines/p50") == 100
+        Program.Check("护栏无重复行 → dedupeRatio == 0.0000",
+            Near(DoubleAt(json, "layers/original/dedupeRatio"), 0.0),
+            StrDouble(DoubleAt(json, "layers/original/dedupeRatio")));
+        // 护栏判定在**去重后**：长行曲目 dedupedBytes == 143,359（> 131,072）。
+        Program.Check("护栏 dedupedBytes max == 143359",
+            IntAt(json, "layers/original/dedupedBytes/max") == 143359,
+            Str(IntAt(json, "layers/original/dedupedBytes/max")));
+        // nearest-rank：[4096, 4097] → p50 = 4096，p95 = 4097。
+        Program.Check("护栏 lines p50 == 4096 / p95 == 4097",
+            IntAt(json, "layers/original/lines/p50") == 4096
                 && IntAt(json, "layers/original/lines/p95") == 4097,
             $"{IntAt(json, "layers/original/lines/p50")}/{IntAt(json, "layers/original/lines/p95")}");
         Program.Check("护栏 translation/romaji 不触发",
@@ -349,7 +366,7 @@ internal static class LyricsStatsTests
 
     private static SqliteConnection Open(string path)
     {
-        var conn = new SqliteConnection(FtsStore.ConnectionString(path));
+        var conn = new SqliteConnection(LibraryDb.ConnectionString(path));
         conn.Open();
         return conn;
     }

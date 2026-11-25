@@ -4745,6 +4745,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Generar automáticamente romaji para letras japonesas sin transliteración para poder buscarlas por romaji (el índice ocupa aproximadamente el doble)';
 
   @override
+  String get settingsSearchIndexInitials => 'Indexar iniciales de la letra';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      'Permite buscar letras por iniciales pinyin (p. ej. wanzg); desactívalo para reducir el índice (el cambio requiere reconstruirlo)';
+
+  @override
   String get settingsSearchIndexNote =>
       'El índice es un dato derivado: desactivado por defecto y sin coste; al activarlo consume tiempo y disco en segundo plano (cientos de MB para 10 000 pistas) y, si falla, vuelve automáticamente a la búsqueda básica.';
 

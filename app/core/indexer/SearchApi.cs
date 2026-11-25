@@ -123,14 +123,21 @@ internal sealed class SearchApiError
 /// </summary>
 internal sealed class SearchApiHandle
 {
-    public SearchApiHandle(string indexPath, StoreMeta meta)
+    public SearchApiHandle(string indexPath, StoreMeta meta, string? libraryDbPath = null)
     {
         IndexPath = indexPath;
         Meta = meta;
+        LibraryDbPath = libraryDbPath;
     }
 
     /// <summary>索引文件的绝对路径（<see cref="SearchSession"/> 按此复用会话）。</summary>
     public string IndexPath { get; }
+
+    /// <summary>
+    /// 源曲库路径（`options_json.libraryDb`，可空）。非空时查询期用它过滤已删除曲目（T2.9）；
+    /// 库不可读则**不过滤**（失败开放），见 <see cref="SearchSession"/>。
+    /// </summary>
+    public string? LibraryDbPath { get; }
 
     /// <summary>打开时的元数据快照（<c>gen</c> / <c>schemaVersion</c> 从这里取）。</summary>
     public StoreMeta Meta { get; }
@@ -201,13 +208,13 @@ internal sealed class SearchApiRequest
     /// </summary>
     public IReadOnlyList<string>? FilterTrackIds { get; init; }
 
-    /// <summary>解析后保留但 S1 不产出对应字段（T2.7 explain / T2.8 snippet）。</summary>
+    /// <summary>返回前 50 条命中的 <c>explain</c> 与执行 <c>trace</c>（S2 / T2.3）。</summary>
     public bool Explain { get; init; }
 
     /// <summary>解析后保留但 S1 不产出对应字段（T2.7）。</summary>
     public bool Highlight { get; init; }
 
-    /// <summary>解析后保留但 S1 不产出对应字段（T2.8）。</summary>
+    /// <summary>返回前 10 条命中的歌词片段（T2.8：查询期只读 <c>library.db</c> 截取）。</summary>
     public bool Snippet { get; init; }
 
     /// <summary>
@@ -318,22 +325,40 @@ internal sealed class SearchApiRequest
                 offset = offsetValue >= int.MaxValue ? int.MaxValue : (int)Math.Truncate(offsetValue);
             }
 
-            // total：只接受缺省 / null / "none"（S1 只做 none）。
+            // total：none | capped | exact（缺省 / null → none）。
+            var totalMode = SearchTotalMode.None;
             if (root.TryGetProperty("total", out var totalElement)
-                && totalElement.ValueKind != JsonValueKind.Null
-                && !(totalElement.ValueKind == JsonValueKind.String
-                     && string.Equals(totalElement.GetString(), "none", StringComparison.OrdinalIgnoreCase)))
+                && totalElement.ValueKind != JsonValueKind.Null)
             {
-                return (null, SearchApiError.Invalid(
-                    "total 在 S1 只支持 none（缺省）", "unsupported_total", "total"));
+                if (totalElement.ValueKind != JsonValueKind.String)
+                    return (null, SearchApiError.Invalid("total 必须是字符串", "invalid_type", "total"));
+                var totalText = totalElement.GetString();
+                if (!SearchPaging.TryParseTotalMode(totalText, out totalMode))
+                {
+                    return (null, SearchApiError.Invalid(
+                        "total 只能是 none / capped / exact", "invalid_total", "total"));
+                }
             }
 
-            // cursor：S1 没有分页游标，只接受缺省 / null。
+            // cursor：不透明 base64url(32B)；非法 / 超长 → 码 1（D.2 / D.5）。
+            string? cursorRaw = null;
+            SearchCursor? cursor = null;
             if (root.TryGetProperty("cursor", out var cursorElement)
                 && cursorElement.ValueKind != JsonValueKind.Null)
             {
-                return (null, SearchApiError.Invalid(
-                    "cursor 在 S1 尚未实现（只接受 null）", "unsupported_cursor", "cursor"));
+                if (cursorElement.ValueKind != JsonValueKind.String)
+                    return (null, SearchApiError.Invalid("cursor 必须是字符串或 null", "invalid_type", "cursor"));
+                cursorRaw = cursorElement.GetString() ?? "";
+                if (cursorRaw.Length == 0)
+                    return (null, SearchApiError.Invalid("cursor 不能为空串", "invalid_cursor", "cursor"));
+                if (cursorRaw.Length > SearchPaging.MaxCursorChars)
+                {
+                    return (null, SearchApiError.Invalid(
+                        $"cursor 超过 {SearchPaging.MaxCursorChars} 字符上限", "invalid_cursor", "cursor"));
+                }
+                if (!SearchPaging.TryDecode(cursorRaw, out var decoded))
+                    return (null, SearchApiError.Invalid("cursor 非法（不是 v1 的 32 字节游标）", "invalid_cursor", "cursor"));
+                cursor = decoded;
             }
 
             // explain / highlight / snippet：接受但 S1 不产出（T2.7 / T2.8）。
@@ -344,7 +369,7 @@ internal sealed class SearchApiRequest
                 return (null, boolError);
             }
 
-            // scheme：未知值原样回显（S1 恒用 SearchPolicy.SchemeId 执行）。
+            // scheme：未知值回退默认执行，但响应里保留 schemeRequested（T2.4）。
             var schemeRequested = SearchPolicy.SchemeId;
             if (root.TryGetProperty("scheme", out var schemeElement))
             {
@@ -352,6 +377,9 @@ internal sealed class SearchApiRequest
                     return (null, SearchApiError.Invalid("scheme 必须是字符串", "invalid_type", "scheme"));
                 schemeRequested = schemeElement.GetString() ?? "";
             }
+            var scheme = SchemeRegistry.TryGet(schemeRequested, out var resolvedScheme)
+                ? resolvedScheme
+                : SchemeRegistry.Default;
 
             var (filterIds, filterError) = ParseFilter(root);
             if (filterError is not null) return (null, filterError);
@@ -361,18 +389,25 @@ internal sealed class SearchApiRequest
                 Query = query,
                 Metadata = metadata,
                 Lyrics = lyrics,
+                Scheme = schemeRequested,
                 Limit = limit,
                 Offset = offset,
-                // S1 默认启用兜底趟（等价 default@1）：v2 不再暴露 fuzzy / minExact 开关。
+                // S2 默认启用兜底趟（default@1）：v2 不再暴露 fuzzy / minExact 开关。
                 Fuzzy = true,
                 MinExact = 1,
-                CandidateCap = FtsStore.DefaultCandidateCap,
+                CandidateCap = SearchRequest.DefaultCandidateCap,
+                Explain = explain,
+                Snippet = snippet,
+                Highlight = highlight,
+                Cursor = cursor,
+                CursorRaw = cursorRaw,
+                TotalMode = totalMode,
             };
 
             return (new SearchApiRequest
             {
                 Request = request,
-                Scheme = SearchPolicy.SchemeId,
+                Scheme = scheme.Id,
                 SchemeRequested = schemeRequested,
                 QueryTruncated = queryTruncated,
                 Clamped = clamped,
@@ -447,7 +482,7 @@ internal sealed class SearchApiRequest
     }
 
     /// <summary>严格 32 位十六进制（大小写皆可；track_id 是 scanner 的纯托管 MD5）。</summary>
-    private static bool IsHex32(string value)
+    internal static bool IsHex32(string value)
     {
         if (value.Length != 32) return false;
         foreach (var c in value)
@@ -492,13 +527,79 @@ internal sealed class SearchApiRequest
 /// </summary>
 internal static class SearchApiJson
 {
-    private static string Write(Action<Utf8JsonWriter> body)
+    private static readonly JsonWriterOptions WriterOptions = new() { Indented = false };
+
+    /// <summary>
+    /// 线程内复用的 JSON 缓冲。10k 命中的响应约 2–3 MB，若每次都新建
+    /// <see cref="ArrayBufferWriter{T}"/> 会反复进 LOH，NativeAOT 进程的匿名 RSS
+    /// 会随查询次数上涨；这里保留一块「高水位」缓冲，下一次查询直接覆盖。
+    /// </summary>
+    [ThreadStatic] private static ScratchWriter? t_scratch;
+
+    private static string Write(Action<Utf8JsonWriter> body, Action<ReadOnlySpan<byte>>? sink = null)
     {
+        if (sink is not null)
+        {
+            var scratch = t_scratch ??= new ScratchWriter();
+            scratch.Reset();
+            using (var writer = new Utf8JsonWriter(scratch, WriterOptions))
+            {
+                body(writer);
+                writer.Flush();
+            }
+            sink(scratch.WrittenSpan);
+            // 宽响应缓冲（~0.7 MB）用完即收：保留会让匿名 RSS 多占 0.5–1 MB，
+            // 而下一次宽查询重新增长的成本远低于多留一整个大对象。
+            scratch.ShrinkRetention();
+            return string.Empty;
+        }
+
         var buffer = new ArrayBufferWriter<byte>();
-        using var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false });
-        body(writer);
-        writer.Flush();
+        using var w2 = new Utf8JsonWriter(buffer, WriterOptions);
+        body(w2);
+        w2.Flush();
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>可增长、线程内复用的 <see cref="IBufferWriter{T}"/>（只增不减）。</summary>
+    private sealed class ScratchWriter : IBufferWriter<byte>
+    {
+        private byte[] _buffer = new byte[64 * 1024];
+        private int _written;
+
+        public ReadOnlySpan<byte> WrittenSpan => _buffer.AsSpan(0, _written);
+
+        public void Reset() => _written = 0;
+
+        /// <summary>超过 512 KB 的缓冲缩回 64 KB（由调用方在响应写出后调用）。</summary>
+        public void ShrinkRetention()
+        {
+            if (_buffer.Length <= 512 * 1024) return;
+            _buffer = new byte[64 * 1024];
+            _written = 0;
+        }
+
+        public void Advance(int count) => _written += count;
+
+        public Memory<byte> GetMemory(int sizeHint = 0)
+        {
+            Ensure(sizeHint);
+            return _buffer.AsMemory(_written);
+        }
+
+        public Span<byte> GetSpan(int sizeHint = 0)
+        {
+            Ensure(sizeHint);
+            return _buffer.AsSpan(_written);
+        }
+
+        private void Ensure(int sizeHint)
+        {
+            var need = Math.Max(sizeHint, 1);
+            if (_buffer.Length - _written >= need) return;
+            var next = Math.Max(_buffer.Length * 2, _written + need);
+            Array.Resize(ref _buffer, next);
+        }
     }
 
     /// <summary>
@@ -508,8 +609,9 @@ internal static class SearchApiJson
     /// S2.5 改成 <c>explain</c> / <c>trace</c> 后删除。同理 <c>score</c> / <c>pass</c>
     /// 只作诊断与归因，顺序才是契约。</para>
     ///
-    /// <para>S1 不产出 <c>explain</c> / <c>highlight</c> / <c>snippet</c>（T2.7 / T2.8）、
-    /// 不分页（<c>next</c> 恒 null / <c>restart</c> 恒 false）、<c>total</c> 恒 -1。</para>
+    /// <para>S2 已产出 <c>explain</c> / <c>trace</c>（仅前 50 条、仅请求开启时）、
+    /// <c>highlight</c>（仅前 50 条、仅请求开启时）与 <c>snippet</c>（仅前 10 条、仅请求开启时）；
+    /// T2.10 起 <c>total</c> / <c>next</c> / <c>restart</c> 由会话计算后原样写出。</para>
     /// </summary>
     public static string Success(
         IReadOnlyList<SearchHit> items,
@@ -518,7 +620,16 @@ internal static class SearchApiJson
         string scheme,
         string schemeRequested,
         bool clamped,
-        bool queryTruncated) => Write(w =>
+        bool queryTruncated,
+        IReadOnlyDictionary<string, SearchExplanation>? explanations = null,
+        SearchTrace? trace = null,
+        IReadOnlyDictionary<string, LyricSnippet>? snippets = null,
+        IReadOnlyDictionary<string, TrackHighlight>? highlights = null,
+        long total = -1,
+        bool totalExact = false,
+        bool restart = false,
+        string? next = null,
+        Action<ReadOnlySpan<byte>>? sink = null) => Write(w =>
     {
         w.WriteStartObject();
         w.WriteNumber("api", SearchApiRequest.ApiVersion);
@@ -535,6 +646,25 @@ internal static class SearchApiJson
             w.WriteNumber("score", hit.Score);
             // 命中原由归因（精度审计 §6.3）：Dart 侧据此区分字面命中与兜底命中。
             w.WriteString("pass", hit.Pass);
+            if (explanations is not null
+                && explanations.TryGetValue(hit.TrackId, out var explanation))
+            {
+                w.WritePropertyName("explain");
+                WriteExplain(w, explanation);
+            }
+            if (highlights is not null
+                && highlights.TryGetValue(hit.TrackId, out var highlight))
+            {
+                w.WritePropertyName("highlight");
+                WriteHighlight(w, highlight);
+                w.WriteBoolean("highlightTruncated", highlight.Truncated);
+            }
+            if (snippets is not null
+                && snippets.TryGetValue(hit.TrackId, out var snippet))
+            {
+                w.WritePropertyName("snippet");
+                WriteSnippet(w, snippet);
+            }
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -550,9 +680,92 @@ internal static class SearchApiJson
         w.WriteNumber("cjkFuzzy", passes.CjkFuzzy);
         w.WriteEndObject();
 
-        // S1 只实现 total=none / 不分页。
-        w.WriteNumber("total", -1);
-        w.WriteBoolean("totalExact", false);
+        // T2.10：total / next / restart 由 SearchSession 计算（none → -1）。
+        w.WriteNumber("total", total);
+        w.WriteBoolean("totalExact", totalExact);
+        w.WriteBoolean("partial", false);
+        w.WriteBoolean("clamped", clamped);
+        w.WriteBoolean("queryTruncated", queryTruncated);
+        w.WriteBoolean("restart", restart);
+        if (next is null)
+        {
+            w.WriteNull("next");
+        }
+        else
+        {
+            w.WriteString("next", next);
+        }
+        if (trace is null)
+        {
+            w.WriteNull("trace");
+        }
+        else
+        {
+            w.WritePropertyName("trace");
+            WriteTrace(w, trace);
+        }
+        w.WriteEndObject();
+    }, sink);
+
+    /// <summary>
+    /// 降级检索响应（T2.12，<c>era_search_fallback</c>）：与 <see cref="Success"/> 同形，
+    /// 但 <c>scheme</c> 固定 <c>fallback@1</c>，不产出 <c>explain</c> / <c>trace</c>，
+    /// 不实现游标（<c>next=null</c> / <c>restart=false</c>），<c>total</c> 为全量匹配数。
+    /// </summary>
+    public static string Fallback(
+        IReadOnlyList<SearchHit> items,
+        string schemeRequested,
+        bool clamped,
+        bool queryTruncated,
+        long total,
+        IReadOnlyDictionary<string, LyricSnippet>? snippets = null,
+        IReadOnlyDictionary<string, TrackHighlight>? highlights = null,
+        Action<ReadOnlySpan<byte>>? sink = null) => Write(w =>
+    {
+        w.WriteStartObject();
+        w.WriteNumber("api", SearchApiRequest.ApiVersion);
+        w.WriteNumber("gen", 0);
+        w.WriteString("scheme", SearchFallback.SchemeId);
+        w.WriteString("schemeRequested", schemeRequested);
+
+        w.WritePropertyName("items");
+        w.WriteStartArray();
+        foreach (var hit in items)
+        {
+            w.WriteStartObject();
+            w.WriteString("trackId", hit.TrackId);
+            w.WriteNumber("score", hit.Score);
+            w.WriteString("pass", hit.Pass);
+            if (highlights is not null
+                && highlights.TryGetValue(hit.TrackId, out var highlight))
+            {
+                w.WritePropertyName("highlight");
+                WriteHighlight(w, highlight);
+                w.WriteBoolean("highlightTruncated", highlight.Truncated);
+            }
+            if (snippets is not null
+                && snippets.TryGetValue(hit.TrackId, out var snippet))
+            {
+                w.WritePropertyName("snippet");
+                WriteSnippet(w, snippet);
+            }
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+
+        // 与正式查询同形的诊断字段（fallback 不执行任何兜底趟，全部为 0）。
+        w.WritePropertyName("passes");
+        w.WriteStartObject();
+        w.WriteNumber("dropTokens", 0);
+        w.WriteNumber("pinyinLoose", 0);
+        w.WriteNumber("reading", 0);
+        w.WriteNumber("crossLingual", 0);
+        w.WriteNumber("fuzzy", 0);
+        w.WriteNumber("cjkFuzzy", 0);
+        w.WriteEndObject();
+
+        w.WriteNumber("total", total);
+        w.WriteBoolean("totalExact", true);
         w.WriteBoolean("partial", false);
         w.WriteBoolean("clamped", clamped);
         w.WriteBoolean("queryTruncated", queryTruncated);
@@ -560,7 +773,169 @@ internal static class SearchApiJson
         w.WriteNull("next");
         w.WriteNull("trace");
         w.WriteEndObject();
+    }, sink);
+
+    /// <summary>
+    /// 装饰响应（T2.11，<c>era_search_decorate</c>）：按 trackId 给出高亮 / 片段，
+    /// 不含命中列表与排序信息。缺失的曲目直接不出现在对象里（失败开放）。
+    /// </summary>
+    public static string Decorate(
+        IReadOnlyDictionary<string, TrackHighlight> highlights,
+        IReadOnlyDictionary<string, LyricSnippet> snippets) => Write(w =>
+    {
+        w.WriteStartObject();
+        w.WriteNumber("api", SearchApiRequest.ApiVersion);
+
+        w.WritePropertyName("highlights");
+        w.WriteStartObject();
+        foreach (var pair in highlights)
+        {
+            w.WritePropertyName(pair.Key);
+            WriteHighlight(w, pair.Value);
+        }
+        w.WriteEndObject();
+
+        w.WritePropertyName("snippets");
+        w.WriteStartObject();
+        foreach (var pair in snippets)
+        {
+            w.WritePropertyName(pair.Key);
+            WriteSnippet(w, pair.Value);
+        }
+        w.WriteEndObject();
+
+        w.WriteEndObject();
     });
+
+    /// <summary>单条命中的 <c>highlight</c>（D.3.2）：字段 / UTF-16 半开区间 / 模式。</summary>
+    public static void WriteHighlight(Utf8JsonWriter w, TrackHighlight highlight)
+    {
+        w.WriteStartArray();
+        foreach (var range in highlight.Ranges)
+        {
+            w.WriteStartObject();
+            w.WriteString("field", range.Field);
+            w.WriteNumber("start", range.Start);
+            w.WriteNumber("end", range.End);
+            w.WriteString("mode", range.Mode);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    }
+
+    /// <summary>单条命中的 <c>snippet</c>（D.3.2）：字段 / 窗口文本 / 相对区间 / 截断标记。</summary>
+    public static void WriteSnippet(Utf8JsonWriter w, LyricSnippet snippet)
+    {
+        w.WriteStartObject();
+        w.WriteString("field", snippet.Field);
+        w.WriteString("text", snippet.Text);
+        w.WritePropertyName("ranges");
+        w.WriteStartArray();
+        foreach (var range in snippet.Ranges)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("start", range.Start);
+            w.WriteNumber("end", range.End);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteBoolean("truncated", snippet.Truncated);
+        w.WriteEndObject();
+    }
+
+    /// <summary>单条命中的 <c>explain</c>（D.3.1）。</summary>
+    public static void WriteExplain(Utf8JsonWriter w, SearchExplanation explanation)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("version", explanation.Version);
+        w.WriteString("kind", explanation.Kind);
+        w.WriteString("field", explanation.Field);
+        w.WriteString("fieldId", explanation.FieldId);
+        // S2 诊断：排序用的保守字段之外的逐列探测结果（S3 与 field 合并）。
+        w.WriteString("resolvedField", explanation.ResolvedField);
+        w.WriteString("resolvedFieldId", explanation.ResolvedFieldId);
+        // T4.2：歌词命中的层 / 置信度（additive；非歌词命中 layer 为空串、confidence=none）。
+        w.WriteString("layer", explanation.Layer);
+        w.WriteString("confidence", explanation.Confidence);
+        w.WriteNumber("matched", explanation.Matched);
+        w.WriteNumber("total", explanation.Total);
+        w.WriteNumber("coverage", explanation.Coverage);
+        w.WriteString("exact", explanation.Exact);
+        w.WriteNumber("proximity", explanation.Proximity);
+        w.WriteBoolean("positioned", explanation.Positioned);
+        w.WritePropertyName("bucket");
+        w.WriteStartArray();
+        foreach (var value in explanation.Bucket) w.WriteNumberValue(value);
+        w.WriteEndArray();
+        w.WriteNumber("bm25", explanation.Bm25);
+        w.WritePropertyName("lexicalSources");
+        w.WriteStartArray();
+        foreach (var source in explanation.LexicalSources)
+        {
+            w.WriteStartObject();
+            w.WriteString("step", source.Step);
+            w.WriteString("kind", source.Kind);
+            w.WriteString("field", source.Field);
+            w.WriteNumber("matched", source.Matched);
+            w.WriteBoolean("positioned", source.Positioned);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteEndObject();
+    }
+
+    /// <summary>执行轨迹（D.3.3；S2 只输出 steps / skipped）。</summary>
+    public static void WriteTrace(Utf8JsonWriter w, SearchTrace trace)
+    {
+        w.WriteStartObject();
+        w.WritePropertyName("steps");
+        w.WriteStartArray();
+        foreach (var step in trace.Steps)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("i", step.I);
+            w.WriteString("step", step.Step);
+            w.WriteString("kind", step.Kind);
+            w.WriteString("fieldId", step.FieldId);
+            w.WriteString("op", step.Op);
+            w.WriteNumber("returned", step.Returned);
+            w.WriteString("state", step.State);
+            if (step.Reason is not null) w.WriteString("reason", step.Reason);
+            w.WriteNumber("ms", Math.Round(step.Ms, 3));
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WritePropertyName("skipped");
+        w.WriteStartArray();
+        foreach (var skip in trace.Skipped)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("i", skip.I);
+            w.WriteString("reason", skip.Reason);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        // T4.2（additive）：被层置信度过滤的步骤。旧字段 steps / skipped 语义不变。
+        w.WritePropertyName("confidence");
+        w.WriteStartArray();
+        foreach (var filtered in trace.Confidence)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("i", filtered.I);
+            w.WriteString("policy", filtered.Policy);
+            w.WritePropertyName("layers");
+            w.WriteStartArray();
+            foreach (var layer in filtered.Layers) w.WriteStringValue(layer);
+            w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WritePropertyName("truncated");
+        w.WriteStartArray();
+        w.WriteEndArray();
+        w.WriteBoolean("deadlineHit", trace.DeadlineHit);
+        w.WriteEndObject();
+    }
 
     /// <summary>错误响应（D.4）：失败也是 JSON（不是 NULL），方便调用方记日志。</summary>
     public static string Error(SearchApiError error) => Write(w =>
@@ -583,8 +958,15 @@ internal static class SearchApiJson
         w.WriteEndObject();
     });
 
-    /// <summary>健康检查（就绪）：不泄露绝对路径，只给调用方需要的版本与世代。</summary>
-    public static string HealthReady(StoreMeta meta) => Write(w =>
+    /// <summary>
+    /// 健康检查（就绪）：不泄露绝对路径，只给调用方需要的版本与世代。
+    /// T4.2 追加 <c>lyricsConfidence</c> 计数（高 / 中 / 低 / 无；按曲目取最高层置信度）。
+    /// T4.3 追加 <c>dataPack</c>（数据包 id / 文件状态 / 降级能力）与顶层 <c>missing</c>
+    /// （数据包降级导致的能力缺失，§5.5.6：不能静默少召回）。
+    /// </summary>
+    public static string HealthReady(
+        StoreMeta meta, EraStore.LayerConfidenceCounts? confidence = null,
+        DataPackHealth? dataPack = null) => Write(w =>
     {
         w.WriteStartObject();
         w.WriteNumber("api", SearchApiRequest.ApiVersion);
@@ -592,15 +974,53 @@ internal static class SearchApiJson
         w.WriteNumber("gen", meta.AppliedGeneration);
         w.WriteNumber("schemaVersion", meta.SchemaVersion);
         w.WriteNumber("analyzerVersion", meta.AnalyzerVersion);
+        // 构建选项（只加不删；旧调用方忽略未知键）：T3.4 V4 开关随之可见。
+        w.WriteBoolean("initialsLyrics", meta.InitialsLyrics);
+        w.WritePropertyName("lyricsConfidence");
+        w.WriteStartObject();
+        w.WriteNumber("high", confidence?.High ?? 0);
+        w.WriteNumber("medium", confidence?.Medium ?? 0);
+        w.WriteNumber("low", confidence?.Low ?? 0);
+        w.WriteNumber("none", confidence?.None ?? 0);
+        w.WriteEndObject();
+        if (dataPack is not null) WriteDataPack(w, dataPack);
         w.WriteEndObject();
     });
 
+    /// <summary>数据包诊断块（additive；键名固定，Dart 侧按 <c>dataPack.id</c> 比对）。</summary>
+    private static void WriteDataPack(Utf8JsonWriter w, DataPackHealth dataPack)
+    {
+        w.WritePropertyName("dataPack");
+        w.WriteStartObject();
+        w.WriteString("id", dataPack.Id);
+        w.WriteString("storedId", dataPack.StoredId);
+        w.WriteBoolean("match", dataPack.Match);
+        w.WriteBoolean("present", dataPack.Present);
+        w.WriteBoolean("foundationOk", dataPack.FoundationOk);
+        w.WriteStartArray("missing");
+        foreach (var name in dataPack.Missing) w.WriteStringValue(name);
+        w.WriteEndArray();
+        w.WriteStartArray("corrupt");
+        foreach (var name in dataPack.Corrupt) w.WriteStringValue(name);
+        w.WriteEndArray();
+        w.WriteStartArray("degradedCapabilities");
+        foreach (var capability in dataPack.Degraded) w.WriteStringValue(capability);
+        w.WriteEndArray();
+        w.WriteEndObject();
+
+        // 与 explain 的 `missing` 同名：设置页 / 健康页不用再理解「文件 → 能力」的映射。
+        w.WriteStartArray("missing");
+        foreach (var capability in dataPack.Degraded) w.WriteStringValue(capability);
+        w.WriteEndArray();
+    }
+
     /// <summary>健康检查（未就绪 / 版本不符）：保持 <c>api</c> + <c>ready</c> 的最小同构形状。</summary>
-    public static string HealthNotReady() => Write(w =>
+    public static string HealthNotReady(DataPackHealth? dataPack = null) => Write(w =>
     {
         w.WriteStartObject();
         w.WriteNumber("api", SearchApiRequest.ApiVersion);
         w.WriteBoolean("ready", false);
+        if (dataPack is not null) WriteDataPack(w, dataPack);
         w.WriteEndObject();
     });
 }

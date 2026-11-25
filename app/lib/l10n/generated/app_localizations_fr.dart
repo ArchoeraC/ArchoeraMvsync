@@ -4750,6 +4750,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Générer automatiquement le romaji des paroles japonaises sans translittération pour les retrouver en romaji (taille de l\'index environ doublée)';
 
   @override
+  String get settingsSearchIndexInitials => 'Indexer les initiales des paroles';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      'Permet aussi de rechercher les paroles par initiales pinyin (ex. wanzg) ; désactivez pour réduire l\'index (la modification impose une reconstruction)';
+
+  @override
   String get settingsSearchIndexNote =>
       'L\'index est une donnée dérivée : désactivé par défaut et gratuit ; son activation consomme du temps et du disque en arrière-plan (quelques centaines de Mo pour 10 000 titres) ; en cas d\'échec, retour automatique à la recherche de base.';
 

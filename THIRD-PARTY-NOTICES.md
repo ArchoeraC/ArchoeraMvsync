@@ -65,11 +65,17 @@ MPL-1.1 / 公有领域）。
 | indexer（C#） | `SQLitePCLRaw.lib.e_sqlite3` 3.53.3 | **Apache-2.0** | 原生 SQLite（含 FTS5，公有领域），随 FFI 分发 |
 | scraper（C++） | Rust 后端（加密：`aes` / `md-5` / `sha1` / `num-bigint` / `getrandom`；HTTP：`reqwest` / `rustls` / `aws-lc-rs` 等） | MIT OR Apache-2.0（TLS 部分含 ISC） | 替代系统 OpenSSL 与 libcurl；staticlib **静态合并**进 `libarchoera_scraper`，逐项见 `app/core/scraper-crypto/THIRD-PARTY-LICENSES.md` |
 
-> 本地曲库搜索索引器另内嵌由 Unicode 数据离线生成的查询表（`data/nfkc.tsv`、
-> `data/def_en2hanzi.tsv`、`data/def_hanzi2en.tsv`、`data/ja_readings.tsv`，派生自
-> **Unihan `kDefinition` / `kJapanese`** 等；`data/kana_romaji.tsv` 为自研表），
-> 受 [Unicode License](https://www.unicode.org/license.txt) 约束——详见
-> `app/core/indexer/THIRD-PARTY-LICENSES.md`。
+> 本地曲库搜索索引器另内嵌一组离线查询表：
+>
+> - `data/nfkc.tsv` / `data/accent_fold.tsv` / `data/variant_fold.tsv` /
+>   `data/ja_readings.tsv` / `data/def_en2hanzi.tsv` / `data/def_hanzi2en.tsv`
+>   派生自 **Unicode Unihan `kDefinition` / `kJapanese` / `kSimplifiedVariant`** 等，
+>   受 [Unicode License](https://www.unicode.org/license.txt) 约束；
+> - `data/kana_romaji.tsv` 为本项目自研表，随仓库按 **AGPL-3.0-or-later** 分发；
+> - `data/lexicon_cross.tsv` 为本项目自建策展专名词表（seed），按 **CC0-1.0** 释出。
+>
+> 逐项来源与许可证见 `app/core/indexer/THIRD-PARTY-LICENSES.md`；数据包
+> `manifest.json` 为每个文件记录 `license` 字段。
 
 ## 字体 / 图标许可
 

@@ -187,10 +187,18 @@ internal static class EraStoreDictTests
             if (!reader.Rev(i).SequenceEqual(docs[i].Rev)) { ok = false; detail.Append($"rev{i};"); }
             if (reader.ScriptBits(i) != docs[i].ScriptBits) { ok = false; detail.Append($"script{i};"); }
             if (reader.Flags(i) != docs[i].Flags) { ok = false; detail.Append($"flags{i};"); }
+            if (reader.LayerConf(i) != docs[i].LayerConf) { ok = false; detail.Append($"layerconf{i};"); }
             if (reader.Title(i) != docs[i].Title) { ok = false; detail.Append($"title{i};"); }
             if (reader.Artist(i) != docs[i].Artist) { ok = false; detail.Append($"artist{i};"); }
             if (reader.Album(i) != docs[i].Album) { ok = false; detail.Append($"album{i};"); }
+            var norm = reader.NormSpans(i);
+            if (Encoding.UTF8.GetString(norm.Title) != docs[i].TitleNorm) { ok = false; detail.Append($"tnorm{i};"); }
+            if (Encoding.UTF8.GetString(norm.Artist) != docs[i].ArtistNorm) { ok = false; detail.Append($"anorm{i};"); }
+            if (Encoding.UTF8.GetString(norm.Album) != docs[i].AlbumNorm) { ok = false; detail.Append($"lnorm{i};"); }
             if (reader.DocLen(i, FieldId.Title) != docs[i].DocLen[0]) { ok = false; detail.Append($"len{i};"); }
+            if (reader.Mtime(i) != docs[i].Mtime) { ok = false; detail.Append($"mtime{i};"); }
+            if (reader.LrcMtime(i) != docs[i].LrcMtime) { ok = false; detail.Append($"lrcm{i};"); }
+            if (reader.LrcSize(i) != docs[i].LrcSize) { ok = false; detail.Append($"lrcs{i};"); }
         }
         Program.Check("DocStore: 全列往返", ok, detail.ToString());
     }
@@ -202,11 +210,15 @@ internal static class EraStoreDictTests
         var count = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(body);
         var version = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(body.AsSpan(4));
         var cols = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(body.AsSpan(6));
-        Program.Check("DocStore 布局: 头字段", count == 1 && version == 1 && cols == 3,
+        Program.Check("DocStore 布局: 头字段",
+            count == 1 && version == DocStoreWriter.Version && cols == DocStoreWriter.TextColumns,
             $"{count}/{version}/{cols}");
+        Program.Check("DocStore 布局: 版本 v4 / 六列",
+            DocStoreWriter.Version == 4 && DocStoreWriter.TextColumns == 6,
+            $"{DocStoreWriter.Version}/{DocStoreWriter.TextColumns}");
 
-        // 头(8) + track(16) + rev(16) + script(2) + flags(1) + doclen(24) = 67。
-        var titleOffsAt = 67;
+        // 头(8) + track(16) + rev(16) + script(2) + flags(1) + layer_conf(1) + state(24) + doclen(24) = 92。
+        var titleOffsAt = 8 + 16 + 16 + 2 + 1 + 1 + 24 + 24;
         var first = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(titleOffsAt));
         var second = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(titleOffsAt + 4));
         Program.Check("DocStore 布局: title 偏移表", first == 0 && second == 6,
@@ -228,9 +240,16 @@ internal static class EraStoreDictTests
             Rev = rev,
             ScriptBits = (ushort)(seed << 4),
             Flags = (byte)(seed & 0x03),
+            LayerConf = (byte)(seed & 0x3F),
             Title = title,
             Artist = artist,
             Album = album,
+            TitleNorm = Analyzer.NormalizeMetadata(title),
+            ArtistNorm = Analyzer.NormalizeMetadata(artist),
+            AlbumNorm = Analyzer.NormalizeMetadata(album),
+            Mtime = 1_700_000_000_000 + seed,
+            LrcMtime = 1_700_000_100_000 + seed,
+            LrcSize = 4_096 + seed,
         };
         doc.DocLen[0] = (ushort)Encoding.UTF8.GetByteCount(title);
         doc.DocLen[1] = (ushort)Encoding.UTF8.GetByteCount(artist);

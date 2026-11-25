@@ -33,17 +33,32 @@ public static class Program
         Console.WriteLine($"vectors: {vectorsDir}");
 
         RunDirectAssertions();
+        DataPackTests.Run();
         EndToEnd.Run();
         SearchLayerTests.Run();
         SearchPlanTests.Run();
         PlanVectorTests.Run();
+        SearchRankerTests.Run();
+        SearchExactnessTests.Run();
+        SchemeRegistryTests.Run();
+        SearchExplainTests.Run();
+        SearchKindProximityTests.Run();
+        SearchSnippetTests.Run();
+        SearchHighlightTests.Run();
+        SearchPagingTests.Run();
+        SearchFallbackTests.Run();
         SearchApiTests.Run();
+        SearchConcurrencyTests.Run();
         NegativeBaselineTests.Run();
         ReplaySampleTests.Run();
         ReplayCompareTests.Run();
         LyricsStatsTests.Run();
+        LyricsPreprocessTests.Run();
+        LexiconCrossTests.Run();
+        LayerConfidenceTests.Run();
         EraStoreFormatTests.Run();
         EraStoreDictTests.Run();
+        EraStoreDocNormTests.Run();
         EraStorePostingsTests.Run();
         EraStoreIteratorsTests.Run();
         EraStorePhraseTests.Run();
@@ -51,8 +66,13 @@ public static class Program
         EraStoreBuilderTests.Run();
         EraStoreCliTests.Run();
         EraStoreMergeTests.Run();
+        EraStoreIncrementalTests.Run();
+        EraStoreBuildCompactionTests.Run();
+        EraStoreDefragTests.Run();
         EraStoreDifferentialTests.Run();
         EraStoreQueryCoverageTests.Run();
+        EraStoreQueryEngineTests.Run();
+        EraStoreBitsetEquivalenceTests.Run();
         EraStoreNoPositionTests.Run();
         EraStoreFuzzTests.Run();
 
@@ -74,7 +94,7 @@ public static class Program
 
     private static void RunDirectAssertions()
     {
-        Assert("AnalyzerVersion == 13", Analyzer.AnalyzerVersion == 13,
+        Assert("AnalyzerVersion == 15", Analyzer.AnalyzerVersion == 15,
             Analyzer.AnalyzerVersion.ToString());
 
         // 假名 / 谚文：子串分词（bigram+unigram），**不进拼音 / 首字母列**。
@@ -177,6 +197,58 @@ public static class Program
         Assert("v13 查询侧多字计数", Analyzer.AnalyzeQuery("我爱你").VisibleCharCount == 3
             && Analyzer.AnalyzeQuery("我爱你").CjkCharCount == 3,
             $"{Analyzer.AnalyzeQuery("我爱你").VisibleCharCount}/{Analyzer.AnalyzeQuery("我爱你").CjkCharCount}");
+
+        // ---- analyzer v14：字面歌词层不产 unigram（T3.7）；派生列仍由完整文本生成 ----
+        var lyricLiteral = Analyzer.Analyze("我爱你", includeUnigrams: false);
+        Assert("v14 字面歌词层只留 bigram", lyricLiteral.Tokens == "我爱 爱你", lyricLiteral.Tokens);
+        Assert("v14 字面歌词层拼音不受影响", lyricLiteral.Pinyin == "wo ai ni", lyricLiteral.Pinyin);
+        Assert("v14 字面歌词层首字母不受影响", lyricLiteral.PinyinInitials == "wan",
+            lyricLiteral.PinyinInitials);
+        Assert("v14 元数据层默认仍留首尾 unigram",
+            Analyzer.Analyze("我爱你").Tokens == "我爱 爱你 我 你", Analyzer.Analyze("我爱你").Tokens);
+        var literalKana = Analyzer.Analyze("きゅうくらりん", includeUnigrams: false);
+        Assert("v14 字面歌词假名层只留 bigram",
+            literalKana.Tokens == "きゅ ゅう うく くら らり りん", literalKana.Tokens);
+        Assert("v14 字面歌词读音仍由全文生成", literalKana.Readings.Contains("ky"),
+            literalKana.Readings);
+        Assert("v14 单字字面歌词层无词元（查询侧单字不扫歌词列）",
+            Analyzer.Analyze("爱", includeUnigrams: false).Tokens.Length == 0,
+            Analyzer.Analyze("爱", includeUnigrams: false).Tokens);
+
+        // ---- analyzer v15：首字母列改 bigram（T3.9）；拉丁 / 数字不进首字母列 ----
+        Assert("v15 bigram: wanzg → wa an nz zg",
+            Analyzer.InitialsToBigrams("wanzg") == "wa an nz zg",
+            Analyzer.InitialsToBigrams("wanzg"));
+        Assert("v15 bigram: 2 字母 → 单个 bigram",
+            Analyzer.InitialsToBigrams("wa") == "wa", Analyzer.InitialsToBigrams("wa"));
+        Assert("v15 bigram: 单字母无 bigram",
+            Analyzer.InitialsToBigrams("w").Length == 0, Analyzer.InitialsToBigrams("w"));
+        var initialsMeta = Analyzer.Analyze("我爱你");
+        Assert("v15 索引首字母 bigram 列", initialsMeta.InitialsBigrams == "wa an",
+            initialsMeta.InitialsBigrams);
+        Assert("v15 人类可读首字母串不变", initialsMeta.PinyinInitials == "wan",
+            initialsMeta.PinyinInitials);
+        // 同一字段内的多个 CJK 段：bigram 组之间插边界词元，避免跨段拼短语。
+        Assert("v15 段边界词元", Analyzer.Analyze("你好，世界").InitialsBigrams == "nh # sj",
+            Analyzer.Analyze("你好，世界").InitialsBigrams);
+        Assert("v15 字面歌词层首字母 bigram 不受 unigram 开关影响",
+            Analyzer.Analyze("我爱你", includeUnigrams: false).InitialsBigrams == "wa an",
+            Analyzer.Analyze("我爱你", includeUnigrams: false).InitialsBigrams);
+        // 拉丁 / 数字段不再进首字母列（设计文档 §4.2），但词法 / 拼音列照旧。
+        var latinOnly = Analyzer.Analyze("Hello World");
+        Assert("v15 纯拉丁首字母列为空", latinOnly.PinyinInitials.Length == 0
+            && latinOnly.InitialsBigrams.Length == 0,
+            $"[{latinOnly.PinyinInitials}]/[{latinOnly.InitialsBigrams}]");
+        var mixed = Analyzer.Analyze("周杰伦Jay2010");
+        Assert("v15 混合源首字母只含 CJK bigram",
+            mixed.PinyinInitials == "zjl" && mixed.InitialsBigrams == "zj jl",
+            $"[{mixed.PinyinInitials}]/[{mixed.InitialsBigrams}]");
+        Assert("v15 拉丁 / 数字词仍进词法与拼音列",
+            mixed.Tokens.Contains("jay") && mixed.Pinyin.Contains("jay"),
+            $"{mixed.Tokens} / {mixed.Pinyin}");
+        // 查询侧首字母仍是人类可读串（高亮 / explain 依赖它），bigram 只在编译分支内生成。
+        Assert("v15 查询侧首字母保持可读串", Analyzer.AnalyzeQuery("你中").PinyinInitials == "nz",
+            Analyzer.AnalyzeQuery("你中").PinyinInitials);
 
         // P4 查询侧连写全拼切分（设计文档 §4.2）：woaini → wo ai ni
         Assert("AnalyzeQuery 连写 woaini", Pinyin(Analyzer.AnalyzeQuery("woaini")) == "wo ai ni",

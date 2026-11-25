@@ -17,10 +17,19 @@ namespace Archoera.Indexer;
 /// </summary>
 internal static class SearchPlanCompiler
 {
-    /// <summary>按 v7 顺序编译计划：lexical → drops → pinyinLoose → reading → crossLingual → fuzzy → cjkFuzzy。</summary>
+    /// <summary>兼容重载：用默认方案的 matchers + 指定策略（S1 测试与诊断仍可用）。</summary>
     public static QueryPlan Compile(
         SearchRequest request, QueryTokens tokens, StoreMeta meta, SearchPolicy policy)
+        => Compile(request, tokens, meta, SchemeRegistry.Default with { Policy = policy });
+
+    /// <summary>
+    /// 按方案生成计划（S2 / T2.4）：matchers 决定生成哪些步骤，顺序仍是
+    /// lexical → drops → pinyinLoose → reading → crossLingual → fuzzy → cjkFuzzy。
+    /// </summary>
+    public static QueryPlan Compile(
+        SearchRequest request, QueryTokens tokens, StoreMeta meta, SearchScheme scheme)
     {
+        var policy = scheme.Policy;
         var terms = new List<QueryTerm>(tokens.Lexical.Count);
         foreach (var token in tokens.Lexical)
         {
@@ -46,16 +55,19 @@ internal static class SearchPlanCompiler
                 Array.Empty<Step>(),
                 Array.Empty<int>(),
                 request.MinExact,
-                SearchPolicy.SchemeId,
+                scheme.Id,
                 Array.Empty<string>(),
                 policy);
         }
 
         // 1) 主趟：精确表达式（词法 / 拼音 / 首字母）。expression 为 null 也保留 step：
         //    旧代码 Merge(null) 之后仍会继续跑兜底，step 存在才不改变后续门的判定顺序。
+        //    kind 由表达式形状决定（T2.5）：单字面 Exact / 短语 Phrase / 前缀 Prefix /
+        //    散落 AND Partial / 纯拼音 Pinyin* / 首字母串 Initials。
+        var shape = SearchQuery.ShapeOf(tokens);
         steps.Add(new Step(
             "lexical@1",
-            MatchKind.Exact,
+            KindOf(shape.Kind),
             family,
             MatchOp.And,
             tokens.Lexical.ToArray(),
@@ -63,18 +75,36 @@ internal static class SearchPlanCompiler
             policy.LiteralCap,
             SearchPassNames.Lexical,
             StepGate.None,
-            WrapLyrics(SearchQuery.CompileMatch(tokens, request.Metadata), request.Lyrics)));
+            WrapLyrics(SearchQuery.CompileMatch(
+                tokens, request.Metadata, lyricsInitials: meta.InitialsLyrics), request.Lyrics)));
+
+        // 1.5) 计划期收缩（RP §3.5.7 / N15）：查询可见码点数 ≥ 策略上限时只保留字面主趟。
+        //      不生成丢词 / 拼音 / 读音 / 跨语言 / 容错 step——这些 step 的候选数随查询长度
+        //      组合增长（变体枚举 / 丢词子集），粘贴整段歌词会让编译与召回同时失控。
+        //      只裁剪「生成哪些趟」，不改写查询文本（请求层另有 200 码点截断）。
+        if (tokens.VisibleCharCount >= policy.MaxPlanQueryCodePoints)
+        {
+            return new QueryPlan(
+                terms,
+                steps,
+                Array.Empty<int>(),
+                request.MinExact,
+                scheme.Id,
+                Array.Empty<string>(),
+                policy);
+        }
 
         // 2) 丢词降级：候选集含「编译为 null」的丢法（仍参与字段亲和度重排），
         //    但只有非空表达式才生成可执行 step（旧代码对 null 直接 continue）。
         var dropCandidates = new List<int>();
-        if (policy.AllowDropTokens)
+        if (policy.AllowDropTokens && scheme.Allows(SchemeMatchers.Drop))
         {
             dropCandidates = SearchQuery.DropTokenCandidates(tokens, request.Query);
             foreach (var dropIndex in dropCandidates)
             {
                 var expression = SearchQuery.CompileDropTokens(
-                    tokens, request.Query, request.Metadata, dropIndex);
+                    tokens, request.Query, request.Metadata, dropIndex,
+                    meta.InitialsLyrics);
                 if (expression is null) continue;
                 expression = WrapLyrics(expression, request.Lyrics);
 
@@ -97,13 +127,14 @@ internal static class SearchPlanCompiler
         }
 
         // 3) 拼音宽松兜底（音节位置无关 AND + 模糊音扩展）。
-        var pinyinLoose = WrapLyrics(
-            SearchQuery.CompilePinyinLoose(tokens, request.Metadata), request.Lyrics);
+        var pinyinLoose = scheme.Allows(SchemeMatchers.PhoneticMeta)
+            ? WrapLyrics(SearchQuery.CompilePinyinLoose(tokens, request.Metadata), request.Lyrics)
+            : null;
         if (pinyinLoose is not null)
         {
             steps.Add(new Step(
                 "pinyin-loose@1",
-                MatchKind.PinyinExact,
+                KindOf(SearchQuery.PinyinKindOf(tokens)),
                 FieldFamily.Pinyin,
                 MatchOp.And,
                 tokens.Pinyin.ToArray(),
@@ -114,8 +145,8 @@ internal static class SearchPlanCompiler
                 pinyinLoose));
         }
 
-        // 4) 读音趟：只在库画像含日 / 韩时生成（旧代码同条件）。
-        if (meta.HasJapanese || meta.HasKorean)
+        // 4) 读音趟：只在库画像含日 / 韩、且方案允许读音时生成（旧代码同画像条件）。
+        if (scheme.Allows(SchemeMatchers.Reading) && (meta.HasJapanese || meta.HasKorean))
         {
             var reading = WrapLyrics(
                 SearchQuery.CompileReading(tokens, request.Metadata), request.Lyrics);
@@ -139,7 +170,9 @@ internal static class SearchPlanCompiler
         // 5) 跨语言趟：先按库画像裁剪（同 FilterCrossLingual），再编译候选 OR。
         //    这里会原地替换 tokens.CrossLingual（与旧代码一致）；后续步骤都不读该字段，
         //   executor 每次查询都持有新的 AnalyzeQuery 结果，副作用安全。
-        var crossCandidates = FilterCrossLingual(tokens.CrossLingual, meta);
+        var crossCandidates = scheme.Allows(SchemeMatchers.CrossLingual)
+            ? FilterCrossLingual(tokens.CrossLingual, meta)
+            : new List<string>();
         if (crossCandidates.Count > 0)
         {
             tokens.CrossLingual.Clear();
@@ -163,7 +196,8 @@ internal static class SearchPlanCompiler
         }
 
         // 6) 模糊趟：不在此加载词表（纯函数）；表达式由执行器延迟解析。
-        if (request.Fuzzy && SearchQuery.HasFuzzyEligible(tokens))
+        var typoAllowed = scheme.Allows(SchemeMatchers.Typo1);
+        if (typoAllowed && request.Fuzzy && SearchQuery.HasFuzzyEligible(tokens))
         {
             steps.Add(new Step(
                 "fuzzy@1",
@@ -179,8 +213,28 @@ internal static class SearchPlanCompiler
                 NeedsFuzzyVocabulary: true));
         }
 
-        // 7) 中文容错趟：仅 fuzzy=true 时生成（旧代码 !Fuzzy 已提前 return）。
-        if (request.Fuzzy)
+        // 6.5) typo2（仅 recall@1）：Damerau ≤2、首字符不变、词长 ≥7，必须靠索引词表枚举。
+        //      门只要求 fuzzy=true，不参与 MinExact 短路——recall@1 的语义是「我确定库里有」。
+        if (scheme.Allows(SchemeMatchers.Typo2) && request.Fuzzy
+            && SearchQuery.HasTypo2Eligible(tokens))
+        {
+            steps.Add(new Step(
+                "typo2@1",
+                MatchKind.Typo,
+                FieldFamily.Fuzzy,
+                MatchOp.Or,
+                tokens.Lexical.ToArray(),
+                tokens.Lexical.Count,
+                policy.TypoCap,
+                SearchPassNames.Typo2,
+                new StepGate(RequiresFuzzy: true),
+                Expression: null,
+                NeedsFuzzyVocabulary: true,
+                Typo2: true));
+        }
+
+        // 7) 中文容错趟：仅 fuzzy=true 且方案允许 typo1 时生成（旧代码 !Fuzzy 已提前 return）。
+        if (typoAllowed && request.Fuzzy)
         {
             var variants = SearchQuery.CjkVariants(request.Query);
             if (variants.Count > 0)
@@ -189,7 +243,8 @@ internal static class SearchPlanCompiler
                 foreach (var variant in variants)
                 {
                     var expression = SearchQuery.CompileMatch(
-                        Analyzer.AnalyzeQuery(variant), metadata: false);
+                        Analyzer.AnalyzeQuery(variant), metadata: false,
+                        lyricsInitials: meta.InitialsLyrics);
                     if (expression is not null) parts.Add(expression);
                 }
 
@@ -222,7 +277,7 @@ internal static class SearchPlanCompiler
             steps,
             dropCandidates,
             request.MinExact,
-            SearchPolicy.SchemeId,
+            scheme.Id,
             Array.Empty<string>(),
             policy);
     }
@@ -259,17 +314,41 @@ internal static class SearchPlanCompiler
     /// 词表加载失败时返回空列表，<see cref="SearchQuery.CompileFuzzy"/> 会自动退回变体枚举。
     /// </summary>
     public static string? ResolveDeferredExpression(
-        Step step, QueryTokens tokens, bool metadata, bool lyrics,
+        Step step, QueryTokens tokens, bool metadata, bool lyrics, bool lyricsInitials,
         Func<IReadOnlyList<string>?> loadVocabulary)
     {
         if (step.NeedsFuzzyVocabulary)
-            return WrapLyrics(SearchQuery.CompileFuzzy(tokens, metadata, loadVocabulary()), lyrics);
+        {
+            var vocabulary = loadVocabulary();
+            return WrapLyrics(
+                step.Typo2
+                    ? SearchQuery.CompileTypo2(tokens, metadata, vocabulary)
+                    : SearchQuery.CompileFuzzy(tokens, metadata, vocabulary, lyricsInitials: lyricsInitials),
+                lyrics);
+        }
         return step.Expression;
     }
 
     /* ------------------------------------------------------------------ */
     /* 辅助                                                                */
     /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// 形状枚举 → 计划 kind 枚举（T2.5 一一对应）。形状本身由
+    /// <see cref="SearchQuery.ShapeOf"/> / <see cref="SearchQuery.PinyinKindOf"/> 判定，
+    /// 编译器只做枚举映射——**不再二次解析表达式字符串**。
+    /// </summary>
+    internal static MatchKind KindOf(QueryShapeKind kind) => kind switch
+    {
+        QueryShapeKind.Exact => MatchKind.Exact,
+        QueryShapeKind.Phrase => MatchKind.Phrase,
+        QueryShapeKind.Prefix => MatchKind.Prefix,
+        QueryShapeKind.Partial => MatchKind.Partial,
+        QueryShapeKind.PinyinExact => MatchKind.PinyinExact,
+        QueryShapeKind.PinyinPhrase => MatchKind.PinyinPhrase,
+        QueryShapeKind.Initials => MatchKind.Initials,
+        _ => MatchKind.Exact,
+    };
 
     /// <summary>
     /// 把表达式收紧到歌词字段族（<c>scope=lyrics</c>）：外层 <c>{cols} : (expr)</c> 与

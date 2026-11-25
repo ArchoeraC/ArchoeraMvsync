@@ -1,0 +1,23 @@
+# 方案向量（S2 / T2.4）：每条用例把同一个查询在 4 个内置方案下编译，
+# 断言 minimal ⊆ fast ⊆ default ⊆ recall，且 fast / minimal 只生成 lexical。
+# profile = cjk | cjk+ja | cjk+ko | latin | empty；pinyin / lrc 缺省为 true。
+{"id":"S0001","query":"晴天","scope":"all","profile":"cjk"}
+{"id":"S0002","query":"周杰伦","scope":"all","profile":"cjk"}
+{"id":"S0003","query":"我爱你","scope":"all","profile":"cjk"}
+{"id":"S0004","query":"爱","scope":"all","profile":"cjk"}
+{"id":"S0005","query":"爱","scope":"metadata","profile":"cjk"}
+{"id":"S0006","query":"晴天","scope":"lyrics","profile":"cjk"}
+{"id":"S0007","query":"qing tian","scope":"all","profile":"latin"}
+{"id":"S0008","query":"love","scope":"all","profile":"latin"}
+{"id":"S0009","query":"夜に駆ける","scope":"all","profile":"cjk+ja"}
+{"id":"S0010","query":"아이유","scope":"all","profile":"cjk+ko"}
+{"id":"S0011","query":"周杰伦 晴天","scope":"all","profile":"cjk"}
+{"id":"S0012","query":"album","scope":"metadata","profile":"latin"}
+{"id":"S0013","query":"稻香","scope":"all","fuzzy":false,"profile":"cjk"}
+{"id":"S0014","query":"qintian","scope":"all","profile":"latin"}
+{"id":"S0015","query":"青花瓷","scope":"all","profile":"cjk+ja"}
+{"id":"S0016","query":"木漏れ日","scope":"all","profile":"cjk+ja"}
+{"id":"S0017","query":"밤편지","scope":"all","profile":"cjk+ko"}
+{"id":"S0018","query":"hello world","scope":"all","profile":"latin"}
+{"id":"S0019","query":"a","scope":"all","profile":"latin"}
+{"id":"S0020","query":"菊花台","scope":"all","profile":"cjk","lrc":false}

@@ -13,13 +13,12 @@ namespace Archoera.Indexer;
 /// <c>tests/SearchPlanTests.cs</c> 的默认值快照）。</para>
 ///
 /// <para><b>Cap 只做计划诊断</b>：<see cref="LiteralCap"/> 等是计划期预算 / 诊断字段，
-/// v7 执行器**不用它们裁剪候选**——<see cref="FtsStore.Search"/> 的 <c>candidateCap</c>
-/// 仍由请求参数决定，语义未变。</para>
+/// EraStore 执行器**不用它们裁剪候选**——候选上限仍由请求参数决定，语义未变。</para>
 /// </summary>
 internal sealed record SearchPolicy
 {
-    /// <summary>方案 id（计划诊断 / 将来的缓存键维度）。</summary>
-    public const string SchemeId = "s1-compat@1";
+    /// <summary>默认方案 id（S2 / T2.4 起为 <see cref="SchemeIds.Default"/>；S1 的过渡名已退役）。</summary>
+    public const string SchemeId = SchemeIds.Default;
 
     /// <summary>默认结果条数；对应 <see cref="SearchRequest.Limit"/> 的默认值 <c>200</c>。</summary>
     public int DefaultLimit { get; init; } = 200;
@@ -61,6 +60,12 @@ internal sealed record SearchPolicy
     /// <summary>对应 <see cref="SearchQuery.MaxCjkQueryLength"/>。</summary>
     public int MaxCjkQueryLength { get; init; } = SearchQuery.MaxCjkQueryLength;
 
+    /// <summary>
+    /// 对应 <see cref="SearchQuery.MaxPlanQueryCodePoints"/>（计划期收缩门槛）：
+    /// 查询可见码点数 ≥ 该值时只生成字面主趟（RP §3.5.7 / N15）。
+    /// </summary>
+    public int MaxPlanQueryCodePoints { get; init; } = SearchQuery.MaxPlanQueryCodePoints;
+
     /// <summary>对应 <see cref="SearchQuery.MinCjkFuzzyLength"/>。</summary>
     public int MinCjkFuzzyLength { get; init; } = SearchQuery.MinCjkFuzzyLength;
 
@@ -84,9 +89,6 @@ internal sealed record SearchPolicy
 
     /// <summary>对应 <see cref="SearchQuery.MinPrefixTokenLength"/>。</summary>
     public int MinPrefixTokenLength { get; init; } = SearchQuery.MinPrefixTokenLength;
-
-    /// <summary>对应 <see cref="SearchQuery.MinInitialsPrefixLength"/>。</summary>
-    public int MinInitialsPrefixLength { get; init; } = SearchQuery.MinInitialsPrefixLength;
 
     /// <summary>对应 <see cref="SearchQuery.PairExactWithPrefix"/>。</summary>
     public bool PairExactWithPrefix { get; init; } = SearchQuery.PairExactWithPrefix;

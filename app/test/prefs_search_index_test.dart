@@ -14,6 +14,7 @@ void main() {
       expect(prefs.enableLocalSearchIndex, isFalse);
       expect(prefs.indexLrc, isFalse);
       expect(prefs.romajiLyrics, isFalse);
+      expect(prefs.initialsLyrics, isFalse, reason: '歌词首字母默认关（T3.4 V4）');
     });
 
     test('copyWithSearchIndex 读写总开关', () {
@@ -39,6 +40,20 @@ void main() {
       expect(same.romajiLyrics, isTrue, reason: '未传字段保持不变');
     });
 
+    test('copyWithSearchIndex 读写歌词首字母子开关', () {
+      final prefs = AppPrefs().copyWithSearchIndex(
+        enabled: true,
+        initialsLyrics: true,
+      );
+      expect(prefs.initialsLyrics, isTrue);
+      expect(prefs.romajiLyrics, isFalse, reason: '未传 romajiLyrics 时不受影响');
+      final same = prefs.copyWithSearchIndex();
+      expect(same.initialsLyrics, isTrue, reason: '未传字段保持不变');
+      final off = prefs.copyWithSearchIndex(initialsLyrics: false);
+      expect(off.initialsLyrics, isFalse);
+      expect(off.enableLocalSearchIndex, isTrue, reason: '其余字段保持不变');
+    });
+
     test('copyWithSearchIndex 往返：未传字段保持不变', () {
       final on = AppPrefs().copyWithSearchIndex(enabled: true, indexLrc: true);
       final same = on.copyWithSearchIndex();
@@ -55,6 +70,7 @@ void main() {
       expect(enableLocalSearchIndexKey, 'search.index.enabled');
       expect(indexLrcKey, 'search.index.lrc');
       expect(romajiLyricsKey, 'search.index.romaji_lyrics');
+      expect(initialsLyricsKey, 'search.index.initials_lyrics');
       final prefs = AppPrefs(initialData: {
         enableLocalSearchIndexKey: true,
         indexLrcKey: true,

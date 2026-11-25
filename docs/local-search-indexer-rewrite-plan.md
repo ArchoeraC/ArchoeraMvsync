@@ -1,6 +1,14 @@
-# 本地曲库索引器与搜索层重写方案（提案，未实施）
+# 本地曲库索引器与搜索层重写方案（S0–S4 已实施）
 
-> 状态：**方案文档；S2.7 EraStore 原型已落地，未接入发布路径**（v0.28）。本文只回答两个问题：
+> 状态（2026-11-25）：**S0–S4 全部落地**。生产索引只写 EraStore（`search.era/`），
+> v7 / FTS5 的存储与写入器已整体删除（T3.13b）；查询路径为
+> `SearchSession → EraQueryPlan`（bitset 召回 + 预计算 tf + 固定大小 top-k）；
+> T3.14 七项门禁 7/7 通过。逐轮实测、门禁与环境见
+> **`docs/local-search-indexer-t314-gate.md`**；剩余项（真机验证 / 产品决策 / 可选优化）
+> 见该文档「下一步」与本文件 §S4 进度表。
+>
+> 本文保留**设计动机与决策记录**；任何"现状"表述以带日期的「落地进度」段落与 gate 文档为准
+> （正文中 v7 / FTS5 的段落属于历史背景，不是当前实现）。本文只回答两个问题：
 > ① 现有索引 / 搜索逻辑为什么"不够好"（结构性原因，不是 bug 清单）；
 > ② 如果**直接重构**（不再对外移植），怎样组织成**可组合、可替换、可演进**的方案层，
 > 并把索引器 / 搜索逻辑**尽可能全部收进 .NET**。
@@ -273,7 +281,8 @@ int32_t  era_search_health(const char* index_dir, char** out_json);
 { "scheme": "default@1",     // 缺省用索引默认
   "cache_capacity": 128,     // 结果 LRU 条数
   "mmap_bytes": 268435456,   // 0 = 关闭 mmap
-  "log_level": "warn" }      // debug | info | warn | error
+  "log_level": "warn",       // debug | info | warn | error
+  "libraryDb": "/…/library.db" }  // 可选：查询期过滤已删除曲目（T2.9）
 ```
 
 未知字段忽略并记一条 warn（内部接口，不做严格 schema 拒绝）；`cache_capacity=0` 表示禁用结果缓存。
@@ -734,7 +743,7 @@ DocStore 是**列式**的，只服务三件事：精确度复核、结果字段�
 
 - **分层（tiered）**：段按 doc 数分桶（≤16k、≤64k、…）；同层 ≥4 段合并到下一层；
 - **段数上限 64**：超过强制合并，保证 Manifest 始终 ≤64KB、`open` 不被段列表拖慢；
-- **触发**：死行比例 ≥20% 或段数 ≥8；单次合并时间预算 2s；
+- **触发**：死行比例 ≥20% 或段数 ≥24（T3.14 实测校准）；单次合并时间预算 2s；
 - **合并只搬活 doc**：丢弃 tombstone；按 term 归并倒排，重算 `df` / `max_tf`；
 - **原子性**：合并写新段 → 新 Manifest → 提交槽；中途失败不回滚已提交的增量；
 - **写放大**：段大小每翻 4 倍合并一次，单 doc 生命周期内约 `log₄(N/16k)` 次重写（50k 曲≈1–2 次）；
@@ -1688,9 +1697,9 @@ for field in [title, artist, album]:
 
 成本：2k 候选 × 3 字段 ≈ 6k 次短字符串比较，< 1ms；不额外查库（DocStore 顺序块读）。
 
-> **阶段约束**：S2 还在 v7 存储上（没有 DocStore 原文），`ExactRank` / `Proximity` 只能记常量，
-> 排序实际只用到 kind / coverage / field / bm25 / docId；这两个键到 S3 才生效，
-> 届时必须**再跑一轮回放评审**，不要和桶序首秀混在同一次上线里。
+> **阶段约束（历史）**：S2 还在 v7 存储上（没有 DocStore 原文），`ExactRank` / `Proximity`
+> 只能记常量。**S3 已完成（2026-11-25）**：DocStore v4 归一列 + 位置最小窗口让这两个键真实生效，
+> 并已跑过 30k / 5k 回放评审（见 gate 文档 T3.11 两节）。
 
 #### 3.6.4 top-k、分页与 `totalCount`
 
@@ -1880,7 +1889,7 @@ IDLE ──start(COMPACT)─▶ COMPACTING ──commit────────�
 
 #### 3.8.2.3 压缩（COMPACTING）
 
-- 触发：死行比例 ≥20%、段数 ≥8、或后台空闲且距上次 ≥24h；
+- 触发：死行比例 ≥20%、段数 ≥24、或后台空闲且距上次 ≥24h；
 - 选段：同层最小的若干段，输入 ≤ `2×S`（约 160MB）；
 - 产出：**向同一世代文件追加**合并后的新段；新 Manifest 只列活段；
 - 旧段字节变成**垃圾**（单文件不可原地删除），由 `era-index stats` 报告；
@@ -1961,7 +1970,7 @@ IDLE ──start(COMPACT)─▶ COMPACTING ──commit────────�
 
 #### 3.8.4 合并与空间回收
 
-- 触发：死行比例 ≥20% **或** 段数 ≥8；
+- 触发：死行比例 ≥20% **或** 段数 ≥24（实测校准）；
 - 分层合并：小段并入相近大小的段，单次时间预算 2s；
 - **可中止、不可部分提交**：中途失败/取消则旧 Manifest 不变；重跑幂等，不续传；
 - 合并产物是**新段 + 新 Manifest**；旧段字节保留为垃圾，由全量重建回收；
@@ -2354,8 +2363,8 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 >   **`scheme` 注册表**按 RP T2.4 归 S2；S0 只在 SearchSpec v1 §2 固化四方案 /
 >   能力协商 / 降级链，不提前写注册表代码。
 > - **负例对照基线已落地**：`tests/NegativeBaselineTests.cs` 覆盖能独立执行的 N1–N17
->   （12 绿 / N12、N15 为 known-gap / N8、N10、N11、N18–N24 为 blocked，等 S1/S2 的
->   plan、explain 或 `scope=lyrics`）；`KNOWN-GAP` / `BLOCKED` 不计入 FAIL。
+>   （13 绿 / N15 为 known-gap / N10、N11、N18 为 blocked，等 S3 的语言画像与召回语义）；
+>   `KNOWN-GAP` / `BLOCKED` 不计入 FAIL。
 > - **日志不足的派生补齐已落地**：`replay sample --library <library.db> [--with-lyrics]`
 >   在日志候选不足时按 `sha256(track_id)` 升序派生标题 / 文件名 / 歌手 / 专辑 / 标题前缀 /
 >   歌词首行查询（标 `derived`），仍保持确定性；派生结果只写本地 `--out`。
@@ -2421,14 +2430,14 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 > - **性能复测**：同一 3k 索引 qbench 复测 pooled P50 2.66 / P95 5.48 ms（改动前 2.86 / 5.32，
 >   差值在机器噪声量级）；未跑正式 full 档。
 > - **测试**：C# PASS 2769 / FAIL 0（含 SearchApiTests 82 项；KNOWN-GAP 2 / BLOCKED 8 不计
->   FAIL，均为 S2/S3 待办）；Dart `dart analyze lib` 0 issue，搜索相关单测与真实 FFI 冒烟全绿。
+>   FAIL，均为当时的 S2/S3 待办）；Dart `dart analyze lib` 0 issue，搜索相关单测与真实 FFI 冒烟全绿。
 > - **实现层两处输出中性差异**（不影响 top-k / pass 计数）：
 >   ① 所有丢词表达式都为空时不再做字段亲和度探测（旧代码会空探）；
 >   ② CJK 容错变体在计划期预编译（旧代码门打开后才编译），CPU 有界。
 > - **未做 / 留给后续阶段**：`typo2` 与 `scope=lyrics` 的正式排序 / 负例判定归 S2；
->   ABI 的 `era_search_fallback`、任务句柄 `era_search_start/wait/free`、游标分页
->   （`cursor` / `next` / `restart`）、`total=capped|exact`、`explain` / `highlight` /
->   `snippet` 产出、per-handle 并发与缓存分片归 S2/S3（S1 请求只解析不报错）。
+>   ABI 的 `era_search_fallback`、任务句柄 `era_search_start/wait/free`、per-handle 并发与缓存分片
+>   归 S2/S3；游标分页（`cursor` / `next` / `restart`）与 `total=capped|exact` 已随 T2.10 落地，
+>   `explain` / `highlight` / `snippet` 产出已随 T2.6 / T2.7 / T2.8 落地。
 
 > 这一步是"重写"与"打补丁"的分水岭。跳过它直接改语义，就永远说不清"变好还是变坏"。
 > 注意：等价性允许"排序相同但内部结构不同"，**不允许**"差一条然后解释为噪声"。
@@ -2444,8 +2453,41 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 | T2.5 | 负例集扩到覆盖每个 kind | `tests/vectors/negative` | 全绿 | 1–2 人日 |
 | T2.6 | **`recall@1`**（含 `typo2` / `scope=lyrics`），复用 T2.4 的注册表与 matcher | `SchemeRegistry` | 方案各自的向量；`typo2` 仅 `recall@1`；增删方案不改实现 | 2–3 人日 |
 
-> ⚠ S2 仍在 v7 存储上（没有 DocStore 原文），`ExactRank` / `Proximity` 只能记常量；
-> 这两个键要到 S3 才真正生效，届时排序会再变一次——必须再做一轮回放评审，不要一次放两个变量。
+> ⚠ **历史提醒**：S2 阶段 `ExactRank` / `Proximity` 只能记常量。**S3 已生效**（T3.11），
+> 并已单独跑过回放评审，没有和桶序首秀混在同一批。
+
+**落地进度（2026-11-24，v0.37）**
+
+| 任务 | 状态 | 交付 / 证据 |
+|---|---|---|
+| T2.1 | ✅ | 新 `app/core/indexer/SearchRanker.cs`：`Evidence(Kind, Field, Coverage, Exactness, Positioned)` + `Candidate`；比较器为 kind → coverage → field → exactness → proximity → bm25 → docId（proximity 已在 S3/T3.11 生效）。`SearchSession` 改为「按 track 收集证据 → 合并取最高 kind → 一次桶序 → 切片」，**唯一排序入口**。 |
+| T2.2 | ✅ | `FromStep` 用 `step.Kind` + `CoveredTerms/termCount` 构造证据；`Merge` 同档取 coverage 最大 / field 最小 / exactness 最小；`vectors/rank/rank-core.jsonl` 30 条覆盖 10 个 kind 的全序与 coverage/field/exactness/bm25/docId 次级键。 |
+| T2.3 | ✅ | `replay compare` 产出每条 top-10 变化与 overlap；真实库 15 条查询 **changed=0 / identical=true**（门控未变，S2 只换排序），无变化条目即无原因可列。「变化原因」所需的 `explain`（kind / coverage / field / pass / lexicalSources）已落地，后续语料扩量时按同一条命令输出。 |
+| T2.4 | ✅ | 新 `app/core/indexer/SearchScheme.cs`：`fast@1` / `default@1` / `recall@1` / `minimal@1`、`SchemeRegistry.Resolve`（未知 id → default，缺能力沿 degradeTo 下降，最小落到 minimal）、启动期环检测；请求 `scheme` 解析与回显（`schemeRequested` / 实际 `scheme`）、缓存键加入 scheme；`s1-compat@1` 退役。`vectors/scheme/scheme-core.jsonl` 20 条断言 `minimal ⊆ fast ⊆ default ⊆ recall` 且 fast/minimal 只生成 lexical。 |
+| T2.5 | ✅ | 桶序 30 条 + 方案 20 条向量已接线；N22/N23（typo2）、N8（Cover 归因）已转绿。v7 可达的 kind 由 `SearchExplainTests` 覆盖 exact / partial / typo；phrase / prefix / pinyinPhrase / initials 在比较器层由 rank 向量覆盖，端到端要等 S3 拆步骤。N10 / N11 / N18 仍 BLOCKED（语言画像 / 单字歌词语义 / df 预算）。 |
+| T2.6 | ✅ | `recall@1` 启用 typo2：`FuzzyVocabulary.WithinTwo`（有界 Damerau ≤2）+ `DistanceTwoCandidates`（首字符区间、距离恰 2、词长 ≥7、扫描上限 20000）；`SearchQuery.CompileTypo2` 延迟用词表生成；新步骤 `typo2@1`（Gate 只要求 fuzzy，不参与 MinExact 短路）。真实库 `pikasonax` → `pikasonic`：default@1 命中 0、recall@1 命中 3 条（pass=typo2）。N22/N23 转绿；`phonetic-lyrics` 仍由 `pinyin-loose` 的歌词列覆盖。 |
+| T2.7 | ✅ | `SearchExplain.cs`：`explain`（前 50 条：kind / field / fieldId / matched / total / coverage / exact / proximity / positioned / bucket / bm25 / lexicalSources）与 `trace`（steps / skipped，含 `min_exact` / `fuzzy_off` / `empty_expression`）；字段归因按 kind 用该步词元重建单列探测（`FtsStore.MatchesDocument`）。高亮新增 `SearchHighlight.cs`：`highlight=true` 时对**前 300 条**（T2.11 起由 50 提升，覆盖一页）返回 `{field,start,end,mode}`（UTF-16 半开区间；`literal` / `reading` / `initial`）；字面复用 `SearchSnippet.MatchRanges`，读音 / 首字母按连续 CJK 段用 `Pinyin` + `Analyzer.AnalyzeQuery` 重算，音节数与段长不符即退化只写字面；每字段 ≤32 段、最多 4 字段，超出置 `highlightTruncated`；歌词仅 `snippet=true` 时取原文（前 300 条）；库缺失失败开放。缓存键含 `highlight`，CLI `--highlight` / `--no-highlight`；新增 `SearchHighlightTests`（literal / emoji UTF-16 / reading / initial / 歌词开关 / 32 段与 4 字段上限 / 库缺失 / 缓存键）与 `SearchApiTests` JSON 形状。 |
+| T2.8 | ✅ | 新增 `app/core/indexer/SearchSnippet.cs`：`snippet=true` 时对**前 300 条**（T2.11 起由 10 提升）命中生成 `{field,text,ranges,truncated}`；查询期只读打开 `library.db`（`busy_timeout=1000`），用内嵌 `lyrics` + `.lrc` 侧车合成原文 / 译文 / 音译三层，按首个字面命中取前后各 24 字符窗口（裁剪端加「…」、总长 ≤512 UTF-16 code unit）；无命中 / 无歌词 / 库缺失 / 锁冲突返回 null 且不报错。片段随结果缓存（缓存键含 `snippet`），`WithoutTracks` 同步过滤；CLI `query --snippet`、FFI / `IndexerJson` 输出 `snippet`；新增 `SearchSnippetTests`（前 300 条 / ≤512 / 区间 / 元数据命中无片段 / 库缺失失败开放 / 缓存命中）与 `SearchApiTests` JSON 形状。 |
+| T2.9 | ✅ | `era_search_open` 的 `options_json.libraryDb` 透传到查询层；返回时按 `library.db.tracks` 回查，缓存保留原始 top-k、每次返回派生过滤（删除后缓存命中也不吐幽灵）。库缺失 / 不可读 / 表缺失失败开放并记 warn。N12 转绿（含缓存命中路径）；Dart `SearchService` 已传源曲库路径。 |
+| T2.12 | ✅ | 新增 `app/core/indexer/SearchFallback.cs` 与 `era_search_fallback`（ABI v2）：只读打开 `library.db`（`busy_timeout=1000`），参数化 `title/artists/album LIKE '%'||?||'%'`，**匹配集合与旧 Dart `_searchWhere` 完全一致**（含 artists/album 原始 JSON 列、空查询返回整库）；排序按简化字段权重 title(3) > artist(2) > album(1)，同权按 title / id；`score` 即权重、`pass=fallback`；`total` 为全量匹配数（等价旧 `countTracks`，不受 limit/offset 影响）、`totalExact=true`、`next=null`、无 `explain` / `trace`；`highlight` / `snippet` 复用 T2.7/T2.8 实现；库缺失 → 码 2、非法 JSON → 码 1、SQLite/IO → 码 5。Dart `indexer_ffi.dart` 绑定 + `SearchService.searchFallback`（总开关关闭 / 空查询 / 原生模块不可用 / 库不存在返回 null 回退既有 LIKE），`search()` 在索引未就绪时改走它；新增 `SearchFallbackTests`（集合一致 / 权重排序 / total 与分页 / 空查询 / 高亮区间 / 错误码 / JSON 形状）与 FFI 冒烟用例。 |
+| T2.11 | ✅ | 新增 `era_search_decorate`（ABI v2；`SearchFallback.cs` 内 `SearchDecorations` + `SearchApiJson.Decorate`）：按当前页 trackId 批量只读 `library.db`，复用 T2.7/T2.8 算高亮 / 片段，**不重跑排名**；`highlight` / `snippet` 上限由 50 / 10 提升到 **300**（一页容量），artist 展示文本改 `" / "` 连接以对齐 Dart `artistNames`。Dart：`SearchService.decorate` + `indexer_ffi.decorateSearch`；`LibraryState.searchHighlights` 与分页器按页装饰（元数据命中行不出片段）；`SongList` / `SongRow` 直接消费字段区间。删除 `search_highlight.dart` / `search_highlight_pinyin.dart` / `script_ranges.dart` / `search_lyric_snippet.dart` 与 3 个对应测试；`SearchHighlighter` / `buildLyricSnippets` 引用清零，`dart analyze lib` 0 issue、`flutter test` 全绿（1229）。总开关关闭时 `search` 也先尝试 `era_search_fallback`（库缺失仍回退 null）。 |
+
+S2 的**已知近似**（不是缺陷，是 v7 没有 DocStore 原文的必然）：
+- `field` 只能按 `FieldFamily` 保守映射：Meta/Pinyin/Initials/CrossLingual → `Title`，
+  Lyrics/Reading/Mixed/Fuzzy → `Lyrics`；v7 无法在结果行上区分 title/artist/album。
+- `exactness` 只有读音趟有真实档位（前缀 1 / 包含 2 / 其它 3），其余步骤恒 0。
+- `fast@1` 与 `minimal@1` 共用 lexical 步骤（`exact` 与 `prefix` 在表达式生成里仍配对）。
+  **S3 未拆**：这是已知偏差——`minimal@1` 也会带上 prefix 变体；影响面仅在「降级链终点」，
+  `default@1` 不受影响。拆开需要独立的 exact / prefix 表达式，收益低，暂列可选。
+- ~~`explain.field` 仍是保守族~~ → **S3 已合一**：精确度复核生效时
+  `field == resolvedField`（真实 title/artist/album）；未复核步才保留诊断探针。
+- `explain.matched/total` 以计划词元计（包含分析器展开），不是用户看到的词数。
+- `recall@1` 已启用 typo2（距离 2）；`phonetic-lyrics` 仍由 `pinyin-loose` 的歌词列覆盖，
+  不单独成步。typo2 依赖索引词表，空词表时该步返回 `null`（不退回组合枚举）。
+- typo2 的词表扫描上限 20000 条 / 词；本机只有 117 首真实库，**大库（≥3 万曲）的
+  recall@1 P95 尚未实测**，列入 S3 前置（与同语料基线一起做）。
+- 步骤门仍是 `MinExact` 短路，`StepDominated`（heap 满且档位支配）**尚未启用**；
+  因此本轮召回范围不变，180 度回放口径保持可比。启用它要单独做一轮回放（会改变召回范围）。
 
 验收：NDCG@10 提升或持平；负例零回归；P95 不明显变差；`kind` 归因与人工抽样一致；
 `scope=lyrics` 与 `typo2` 的负例（N21–N24）全绿；三个方案各自的向量全绿。
@@ -2457,10 +2499,10 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 |---|---|---|---|
 | T2.7 | `era_search_run` 返回 `highlight[]`：原文 / 拼音 / 首字母区间由 C# 计算 | 与 Dart 现实现逐条对比一致（黄金集） | 2–3 人日 |
 | T2.8 | 歌词片段下沉：查询期只读 `library.db` 截取 | 片段与 UI 期望一致；失败返回空片段 | 2 人日 |
-| T2.9 | 陈旧 `track_id` 过滤下沉 | 结果里不出现已删除曲目 | 1 人日 |
-| T2.10 | 分页 keyset 下沉（`next` 游标） | 翻页不漂移；与 `totalCount` 自洽 | 1–2 人日 |
-| T2.11 | 删除 Dart `search_highlight*` / `script_ranges.dart` / `search_lyric_snippet.dart` | 静态检查无引用；行为不变 | 1 人日 |
-| T2.12 | `LIKE` 回退下沉 `era_search_fallback`（参数化 SQL + 字段权重） | 索引关闭 / 未就绪时结果与旧 Dart 路径一致 | 1–2 人日 |
+| T2.9 | ✅ 陈旧 `track_id` 过滤下沉（`options_json.libraryDb` → 返回时按 `tracks` 回查；缓存保留原始 top-k，库不可读失败开放） | 结果里不出现已删除曲目（N12 转绿，含缓存命中路径） | 1 人日 |
+| T2.10 | ✅ | 分页与 `total` 下沉到查询会话。请求解析 `cursor`（不透明 `base64url(32B)`，v1：gen / scheme_hash / kind / coverage / field / exact / proximity / bm25 / doc_ref）与 `total=none|capped|exact`；非法游标 / 非法 total → 码 1（`invalid_cursor` / `invalid_total`）。`next` 取本页最后一条在**同一全序**里的位置（v7 用 `doc_ref` 低 32 位放 rowid 定位），`restart` 仅由 gen / scheme 失配或位置消失触发（items=[] / next=null）。`total=none` → -1；`capped` → `min(候选数, 10001)`；`exact` → 合并去重后的全量。分页 / 计数请求每步召回取同一候选集（`exact` 不截断、`capped` 取 10002），保证跨页排序不漂移；缓存键加入 `cursor` 与 `total`。新增 `SearchPaging.cs` + `SearchPagingTests`（往返 / 三页 10+10+10 无重复无遗漏且与一次取全顺序一致 / 三模式 / gen 与 scheme 失配 restart / 缓存键 / API 形状）；CLI `query --cursor` / `--total`，FFI 与 `IndexerJson` 输出 `total` / `totalExact` / `restart` / `next`。 |
+| T2.11 | ✅ | 删除 Dart `search_highlight*` / `script_ranges.dart` / `search_lyric_snippet.dart`；新增 `era_search_decorate` 按页补高亮 / 片段，上限提升到 300 | 静态检查无引用；含第 2 页在内行为一致 | 1 人日 |
+| T2.12 | ✅ 已落地（见上表 T2.12 行） | 索引关闭 / 未就绪时匹配集合与旧 Dart LIKE 一致；排序按字段权重 | 1–2 人日 |
 
 验收：Dart 侧不再出现任何"搜索语义"代码；`dart analyze` 0 issue；高亮 / 片段与旧实现一致率 100%
 （先对比后删除，不允许"删了再说"）。
@@ -2499,10 +2541,10 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 | T3.7 | **V3**：歌词字段不建 unigram（只 bigram） | 修复后重建 | 单字查询行为不变（本来不查歌词） |
 | T3.8 | **V5/V6**：`lyrics_rom` 仅显式层写入 + 病态数据护栏（4096 唯一行 / 128 KB 每层） | 按真实分位上调护栏 | 真实库中**0 首正常曲目被截断**；截断仅发生在超护栏记录并打点 |
 | T3.9 | 首字母 bigram（`tokenizer_version+1`） | 修复后重建 | 部分首字母召回提升；单字母仍未召回 |
-| T3.10 | 分层段合并（死行 ≥20% / 段数 ≥8；单次 2s） | 修复后重建 | 增量耗时与脏曲数解耦；dead_ratio 可控 |
+| T3.10 | 分层段合并（死行 ≥20% / 段数 ≥24；单次 2s） | 修复后重建 | 增量耗时与脏曲数解耦；dead_ratio 可控 |
 | T3.11 | 精确度 / 邻近度复核启用（读 DocStore + 位置） | 修复后重建（算法级开关仅调试，不进发布配置） | P@10 / NDCG 不降 |
 | T3.12 | Manifest 写入 `capabilities` / `options_bits` / 版本锚 | — | `default@1` / `recall@1` 能正确降级 |
-| T3.13 | 删除所有 v7 / FTS5 代码路径 / 常量 / 注释 | — | 代码里零 v7 / FTS5 引用；旧索引只会被删除重建 |
+| T3.13 | 删除所有 v7 / FTS5 **存储 / 写入**代码路径 | — | 零 v7 存储 / 写入代码；旧索引只会被删除重建（查询 IR 的 MATCH 子集语法保留为 EraStore 内部语法） |
 | T3.14 | **§8 实测门禁**：footprint / startup / latency 三份 JSON 与 S0 基线逐项对比 | 未达标不合并 | 七项比值全部满足 §8.0 |
 | T3.15 | 全量重建路径：新世代文件 + `CURRENT` 原子切换；Windows 占用降级 | 修复后重建 | 三端都能在旧索引被占用时完成切换 |
 
@@ -2519,6 +2561,373 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 失败处置：停发已构建版本，修复后删除索引重建（索引是派生数据，允许丢弃；不保留旧路径）。
 **不允许**用"关掉歌词拼音"来达标——V4 只关首字母，拼音歌词必须保持默认开。
 
+**落地进度（2026-11-24，S3 前置：EraStore 读路径）**
+
+| 任务 | 状态 | 交付 / 证据 |
+|---|---|---|
+| T3.3 | ✅ | `SearchSession` 默认走 EraStore（`search.era/` + `CURRENT`）：`EraQueryPlan.Execute` 解析 MATCH 子集 → ~~迭代器召回~~（T3.14 起为 bitset 召回 + 预计算 tf）→ `EraBm25` 复算分数。真实库 51 条查询全量对拍一致（相对差 ≤5e-16），读音趟「前缀 / 包含 / 其它」分档两侧一致（sora=contains、kyu=startsWith、gak=none）。 |
+| T3.12 | ✅ | Manifest 写入 `metaVersion` / `anchors.analyzer` / `optionsBits` / `capabilities`；查询元数据（analyzer、能力、选项、世代）全部改读 Manifest。explain 列探针改走 EraStore 词典 + 倒排；模糊词表改扫 EraStore 词典；丢词重排命中计数改由 `EraQueryPlan` 去重曲目数。`SearchSession` 删除 `_fts`、`_ftsMeta`、`FtsStore.Search/MatchesDocument/CountMatches/LoadFuzzyVocabulary`，查询期只读 EraStore（snippet / highlight / 陈旧过滤仍只读 `library.db`）。 |
+| T3.0 | ✅ | 搜索**代码路径**零 SQLite：召回、bm25、读音分档、explain、模糊词表、命中计数全部由 EraStore 完成。~~`FtsStore` 仅保留给 CLI / 测试 / 管理视图~~ → **T3.13b 已整体删除**（连同 `IIndexStore` / `WriteLegacyFts`）；生产路径不再写 `search.db`，脏集状态由 DocStore 承载。 |
+
+本轮新增 / 变更：
+
+- `EraStore/Expression.cs`：`SearchQuery` 产出的 FTS5 MATCH 子集解析器（列作用域、双引号词 / 短语、
+  前缀、`AND` / `OR`、括号）；作用域绑定紧随其后的一个 primary，嵌套作用域取交集。
+- `EraStore/Bm25.cs`：与 FTS5 `bm25()` 同口径（idf 下限 1e-6、k1=1.2、b=0.75、分数取负）；
+  12 字段权重按 `FieldId` 顺序重排；`df` 为作用域内文档数（同文档多列只计一次），
+  `L` / `avgL` 为整行 12 列口径。
+- `EraStore/QueryEngine.cs`：`EraQueryPlan.Execute` 跨段召回 + 打分；`df` 跨段累加、
+  `N = TotalDocs`、`avgRowLen` 为全库平均；`perStepTake > 0` 时先全量打分再全局截断；
+  `ScoreNode` + `MarkContributing` 实现「未满足的 AND 分支不计分」；读音趟用
+  `ReadingMeta` 位置块复算分档（不再回读 SQLite）。
+- `EraStore/StoreReader.cs`：单文件打开 + 双槽恢复 + 每段三元组 + `AverageDocLengths`（按 `TotalDocs` 归一）。
+- `IndexerEngine`：`needFull` 之外，本轮有新增 / 改写 / 删除时也重建 `search.era/`（EraStore 暂无增量合并，
+  T3.10 再做）；文件名带时间戳避免覆盖读取中的旧文件，成功后清理旧 `.eraindex`。
+  Manifest 写入 analyzer / options / capabilities；非 32-hex 的短 track id（测试夹具）以零填充
+  + 文本标志位保存，查询时原样还原。
+- 测试：新增 `tests/EraStoreQueryEngineTests.cs`（Program 已注册）。同一批 23 条 doc 分别构建成
+  「全部一段」与「每 7 条一段」，对单词 / 低频词 / 前缀 / 短语 / AND / OR / 列作用域 / 嵌套作用域 /
+  空命中 10 条表达式断言 `(TrackIdHex, Score)` 序列与顺序一致（相对差 ≤1e-12）；另锁定 AND 分支门控、
+  列作用域优先级、语法错误返回空、`perStepTake` 全局截断。
+- 回归：C# 全量 **PASS 3110 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5**（S3 读路径落地前为 3087）；
+  `dart analyze lib` 0 issue；`flutter test` 1229 通过。
+
+**第一轮已知限制（2026-11-24 上午；其中 #1/#2/#3 已由下方第二轮进度更新）**：
+
+1. 端到端对拍只覆盖本机 117 首真实库的 51 条查询；qbench 5k / 30k / 48.7k 三档基线尚未重跑，
+   §8.0 的七个相对指标仍不可判。→ 第二轮已重跑，见 gate 文档。
+2. EraStore 尚无增量段合并（T3.10）：本轮只要曲库有新增 / 改写 / 删除就整库重建，曲库变更后的
+   首次索引耗时等同全量。世代号在现有扫描器里不递增，因此暂不依赖它判断增量。→ T3.10 已落地。
+3. ~~`FtsStore.cs` 仍在仓库内，但已不参与查询~~ → **T3.13b 已整体删除**。召回与 explain 路径
+   （`SearchSession` / `SearchExplain`）已无 `search.db` / `fts5vocab` / PRAGMA / `MATCH` 调用；
+   仅 snippet / highlight / 陈旧曲目过滤保留 `library.db` 只读查询（与 §3.2 的许可一致）。
+   CLI `query` 与 FFI open/health 也已迁到 EraStore；边界见 gate 文档 §6。
+4. 精确度 / 邻近度（T3.11）未启用，排序键与 S2 保持一致——切 EraStore 本身没有再改一次排序语义。
+5. 多段 bm25 的正确性现由回归测试锁定，但大库上的 `df` / `avgdl` 分布与 P95 仍未实测。
+   → 第二轮已测；`query_p50/p95` 未达标。
+
+**落地进度（2026-11-24 第二轮：T3.10 / T3.13 / T3.14 / T3.15）**
+
+> 详细数据、环境与复现命令见 **`docs/local-search-indexer-t314-gate.md`**。
+
+| 任务 | 状态 | 交付 / 证据 |
+|---|---|---|
+| T3.10 | ✅ 功能 / ⚠ 合并成本待压 | `EraStore/Incremental.cs` 追加新段 + 墓碑；DocStore v2 保存 `mtime/lrc_*`；`StoreReader` 只读 mmap + 死行过滤；`Merger` 流式 k 路归并；合并触发改为「死行 ≥20% 或段数 ≥24，且常态只归并小段」。1 首脏曲 apply 72 ms；30k 全量 40.5 s → 增量 1.3 s。 |
+| T3.13b | ✅ 已删除 | `FtsStore.cs` 整体删除；`IIndexStore` / `WriteLegacyFts` / `--legacy-fts` / `--merge-every` / `Merged` 一并移除；`IndexerEngine` 去掉存储注入，`RunEraOnly` → `Run`；测试迁到 Manifest / `IndexStats` / `EraQueryPlan` / `DocStore`；`Replay` 支持 EraStore-only（`scheme="erastore"`）。C# **PASS 3571 / FAIL 0**。 |
+| T3.13 | ✅ 查询路径 | FFI `era_search_open/health` 改读 Manifest；CLI `query` 改走 `EraQueryPlan`；`LibraryDb` 收口连接串；Dart `SearchIndex.isAvailable` 改判 `search.era/CURRENT`；生产 `RunEraOnly` 不写 v7。`FtsStore` 只剩测试 / `--legacy-fts` 写入器，边界与删除计划见 gate 文档 §6。 |
+| T3.14 | ✅ 通过 | 30k：`bytes_per_track` 0.60× ✅、`open` 3.94 ms ✅、首查 1.39 ms ✅、NativeAOT `rss_peak_build` 142 MB（0.78×）✅、`rss_query` 56.5–58.7 MB（5k / 30k / 48.7k）✅、`query_p50` 7.7–9.6 ms（0.26–0.32×）✅、`query_p95` 28.5–32.3 ms（0.41–0.46×）✅。**按 §5.4.4 可进入 S3 合并评审（T3.15 真机待办）**。 |
+| T3.15 | 🟡 Linux 已测 | `CURRENT` 原子切换、旧文件被占用 / 删除失败后下一次运行重试清理、增量提交前异常不改旧世代均有自动测试；Windows / macOS 需真机跑 gate 文档 §7 的四行场景。 |
+
+第二轮实施要点：
+
+- **生产路径去 FTS**：`IndexerOptions.WriteLegacyFts` 默认 `true` 仅保留给测试；
+  CLI / FFI 显式 `false`。全量构建按 200 曲分块**流式**分析，峰值 RSS 从近 1 GB
+  降到 150–175 MB；`search.db` 不再写。
+- **DocStore v2**：新增 `file_mtime / lrc_mtime / lrc_size`（v1 读作 0），
+  `StoreReader.LoadTrackState()` 提供增量脏集；索引 `gen` 与扫描器 `generation` 解耦。
+- **只读 mmap**：`StoreReader` 改用 `MemoryMappedFile`（`FileShare.ReadWrite`），
+  查询期匿名 RSS 不再随索引体积增长；`TryReadCommitGen` 让缓存的会话能在同一文件
+  被增量提交后自动重开。
+- **查询打分**：每段预建 `atom × field` 倒排游标，候选 doc 升序 `Advance`；
+  逐 doc 复用缓冲、空字段跳过、空段跳过评分器。30k（8 段）pooled P50 从 72 ms
+  降到 32 ms。
+- **合并**：`Merger` 不再物化全段 `term → postings`，改流式 k 路归并；补回
+  Manifest 的 `metaVersion/optionsBits/capabilities`（否则合并后下一次增量误判全量）。
+- **合并阈值校准**：真实歌词按 4 MB 估算落段，单段约 4k 曲；「段数 ≥8」会让每次
+  增量重写 4k 段（1.2–1.4 s）。改为 **≥24 + 只归并小段**；死行 ≥20% 仍立即回收。
+- **查询热路径**：bitset 候选评估（逐 atom 位图 + 布尔树位运算，df = popcount）、
+  单词 atom 预计算加权 tf、固定大小 top-k、`OrIter` 堆化、df 缓存、延后 TrackId、
+  惰性 AND、宽前缀 tf 归并、候选对象减配。30k（8 段）p50 从 33–38 ms 降到
+  **7.7–9.6 ms**，p95 从 71–92 ms 降到 **28.5–32.3 ms**（0.26–0.32× / 0.41–0.46×）。
+- **测试**：新增 `tests/EraStoreIncrementalTests.cs`；`EndToEnd.EraIncremental`
+  走生产路径（`WriteLegacyFts=false`）覆盖新增 / 改写 / 删除 / 自动合并 / 残留清理。
+  回归 **PASS 3170 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5**（第二轮快照；第三轮收尾后为
+  **3644 / 0 / 0 / 3**，见下）。
+
+**第二轮仍开放（历史快照；下列均已落地，结果见第三～六轮）**：
+
+1. `query_p50/p95` 已达标（bitset 候选评估 + 预计算 tf + 固定大小 top-k）。
+2. 段数与查询固定成本：4 MB 估算落段 → 30k 286 段 / 48.7k 465 段；O8 位打包 /
+   更紧凑 postings 仍是「段更大 + RSS 不涨」的进一步优化。
+3. ~~全量构建后的自动 `compact`~~：已实现（`EraStore/BuildCompactor`，30k 286 → 1 段），
+   见下节「构建收尾自动 compact」。
+4. `rss_query` 已达标（56.5–58.7 MB）：惰性词库加载后 Aggressive GC + JSON 直写 +
+   释义表内部化。宽响应（≥128 KB）会在返回前多付 ≈9 ms 回收；常见页大小不触发。
+5. Windows / macOS 实机验证占用 / 中断降级。
+6. T3.4–T3.9 / T3.11 的功能与收益已复核，排序见下节「T3.14 之后：T3.4–T3.11 复核」。
+
+**第三轮（2026-11-25）收尾**：功能 / 测试补齐，门禁数据不变。
+
+- **bitset 等价性审计**：新增 `tests/EraStoreBitsetEquivalenceTests.cs`，用「从旧程序集恢复的
+  迭代器实现」作参考，覆盖 23 条表达式矩阵 × 单段 / 多段、列作用域与嵌套 / 优先级、
+  前缀截断（10001 词条）、词组与无位置降级、墓碑与跨代重开、df = popcount、加权 tf、
+  AND/OR 归因、top-k 边界（`<k` / `==k` / `>k` / `take=0/-1/int.MaxValue` / `MaxTopK`
+  16 384 与 16 385）、df 缓存。**修掉两个只影响输出顺序的 top-k bug**：`hits == k` 时
+  提前建堆打乱扫描顺序、截断后按堆序输出未排序；现在「未截断 = 旧扫描顺序、截断 =
+  按 `(Score, SegmentIndex, DocId)` 升序的确定性 top-k」。
+- **测试缺口**：N15（超长查询只跑字面步）转 PASS——`MaxPlanQueryCodePoints=64`，
+  可见码点超限时计划只保留 `lexical@1`；N19（版本不符降级）转 PASS——Dart/FFI 集成测试
+  原地改 `metaVersion` 并重算 CRC32C，验证 `open` 返回 null 后走 `era_search_fallback`；
+  N20（构建中读旧快照）转 PASS——用 `ManualResetEventSlim` 卡在 commit 阶段，断言构建中
+  旧快照 / 构建后新快照 / 旧 reader 跨重建仍完整。剩 N10 / N11 / N18 三项 BLOCKED，
+  原因已收窄到「缺 per-track 语言画像 / 单字歌词召回语义 / 计划期 df 预算」。
+- **回归**：C# **PASS 3644 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**；Flutter **1235 通过**；
+  `dart analyze lib` 0 issue；FFI NativeAOT 重建后冒烟通过，`rss_query` 56.6 / 57.3 /
+  58.7 MB；30k 延迟复测 7.7–9.0 / 27.9–31.4 ms（排序修复未回退）。
+- **T3.13 迁移遗留已修**：`SearchIndex.available` 原来看 `search.db` 是否存在（生产不再
+  生成 → 恒 false → 每次搜索都重建），改为看 `search.era/CURRENT`；`deleteIndex()` 递归删
+  `search.era/`；设置页索引体积改读 `CURRENT` 指向的 `.eraindex`。
+
+#### T3.14 之后：T3.4–T3.11 复核（2026-11-25，代码现状）
+
+> 前提：T3.14 已 7/7 达标，下面每一项都**不再影响合并**，只按「收益 / 风险」排序推进。
+
+| 任务 | 现状（代码事实） | 缺口 / 改动 | 判定 |
+|---|---|---|---|
+| T3.4 V4 | ✅ 已实现：`IndexerOptions.InitialsLyrics`（默认 **关**）+ Manifest 位 `1<<7` + `EraOptionsMatch` + FFI `initialsLyrics` + Dart 设置；查询侧按 Manifest 位收窄到 `initials_meta_tok` | 30k live bytes −18.7%（4.39 KiB/曲）；仅 `wan` 首字母题下降，opt-in 完全恢复 | **已完成** |
+| T3.5 V1 | ✅ 已实现：行级 + 归一化去重（与 `LyricsStats` 同一 key），analyzer v14 | 真实库 ≥20% 去重率待抽样验证 | **P0 已完成** |
+| T3.6 V2 | `NoPositionFields` 仅原型启用（`bench/erastore`），生产/增量未启用；`Positioned` 在 `SearchRanker.cs:136-142` 硬编码 true | 需要 option bit + 增量一致 + `explain` 真实标注 | **P2（跳过）** |
+| T3.7 V3 | ✅ 已实现：歌词三列 `includeUnigrams=false`（analyzer v14） | 30k live bytes −24.7%，单字歌词查询行为不变 | **P0 已完成** |
+| T3.8 V5/V6 | ✅ 已实现：索引路径 4096 行 / 128 KiB 截断 + `lyricsTruncated*` 指标；V5 本就满足 | 另修掉 >255B 词条导致整库构建失败的缺陷（`oversizeTokens`） | **P0 已完成** |
+| T3.9 | ✅ 已实现：每段首字母 bigram（无 unigram、`#` 分隔边界、排除拉丁/数字），查询侧 2 字词条 / 长串词组；analyzer v15 / tokenizer v4，能力按版本声明 | 30k live bytes +0.44%；`nz` 中段命中新增，`wan` 仍命中；eval 总体逐项不变 | **已完成** |
+| T3.11 | ✅ 已实现：DocStore v3 归一列 + `SearchExactness`（Mixed/Meta 步、≤2048 命中才复核）+ 字段桶取真实列 + `Evidence.Proximity`；explain / 分页带真实值 | 5k narrow P@1 0.333→0.667 / NDCG 0.710→0.833；30k 不降 | **已完成**（kind 分类另计） |
+
+**排序结论**
+
+- **P0（先做）**：T3.5 + T3.8 V6，顺带 T3.7——三者共用一条歌词预处理路径，只改索引内容，
+  不碰查询引擎 / 排序器。
+- **P1（需重建 + 召回评审）**：T3.4 → T3.9 → T3.11。T3.4 先做以缩小歌词首字母规模，
+  T3.9 再扩元数据 bigram。
+- **P2（不做）**：T3.6。门禁已过，它是精度换体积的非默认项，且会牵动 `explain` 语义。
+
+**测量口径的三条硬约束**
+
+1. **qbench 的 recall / NDCG 目前跑不了 EraStore**：`bench/qbench/QueryEval.cs.txt` 仍从 v7
+   `search.db` 的 `search_docs` 取样本。T3.11 / T3.9 的「P@10、NDCG 不降」必须先迁 eval
+   harness（从 EraStore 取 trackId + DocStore 取字段），否则只能测体积与延迟。
+2. **合成语料证明不了 T3.5 的 ≥20%**：`bench/gen_corpus.py` 是随机行、没有副歌重复；
+   20% 需真实库抽样 + `lyrics stats`（且其去重 key 要与索引侧统一）。
+3. **不要混用两套字节基线**：门禁的 229 MB / 7.63 KB/track 是**带位置**的生产构建；
+   S2.7 原型 1203 B/track 是 `NoPositionFields` 的估算路径。
+
+#### T3.13b 执行清单（2026-11-25 审计 → 已执行）
+
+> 目标：删掉 v7 / FTS5 的**写入**路径。查询路径早已零 v7，剩下的不是「查询还在用」，
+> 而是 `IndexerEngine` 构造签名强制注入 `IIndexStore`，使 `FtsStore` 仍被生产链接。
+
+**顺序硬约束**：先迁测试 → 再删写入器。否则 `WriteLegacyFts` 一删，`EndToEnd` /
+`SearchLayer` / `SearchApi` 里所有 `search.db` 断言会同时失败。
+
+- **P0（零风险死代码，可立即删）**：`FtsStore.CountMatches` / `MatchesDocument` /
+  `ResolveReadingTexts` / `VersionsMatch`（仓库内零调用）；`SearchSession.DebugLastStoreKind`。
+- **P1（先把消费者迁到 EraStore）**：
+  - 测试夹具的 `FtsStore.ConnectionString` → `LibraryDb.ConnectionString`（`EndToEnd`、
+    `SearchFallbackTests`、`LyricsStatsTests`）。
+  - `EndToEnd`：`Meta`/`Scalar(search_docs)`/`MatchContainsTrack`/`DocSizeHex` 换成
+    Manifest / `IndexStats` / `EraQueryPlan` / `DocStoreReader`；`MergeThreshold` 直接删
+    （测的是 FTS `optimize`，Era 合并已有独立测试）。
+  - `SearchLayerTests`：`ReadMeta` → Manifest；`RankingIntegrity` 删（测的是旧 bm25 +
+    candidateCap 缺陷）；`LoadFuzzyVocabulary` → Era 词典断言。
+  - `SearchApiTests` / `SearchPlanTests`：`FtsStore.SchemaVersionValue` 换 Era 常量；
+    删 v7 元数据门禁块。
+  - `Replay.cs`：`File.Exists(search.db)` / `FileInfo.Length` / `scheme:"v7"` 换成
+    EraStore `CURRENT` / `.eraindex` 字节 / 实际 scheme 名。
+  - **已修**：`SearchIndex.available` 原来看 `search.db` 是否存在（生产永不生成 →
+    恒 false → 每次搜索都重新构建），改为看 `search.era/CURRENT`，FFI 冒烟补断言。
+- **P2（删写入器）**：`IndexerEngine` 去掉 `IIndexStore` 构造参数与 `Run` 旧分支
+  （`RunEraOnly` 改名 `Run`）；`Program.cs` 删 `--legacy-fts` / `--merge-every`
+  （后者在生产路径本就是 silent no-op）；`Ffi.cs` 删 `new FtsStore()` 与
+  `merge_every_updates`；`IndexStore.cs` 只保留 `DocTokens` / `StoreMeta`，删
+  `IIndexStore` / `IIndexStoreAdmin` / `UpdatesSinceMerge`；`IndexerJson` 删
+  `WriteLegacyFts` / `Merged`；删 `FtsStore.cs` 与三个 csproj 的 `<Compile Include>`。
+- **验收口径要改写**：查询 IR 仍用 `{title_tok ...} : "..."` 这套 MATCH 子集语法
+  （`EraStore/Expression.cs` + `SearchQuery.cs`），它现在是 **EraStore 内部语法**，
+  不是 FTS5。T3.13 的「代码里零 v7 / FTS5 引用」应改成「零 v7 存储 / 写入代码」。
+- **健康检查的 `schemaVersion`**：`SearchApi.HealthReady` 现在发 7（`StoreMeta`）；
+  删 v7 后要么映射到 Era 格式版本（1），要么保留 7 作兼容号——Dart 侧没有消费者。
+
+#### qbench 查询质量基线（2026-11-25）
+
+查询质量评测原先读 v7 `search.db` 的 `search_docs`，T3.13 之后跑不了。现已改为：
+
+- **真值来源**：`search.era/CURRENT` → `StoreReader` → `DocStore`（`track_id` + 标题 / 艺术家 /
+  专辑原文，跳过墓碑）；歌词是唯一不在 DocStore 的字段，从 `library.db` 单次流式补齐
+  （缺库时降级为「仅元数据真值」并给出提示）。
+- **真值定义**：词面命中（CJK 用 ordinal，ASCII 忽略大小写）。这是**词面真值，不是人工相关性**，
+  NDCG 是二元的；拼音 / 首字母 / 繁体的目标串由标注集给定，不从分析器反推（避免循环论证）。
+- **标注集**：确定性、与查询无关地派生（标题频档、最长标题二元组、高频艺术家 / 专辑、
+  稀有歌词 bigram、3 条「唯一歌词行」探针）+ 21 条分析器探针；37 条查询，
+  `query_set.hash` 保证跨轮可比。
+- **命令**（`bench/qbench/README.md` 有完整说明）：
+  `dotnet run -c Release --project QueryBench.csproj -- eval --index .../corpus30k/search.db --library .../corpus30k/library.db --limit 50 --out ...`
+- **基线**（corpus30k，37 条）：P@1 1.000 / P@10 0.911 / MRR@10 1.000 / NDCG@10 0.986；
+  corpus5k：P@1 0.946 / MRR@10 0.968 / NDCG@10 0.959。
+  基线 JSON 在 `bench/.work/t314/qeval-corpus{30k,5k}-baseline.json`（gitignore）。
+- **已知局限**：合成语料词表只有 ~90 词，任何词都命中 ≥6% 曲库，所以没有 df ≤ 10 的稀有词，
+  `narrow` 档只能由「唯一歌词行」填充；`pinyin_initials`（`wan`，4592 个目标、3 万候选）
+  50 条内只召回 12 条，属歧义/排序结果而非标注错误。
+- **顺带修掉的 harness bug**：`run_bench.py` 的 A/B/C 三档原先共用同一个 `work/search.era/`，
+  导致 A 的 eval / 延迟实际测的是 C；现在各自 `work/A|B|C/search.db`。
+- **留给 T3.11 的两条证据**：5k 的「唯一歌词行」探针里，`line_mid` / `line_tail` 排到 #2/#3
+  （30k 上都是 #1）；首字母查询被大量同前缀候选稀释。做字面精确度 / 邻近度时用这两条回归。
+
+#### 构建收尾自动 compact（2026-11-25）
+
+全量构建原先落 286 个小段（30k），必须手动跑 10 轮 `compact` 才能到个位数。现在
+`IndexerEngine.RunEraOnly` 在**提交并切换 `CURRENT` 之后、清理旧世代之前**调用新的
+`EraStore/BuildCompactor`：
+
+- **触发条件**：段数 ≥ `Merger.MergeTriggerSegments`（24）；增量构建**不**触发。
+- **预算**：`clamp(构建耗时 × 0.30, 1 s, 15 s)`，最多 2 轮；每轮一次独立
+  `Merger.Merge` + `Commit`，轮间不持有写句柄。
+- **崩溃安全**：压缩不动 `CURRENT`，只往当前世代追加段；中断 / 异常只记 warn，
+  构建产物（已提交的 Manifest）始终可读。
+- **结果上报**：`IndexerResult` 新增 `eraCompacted` / `eraSegmentsBeforeCompact` /
+  `eraCompactMs`（只增字段，ABI 不变）。
+
+**实测（30k / 286 段，本机 SSD，构建本体 ≈27.6 s）**
+
+| 预算比例 | 段数 | 压缩耗时 | 总构建 | 查询 p50 / p95 |
+|---|---|---|---|---|
+| 0.10（§8.0 的 10% 条款） | 286 → 180 | 2.7 s | +10% | 19.0 / 79.8 ms（不达门禁） |
+| **0.30（默认）** | 286 → **1** | 7.0 s | **+25%** | **6.95–7.31 / 28.1–28.6 ms**（达门禁） |
+
+- **维护者已确认取 0.30**（2026-11-25）。
+- 取舍理由：全量构建是一次性、后台、启动预热路径；查询延迟每次搜索都可见。
+  §8.0 的 10% 条款是为「去重不得让构建变慢」设的，不是禁止一次有界的收尾整理。
+- 若某平台要求严守 10%，把 `FullBuildCompactBudgetFraction` 改回 0.10 即可，
+  代价是稳态停在 180 段，需靠后续增量构建的自动合并继续收敛。
+- 顺带把 `Merger.MergeTerms` 的逐词 `readers.Find(...)` 线性扫换成
+  `segmentId → term cursor` 字典（286→1 归并 6.85 s → 6.05 s），行为与字节确定性不变。
+- 测试：`tests/EraStoreBuildCompactionTests.cs`（微小段归并 / 均匀 70-doc 段 /
+  小索引跳过 / 轮次与 doc 预算 / 中断保留上一世代）+ `EndToEnd` 的「小索引跳过」。
+
+#### 歌词预处理：T3.5 + T3.7 + T3.8 V6（2026-11-25）
+
+一条共享预处理路径（`LyricsPreprocess`，在 `IndexerEngine.BuildTokens` 内调用）：
+
+- **行级去重（T3.5）**：按 `\n` 切行 → trim → 丢空行 → 以 `Analyzer.Normalize`
+  （NFKC / 去音标 / 异体 / 繁简）为键保序去重。原文 / 译文 / 音译三层独立，不跨层去重；
+  `library.db` 原文与片段 / 高亮都不变。
+- **歌词字面列不建首尾 unigram（T3.7）**：`Analyzer.Analyze` 新增 `includeUnigrams`，
+  歌词三列传 `false`；元数据列维持默认。拼音 / 首字母 / 读音仍按完整文本生成。
+  单字歌词查询本来就被列门禁挡住，新增断言证明编译结果不引用歌词列。
+- **V6 护栏（T3.8）**：去重后每层最多 4096 行 / 128 KiB（UTF-8），超限截尾（按 rune
+  边界切），分别计数；结果 JSON 新增 `lyricsTruncatedLayers` / `lyricsTruncatedTracks`，
+  每曲最多一条 WARN。
+- **版本**：`AnalyzerVersion` 13 → **14**（T3.9 再升 **15**），`ManifestAnchors.TokenizerVersion` 2 → **3**（T3.9 再升 **4**，T4.2 升 **5**）
+  （去重 / 截断规则变化属 tokenizer 产物），旧索引自动全量重建。
+- **顺带修掉的崩溃**：`TermDict` 对 >255 B 词条抛异常——一个 300B 拉丁词或单行 300 字
+  （首字母串 300B）就会让整库构建失败。现在在 `BuildEraDoc` 写入前剔除并计数
+  （`oversizeTokens`，每库一条 WARN），其余字段与构建不受影响；新增
+  `EndToEnd.OversizeTermGuard` 覆盖。
+
+**30k 实测**（同一语料，v13 → v14）：live bytes **220.05 → 165.75 MB（−24.7%）**、
+`bytes_per_track` **7.34 → 5.40 KiB（0.42× 基线）**、构建本体 **+5.6%**、
+查询 p50 **7.31–7.36 ms** / p95 **29.6–32.2 ms**（与 v13 的 7.6–9.0 / 29.8–30.2 持平）。
+查询质量：同一 37 条集 `NDCG@10 0.986 → 0.985`、`P@1` 与 `MRR@10` 均保持 1.000，
+`P@10 0.911 → 0.908`（tf / 文档长度归一化的小幅变化，无召回损失）。
+
+**真实曲库抽样（2026-11-25，117 首）**：原歌词层去重率 **21.8%**（104 首有歌词）、
+译文 15.7%（28 首）、音译 21.3%（5 首），护栏触发 0 —— T3.5 的「≥20%」达标。
+（合成语料本身没有曲内重复行，所以这 24.7% 的体积收益全部来自 T3.7。）
+
+#### T3.4：歌词首字母改为可选（默认关）
+
+- `IndexerOptions.InitialsLyrics`（默认 `false`）+ Manifest 位 `ManifestOptionsBits.InitialsLyrics = 1<<7`；
+  `EraOptionsMatch` 比较该位，开关切换双向都会强制全量重建。
+- FFI `options_json` 接受 `initialsLyrics`（兼容 `initials_lyrics`），缺省 / 非 bool → false。
+- 查询侧：位关闭时 `InitialsBranch` 只查 `initials_meta_tok`（`initials_lyrics_tok` 不再参与）；
+  能力表新增 `initials_lyrics`，仅在 `Pinyin && InitialsLyrics` 时声明。
+- Dart：`search.index.initials_lyrics` 偏好 + 设置页「索引歌词首字母」，切换即 `reindex()`；
+  9 个 ARB 全量补齐，`flutter gen-l10n` + 设置搜索索引（286 → 287 项）已重生成。
+- **30k 实测**：默认关 live bytes **128.5 MiB / 4.39 KiB 每曲（0.34× 基线）**；打开后
+  回到 165.75 MB / 5.40 KiB（与 v14 完全一致）。
+- **查询质量**：同一 37 条集 NDCG@10 0.9850 → 0.9827，P@1 / MRR@10 保持 1.000；
+  **只有 `pinyin_initials`（`wan`）一题变化**，opt-in 重建后 eval 与基线逐项完全相同。
+- 迁移：v14 旧索引没有该位 → 按「关」处理（查询侧已收窄），不强制迁移重建；
+  打开设置时再触发全量重建。
+
+#### T3.9：首字母 bigram（2026-11-25）
+
+- **索引**：`Analyzer.InitialsToBigrams` 是唯一规则（相邻两字，`wanzg → wa an nz zg`）；
+  `AddCjkSegment` 同时产出「人可读整串」（诊断 / 高亮用）与 bigram 索引串。段间与字段间
+  插入边界 token `#`（占一个位置），短语邻接校验无法跨段 / 跨字段。拉丁 / 数字段不再进首字母列。
+- **查询**：`SearchQuery.InitialsExpression` 把每个 run 分解：2 字 → 单 bigram 词条，
+  ≥3 字 → bigram 短语，单字仍被 `MinInitialsBranchLength` 抑制；多 run 用 `AND`。
+  新增 `LatinInitialsBranch`——纯字母输入（`wan` / `wanzg`）显式走同一套 bigram 短语，
+  不再依赖「整串 token 恰好等于首字母串」的偶然路径；T3.4 的列收窄保持不变。
+- **版本 / 能力**：`AnalyzerVersion` 14 → **15**、`TokenizerVersion` 3 → **4**；
+  `initials_bigram` 仅在 `Pinyin && AnalyzerVersion ≥ 15` 时声明，不再谎报。
+- **30k 实测**：live bytes 134.78 → **135.37 MB（+0.44%）** / 4.41 KiB 每曲；
+  eval 总体与 T3.4 基线**逐项相同**（NDCG@10 0.9827 / P@1 1.000 / MRR@10 1.000），
+  仅 `pinyin_initials`（`wan`）的 found@50 9 → 8（首字母字段变长带来的 bm25 归一化，
+  不是召回缩小；bigram 短语在集合关系上是旧整串前缀的超集）。
+- **验收证据**：新增 `EndToEnd.InitialsBigramSearch`——标题 / 艺术家**中段**首字母命中、
+  整串命中、倒序 / 非相邻不命中、标题↔艺术家跨边界不命中、纯 ASCII 不产首字母。
+
+#### T3.11 第一步：DocStore v3 归一化列（2026-11-25）
+
+- **布局**：v3 在既有 raw `title/artist/album` 之后追加 `title_norm / artist_norm / album_norm`
+  （每列 `u32 offsets[N+1] + utf8 blob`）；raw 列原样保留（片段 / explain 仍读原文）。
+- **归一规则**：`Analyzer.NormalizeMetadata` = 既有 `Analyzer.Normalize`（NFKC → 去音标 →
+  异体 / 日文新字体 → 小写 → 繁简）+ 空白折叠为单个 ASCII 空格；null / 空白 → 空串。
+  只在 `IndexBuilder.MakeRecord` 一处生成（全量与增量共用）；`Merger` 直接拷贝旧段字节，
+  合并后逐字节稳定。
+- **版本**：`DocStoreWriter.Version 2 → 3`、`text_columns 3 → 6`；读取端**只接受 v3**，
+  v1/v2 抛「必须全量重建」，不再静默读成空列。`Manifest.CurrentMetaVersion 1 → 2`
+  作为重建杠杆（FFI 版本门禁返回 `VersionMismatch`，健康检查 `schemaVersion=2`）。
+- **读取 API**：`seg.Docs.NormSpans(doc)` → `DocNormSpans`（ref struct，三个
+  `ReadOnlySpan<byte>`，零分配，已用 `GC.GetAllocatedBytesForCurrentThread` 断言）。
+- **30k 实测**：live bytes 135.37 → **136.59 MB（+0.90%）** / 4.45 KiB 每曲（defrag 前磁盘是 2×）；
+  构建 29.1 s + 自动压缩 4.4 s；新增 32 项测试（归一矩阵 / 空值 / 合并 / 增量 /
+  v1-v2 拒绝 / 零分配）。回归 **PASS 3723 / FAIL 0**。
+
+#### T3.11 第二步：字面精确度 / 邻近度进入桶序（2026-11-25）
+
+- **精确度（第 4 键）**：`SearchExactness` 把查询归一形（`NormalizeMetadata` 后去空白）
+  与 DocStore v3 的 `title_norm / artist_norm / album_norm` **按字节、空白不敏感**比较：
+  `equal=0 < startsWith=1 < contains=2 < none=3`，三列取最优。CJK 走码点等价（UTF-8
+  前缀即码点前缀），拉丁天然按词边界。
+- **成本护栏**：只在**该步未截断命中数 ≤ `Cap = 2048`** 时读 DocStore；判定用未截断命中数
+  而非返回条数，翻页 / `limit` 不影响结论。宽命中步保持 exactness=none，不读 DocStore。
+- **邻近度（第 5 键）**：单 term = 0；Meta 步且表达式恰为一个多 token 短语 = `token 数 - 1`
+  （位置连续已由 `PhraseIter` 证明）；散落多 term 与歌词 / 混合 / 读音族 = `int.MaxValue`
+  （再扫一遍位置会破坏 T3.14 的成本模型，按 spec「算不出」处理）。
+- **解释与分页**：`explain.bucket` 现在填满 5 元（kind / coverage / field / exact / proximity），
+  `proximity` 未知时实体值映射为 `-1`（线格式未变）；`SearchPaging` 的 proximity 槽写入真实值，
+  keyset 翻页与新排序键一致。
+- **`positioned`**：现按「该步是否含位置短语」报告（散落 AND = false）。这与 spec「无位置字段
+  降级时才 false」略有出入——生产未启用免位置字段，故目前只影响诊断语义；T3.6 启用时必须
+  改为由 `PhraseIter.Positioned` 透传。
+- **质量实测**（30k / 5k，同一 37 条集）：
+  - 30k 逐项不变（NDCG@10 0.9827 / P@1 1.000 / P@10 0.9054）——该集已经没有可提升空间。
+  - **5k**：`narrow` 桶 P@1 **0.333 → 0.667**、MRR@10 **0.611 → 0.778**、NDCG@10 **0.710 → 0.833**；
+    整体 NDCG@10 **0.959 → 0.9643**、P@5 0.908 → 0.9135。`line_mid` 从 #2 升到 **#1**；
+    `line_tail` 仍是 #2（该行只命中歌词列，歌词族按 spec 不算精确度）。
+- **资源**：DocStore v3 体积 +0.90%（4.45 KiB/曲）；`rss_query` 56.7–59.0 MB；
+  延迟 5 次 p50 **8.6–12.8 ms**、p95 **26.7–33.5 ms**（机器 load 1–2；p50 贴近 10.57 门禁，
+  正式基线需在空闲机重跑）。
+- 回归 **PASS 3771 / FAIL 0**、Flutter **1235 通过**、`dart analyze lib` 0 issue。
+  另修 `search_version_mismatch_fallback_test` 的硬编码 `"metaVersion":1`（改为按前缀改写数字）。
+
+**收口（同日晚）**：复核扩到 `scope=all` 的 **Mixed** 主趟（此前只有 `scope=metadata` 吃到
+exactness），并把字段桶改成**真实命中列**：
+
+- `MayMatchMetadataLiteral` 只放行 `Meta` / `Mixed`（且非 `scope=lyrics`）；拼音 / 首字母 /
+  读音 / 跨语言 / 容错步的搜索文本是转写，字节比较无意义，不读 DocStore。
+- `RankBest` 回传命中列 → `FieldKind` 取 title < artist < album；三列都不命中时
+  `exact=none` 且保留 `Mixed → Lyrics`（spec「宁可把歌词命中排低」）。
+- `Evidence.ExactChecked` 让 `explain.field == resolvedField`；未复核步（宽命中 / 转写 / 歌词族）
+  才保留 `resolvedField` 诊断探针。
+- 实测：`query 晴天 --explain` 从 `field=lyrics / exact=none` 变为
+  `field=title / exact=equal`；宽命中步 `DebugDocReads == 0`，顺序与复核前逐条一致。
+- 质量：30k / 5k 的 37 条集**逐项不动**（30k 已饱和；5k 的 `line_tail` 是纯歌词行，按 spec 仍 none），
+  新增成本只落在 ≤cap 的混合步（`traditional` 0.49 → 1.01 ms）。
+- 延迟 5 批 p50 **8.03–8.74 ms** / p95 **26.76–33.56 ms**；RSS 56.7–59.0 MB。
+- 回归 **PASS 3802 / FAIL 0**、Flutter **1235 通过**。
+- **kind 分类（后续已补）**：见下节，生产计划现在能产出全部 7 档字面 / 拼音 kind。
+
 ### S4 — 跨语言与非核心能力收口
 
 | 任务 | 交付物 | 验收 |
@@ -2527,6 +2936,19 @@ rg -n "LIKE .*tracks|SELECT .* FROM tracks" app/lib
 | T4.2 | LRC 分层置信度 `layer_confidence`，细则见 §5.6 | 低置信层不参与 `scope=all`；`scope=lyrics` 仍可搜 |
 | T4.3 | 数据包 manifest + C#/Dart 同源校验 | 校验和不一致时拒绝启用并有明确提示 |
 | T4.4 | Dart 侧契约最终收敛（只剩请求 + 渲染） | `dart analyze` 干净；无搜索算法残留 |
+
+**S4 落地进度（2026-11-25）**
+
+| 任务 | 状态 | 交付 / 证据 |
+|---|---|---|
+| T4.2 | ✅ | `LrcReader.ScoreLayers`（0–8 分 / 阈值 / U+FFFD 硬降级）；DocStore **v4** 新增 `layer_conf`（每层 2 bit）+ 来源位；`Manifest.CurrentMetaVersion 3` / `TokenizerVersion 5`；查询期 `LyricsMask` 按字段掩码（`scope=all` 低置信不参与、`scope=lyrics` 仍可搜；跨语言步 HighOnly）；`explain.layer/confidence`、`trace.confidence[]`、health `lyricsConfidence{high,medium,low,none}`。测试 `LayerConfidenceTests`（45 项）。回归 **PASS 3921 / FAIL 0**。 |
+| T4.3 | ✅ | `data/manifest.json`（sha256/bytes/license/unicode 版本，确定性重生成）；`dataPackId` 写入 Manifest 锚并参与重建判定；缺失基础表拒绝构建，`def_*`/`ja_readings`/`kana_romaji`/`lexicon_cross` 缺失按能力降级；`verify --data` 全量校验；health `dataPack` 明细；Dart `data_pack.g.dart` 同源常量 + 设置页可操作提示。测试 `DataPackTests` + `search_data_pack_check_test.dart`。 |
+| T4.1 | ✅ | `data/lexicon_cross.tsv`（16 组双向、CC0-1.0、自建 seed 待人工复核）+ `LexiconCross` 加载期准入校验（6 列 / weight 0.50–1.00 / 来源与许可证必填 / 单字源禁止 / 每源 ≤4 目标 / 控制字符）+ 目标串按索引同构切成 token 短语；进入数据包 manifest（8 文件 → 新 pack id）。测试 `LexiconCrossTests`（12 项）。回归 **PASS 3978 / FAIL 0**。 |
+| T4.4 | ✅ | 审计确认 Dart 侧**无搜索算法**：无分词 / 排序 / bm25 / 编辑距离 / 跨语言展开，`lib/services/search/` 只剩 FFI 组装、请求 JSON、响应映射、pass 计数与日志；`library_search_rank.dart` 只做「是否走索引 / 命中 id 列表」编排。保留的 `TracksDb` 三列 `LIKE` 是**索引关闭时的既有列表过滤**（早于索引功能），不是索引搜索算法；注释里的 FTS5 / `search.db` 措辞已统一为 EraStore。`dart analyze lib` 0 issue、Flutter **1243 通过**。 |
+
+> T4.2 的规格修订：内嵌原文 +3 基线（见 §5.6.2 注），避免无 `.lrc` 曲库整体判低。
+
+> **S4 验收口径**：跨语言负例（`LexiconCrossTests` 的未登录词 / 单字不展开）通过；Dart 侧搜索算法代码清零（只剩 FFI 组装与渲染）；`lexicon_cross.tsv` 已登记来源 / 许可证（CC0-1.0，自建 seed）并在 `acknowledgements.md`、`THIRD-PARTY-LICENSES.md` 留痕。**待人工完成**：§5.5.4 要求的 ≥10% 抽样复核与第二名评审签字（当前标注为 seed）。
 
 验收：跨语言负例通过；Dart 侧搜索算法代码清零（只剩 FFI 组装与渲染）；
 许可证登记进 `docs/acknowledgements.md` 与 `THIRD-PARTY-NOTICES.md`。
@@ -2899,12 +3321,19 @@ app/core/indexer/data/
 | 原文 ≥5 行 | +1 |
 | 译文与原文时间戳对齐 ≥80% | +2 |
 | 侧车文件（显式命名） | +1 |
+| **内嵌原文（用户自带主来源）基线** | **+3**（2026-11-25 增补） |
 | 用户编辑 | +2 |
 | 重复时间戳 / 乱序严重 | −1 |
 | 替换字符 `U+FFFD` >1% | −2 |
 | 单行 >500 字符（疑似正文） | −1 |
 
 阈值：**≥5 高**、**3–4 中**、**≤2 低**。
+
+> **+3 基线的原因**：原表只奖励「有时间轴 / 显式侧车」，而 `tracks.lyrics`（tags 里的纯文本歌词）
+> 通常没有时间轴，几乎所有无 `.lrc` 的曲库都会被判为低置信、整体排除出 `scope=all`——
+> 这与 §5.6.3「低置信只用于可疑层」的目标相反。实测（30k，`--index-lrc` 关闭）原本
+> **30000 首全 low**；加基线后恢复为「中」，eval 也回到基线（NDCG 0.9827）。
+> 损坏（U+FFFD）、乱序、超长行等强负信号仍会把层压回低置信。
 
 #### 5.6.3 置信度如何影响检索
 
@@ -3250,6 +3679,14 @@ dotnet run --project app/core/indexer -- replay run \
 > 附带约束：全量构建耗时不得比现状差 10% 以上（行/块去重的哈希成本应可忽略）；
 > 若明显变慢，说明去重实现有问题，先修实现而不是放宽门禁。
 
+> **2026-11-24 实测（30k，生产路径）**：`bytes_per_track` 0.60× / `open_ms` 3.94 ms /
+> `first_query_ms` 1.39 ms / NativeAOT `rss_peak_build` 142 MB 通过；
+> `query_p50` 7.7–9.6 ms（5 次，0.26–0.32×）、`query_p95` 28.5–32.3 ms（5 次，0.41–0.46×）通过；
+> `rss_query` 56.5–58.7 MB（匿名，5k / 30k / 48.7k）通过。
+> **七项门禁 7/7 通过（空闲机器；有并发负载时 p50/p95 会漂到目标边缘），
+> S3 可进入合并评审**（T3.15 真机待办）。逐项数据与复现命令见
+> `docs/local-search-indexer-t314-gate.md`。
+
 **能力基线（先于数字）**：体积 / 延迟门禁一律按 `lyrics_pinyin=on` 且**音节级召回完整**计算；
 "关掉歌词拼音"不是达标手段，也不作为默认值变更的借口。若用户主动关闭，只影响自身体验，
 不影响门禁口径。
@@ -3553,7 +3990,7 @@ indexBuilding ──构建完成回调──▶ 若查询非空，静默重跑�
 | 跨语言步 | 单字禁止；仅策展候选；最低桶 | 审计 §14 + 本文 S4 |
 | 候选预算 | literal 2k / drop 1k / phon 1k / reading 500 / cross 300 / typo 300 | 回放校准 |
 | `maxQueryFrequency` | 拉丁/拼音词 `df/N > 1%` 不生成前缀/读音/容错；CJK bigram 一律不做容错 | Lucene 0.01；CJK bigram 的 df 分布更平，1% 会几乎全禁，故直接按脚本分治 |
-| 合并 | 死行 ≥20% 或段数 ≥8；单次时间预算 2s | §3.3.0.7；可中断 |
+| 合并 | 死行 ≥20% 或段数 ≥24；单次时间预算 2s | §3.3.0.7；可中断 |
 | 歌词去重 | 行级（归一后相等） | §8.1 V1；目标去重率 ≥20% |
 | 歌词 unigram | 不建（只 bigram） | §8.1 V3 |
 | 歌词护栏 | 4096 唯一行 / 128 KB **每层**（去重后计数；正常歌词不截断） | §8.1 V6；阈值由真实库 p99.9 校准 |
@@ -3567,7 +4004,7 @@ indexBuilding ──构建完成回调──▶ 若查询非空，静默重跑�
 | 写锁等待 | 5000 ms（读不需要锁） | §3.8.7 |
 | EraStore 倒排块 | 128 doc/块 | §3.3.0.3；块内 Δvarint |
 | EraStore 内存段 | 64 MB 或 16k doc 刷盘 | §3.3.0.6 |
-| EraStore 合并 | 死行 ≥20% 或段数 ≥8；单次 2s | §3.3.0.7 |
+| EraStore 合并 | 死行 ≥20% 或段数 ≥24；单次 2s | §3.3.0.7 |
 | EraStore 词典块 | 每 64 条一个块索引 | §3.3.0.2 |
 | EraStore 垃圾回收 | 垃圾 >30% 触发全量重建 | §3.3.0.7；单文件不原地删 |
 
@@ -3609,13 +4046,14 @@ Dart 与 C# 是同一个安装包里的两层，没有第三方调用方；因�
 > - `era_search_open` 的 `index_dir` 按单文件 `search.db` 路径处理（S1 索引是单文件）；
 > - `era_search_fallback`、`era_search_start` / `wait` / `free` 任务句柄未实现
 >   （S1 构建是同步 `era_index_run` + 全局 `era_index_cancel`，任务 API 留 S3）；
-> - `cursor` / `next` / `restart` 分页、`total=capped|exact`、`explain` / `highlight` /
->   `snippet` 产出未实现（请求只解析、不报错，归 T2.7 / T2.8）；
+> - `cursor` / `next` / `restart` 分页与 `total=capped|exact` 未实现（请求只解析、不报错）；
+>   `explain` / `trace`（前 50 条）、`highlight`（前 50 条，T2.7）与 `snippet`（前 10 条，T2.8）
+>   已在 S2 落地；
 > - 不同句柄并发与 per-handle 缓存未实现：S1 仍共享 `SearchSession` 进程级缓存，
 >   `close` 会丢弃共享缓存（S3 句柄化）；
 > - 成功响应暂留 `passes`（六趟计数）作为 **S1 过渡诊断字段**，供 Dart 查询日志使用；
 >   S2.5 由 `explain` / `trace` 取代后删除；
-> - 错误码 4（Busy）已定义但 S1 不会返回（写任务留 S3）。
+> - 错误码 4（Busy）是协议预留：查询期无写任务，当前实现不返回该码。
 
 ### D.1 ABI 与所有权
 
@@ -3727,9 +4165,11 @@ int32_t era_search_health(const char* index_dir, char** out_json);
 ```jsonc
 {
   "version": 1,
-  "kind": "exact",              // exact|phrase|prefix|partial|pinyin|initials|reading|crossLingual|typo
-  "field": "title",             // title|artist|album|filename|lyrics|lyricsTr|lyricsRom
-  "fieldId": "0x01",            // 实际字段族
+  "kind": "exact",              // exact|phrase|prefix|partial|pinyinExact|pinyinPhrase|initials|reading|crossLingual|typo
+  "field": "title",             // title|artist|album|filename|lyrics|lyricsTr|lyricsRom（排序实际使用的字段）
+  "fieldId": "0x01",            // 排序字段 id（§3.3.1）
+  "resolvedField": "title",     // S2 诊断：explain 期逐列探测的真实字段（不参与排序）
+  "resolvedFieldId": "0x01",
   "matched": 2,                 // 命中的查询 term 数
   "total": 2,                   // 查询 term 总数
   "coverage": 1.0,              // matched / total（量化后）
@@ -3739,13 +4179,18 @@ int32_t era_search_health(const char* index_dir, char** out_json);
   "bucket": [0, 1, 0, 0, 0],    // 前五个排序键：kind / coverage / field / exact / proximity
   "bm25": -12.3,                // 第 6 键，仅桶内
   "lexicalSources": [           // 该候选被哪些 step 召回（诊断）
-    { "step": 0, "kind": "exact", "field": "title", "matched": 2, "positioned": true }
+    { "step": "lexical", "kind": "exact", "field": "title", "matched": 2, "positioned": true }
   ]
 }
 ```
 
 - `bucket` 只放前五键，不放 `bm25` 与 `docId`，避免浮点与内部 id 进 UI 契约；
-- `positioned=false` 表示该步没有位置信息（短语被降级为 AND），不是错误。
+- `positioned=false` 表示该步没有位置信息（短语被降级为 AND），不是错误；
+- `kind` 的 wire 名在 S2 定稿为 10 档 lowerCamel（`pinyinExact` / `pinyinPhrase` 不合并成
+  `pinyin`，否则丢掉读音趟的精确 / 短语档）；
+- S2 额外输出 `resolvedField` / `resolvedFieldId`（v7 无法在结果行上区分字段族，见 S2
+  「已知近似」）；`lexicalSources[].step` 在 S2 是趟次名（如 `lexical` / `dropTokens`），
+  S3 计划步骤编号稳定后改为整数下标。
 
 #### D.3.2 高亮（`highlight=true`）
 
@@ -3787,6 +4232,11 @@ int32_t era_search_health(const char* index_dir, char** out_json);
 `reason` 取值固定：`kind_dominated` / `budget` / `df_gate` / `capability`。
 `steps[].state` 取值：`ran` / `skipped` / `degraded`（无位置降级）。
 `truncated[].what` 取值：`prefix_expansions` / `df_estimates` / `typo_variants`。
+
+> **S2 过渡**：`StepDominated` 尚未启用，步骤门仍是旧的 `MinExact` 短路。因此 S2 的
+> `trace.skipped[].reason` 额外出现 `min_exact`（主趟有命中）、`fuzzy_off`（fuzzy=false）、
+> `empty_expression`（本步表达式为空）；`est` 字段缺失（v7 无 df 快照），
+> `truncated` 恒为空。S2.5 启用 `StepDominated` 后回到上面的固定取值。
 
 ### D.4 错误
 
@@ -4027,8 +4477,8 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 | ADR-11 | 体积只接受**无损优化**：去重、编码、压缩、合并；V2（歌词读音无位置）非默认且需用户确认 | 已定 | 关拼音 / 只索引副歌 / 词级合并：都是丢能力或明显降召回 |
 | ADR-12 | 模糊词表直接扫词典前缀区间（**无额外表**） | 已定 | 复制一份词表：启动慢、常驻内存大，与 §8 冲突 |
 | ADR-13 | **发布只带一个后端**（EraStore），无运行时切换、无双写、无引擎配置项 | **已定（v0.22）** | 双后端：两套故障模型、两倍测试面，且违反"不回退" |
-| ADR-8 | 首字母改 bigram（不出 unigram） | 待 S3 实测 | 整段 token：部分首字母（`xz`）永远搜不到 |
-| ADR-9 | 段间插入 `seg_sep` 哨兵 | 待 S3 实测 | 不插：跨段短语有极小概率假命中，难排查 |
+| ADR-8 | 首字母改 bigram（不出 unigram） | ✅ 已实施（S3 / T3.9，analyzer v15） | 整段 token：部分首字母（`xz`）永远搜不到 |
+| ADR-9 | 段间插入 `seg_sep` 哨兵 | ✅ 已实施（T3.9 用 `#` 边界 token） | 不插：跨段短语有极小概率假命中，难排查 |
 | ADR-10 | 分页只用 keyset（不保留 offset） | 待 S2 落地 | 纯 offset：重建 / 增量后翻页漂移；内部接口无需兼容 |
 
 ## 附录 G：数据、许可证与隐私
@@ -4059,16 +4509,18 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
       **quick 3k 已跑**（`metrics.json` / `qbench_A` / `qbench_B` / `qeval_A`，commit `94ae5bdf`）；
       正式 30k / full 档与 50k 真实子集未跑。
 - [ ] 负例集 N1–N20 全部写成可执行断言（当前实现允许部分失败，作为对照基线）。
-      **对照基线已落地**（`tests/NegativeBaselineTests.cs`）：12 绿 / N12、N15 known-gap /
-      N8、N10、N11、N18–N20 blocked（等 plan、explain 或集成层）；
-      S1 收尾后 N21、N24 已转绿，N22、N23 仍 blocked（留给 S2 的正式 lyrics 判定）。
+      **对照基线已落地**（`tests/NegativeBaselineTests.cs`）：2026-11-25 现状为
+      N1–N9 / N12–N17 / N21–N24 全绿、N15 已从 known-gap 转绿；
+      N19 / N20 分别由 `app/test/search_version_mismatch_fallback_test.dart`
+      （FFI / Dart，含 C# 侧码 3）与 `SearchConcurrencyTests`（构建期读旧快照）覆盖；
+      仍 blocked 的只有 N10（per-track 语言画像）、N11（单字歌词语义）、N18（计划期 df 预算）。
 - [x] golden vectors 目录与加载器就位（C# 全量跑；Dart 只做响应 schema 校验）。
-      **analyze / query / plan 已接线**（`plan/*.jsonl` 45 条，2026-11-24）；
-      Rank 向量等 S2 的 `SearchRanker`；Dart 侧 v2 握手与响应 schema 校验已随 T1.8 落地。
+      **analyze / query / plan / rank / scheme 已接线**（plan 45 条、rank 30 条、scheme 20 条，2026-11-24）；
+      Dart 侧 v2 握手与响应 schema 校验已随 T1.8 落地。
 - [ ] `rev` 的 canonical 格式冻结（C# 实现 + 向量，格式变更走 `rev2`）。
       **仍未冻结**（EraStore Manifest 已有字段，向量未覆盖）。
 - [ ] 开关命名冻结：`scheme`、`explain`（**不存在** `engine` / `ranking` / `index.schema` 回退开关）。
-      **SearchSpec v1 已定名**；代码侧 `scheme` 注册表归 S2。
+      **SearchSpec v1 已定名**；`scheme` 注册表与请求回显已随 S2 / T2.4 落地。
 - [ ] 清理演练一次：搜索代码里搜不到旧符号、旧索引格式、旧 ranker 的任何引用。
       **部分完成**（S1 T1.7）：FFI 层 `indexer_*` 符号与旧请求字段已零残留；
       旧索引格式 / 旧 ranker 的删除清单归 S3。
@@ -4128,6 +4580,11 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 | v0.26 | 2026-11-24 | S0 收口：`replay sample`（真实日志键兼容 / 固定 14 / 频次加权确定性抽样 / 日志不足时从 `library.db` 派生补齐）、`lyrics stats`（三层行数分位 / 去重率 / V6 护栏、旧库降级、隐私输出）、N1–N17 负例对照基线（N12/N15 known-gap，N8/N10/N11/N18–N24 blocked）、qbench quick 3k 基线与 400 首回放/歌词统计实测，新增 `docs/search-spec-v1.md` 与 `tests/vectors/README.md`；Plan/Rank 向量留待 S1/S2 类型就位，scheme 注册表归 S2，正式 30k/50k 基线与真实库歌词分布仍未做 |
 | v0.27 | 2026-11-24 | S1 核心 T1.1–T1.6：`SearchPolicy` / `SearchPlan` / `SearchPlanCompiler` / PlanExecutor 落地，删除旧六趟直连；新增 `replay compare`（完整 ids 逐条比较）；三语料对拍 changed=0（400/57、3k/214、400 派生/64）；Plan 向量 40 条接线；T1.7（ABI v2）/ T1.8（Dart FFI v2）与 `scope=lyrics` / `typo2` 仍待 S1 收尾 |
 | v0.28 | 2026-11-24 | S1 收尾 T1.7 / T1.8 + `scope=lyrics`：`era_search_*` 句柄 ABI v2（`api:2` 请求 / 响应 / 错误 JSON、`era_index_run` 过渡入口、`indexer_*` 零残留）；Dart 同包升级（启动握手、句柄式查询、删除 `fuzzy`/`minExact`/`candidateCap`/`offset`）；歌词 scope 列裁剪与单 CJK 字空计划（N21/N24 转绿）、缓存键三态；Plan 向量 45 条；C# PASS 2769 / FAIL 0（SearchApiTests 82 项），三语料对拍仍 changed=0；`passes` 暂留为 S1 过渡诊断字段，附录 D 记录未实现的 v2 项（fallback、任务句柄、游标、explain/highlight/snippet、per-handle 并发） |
+| v0.29 | 2026-11-24 | S2 桶序与方案注册表（T2.1 / T2.2 / T2.4，T2.3 / T2.5 部分）：新增 `SearchRanker`（6 键比较器、证据合并取最高 kind、唯一排序入口）与 `SearchScheme`（fast/default/recall/minimal、能力协商、环检测、`s1-compat@1` 退役）；`SearchSession` 改为收集证据后统一排序，offset 只在最终切片；请求 `scheme` 解析 / 回显与缓存键接线；新增 rank 向量 30 条、scheme 向量 20 条；真实库回放 changed=0 / identical=true；C# PASS 2977 / FAIL 0，CLI 与 FFI 0 警告 0 错误；记录 S2 的 v7 近似（field 按族映射、exactness 仅读音趟、fast/minimal 共用 lexical、recall 暂同 default、StepDominated 未启用） |
+| v0.30 | 2026-11-24 | S2 T2.6：`recall@1` 启用 typo2 —— `FuzzyVocabulary.WithinTwo`（有界 OSA ≤2）与 `DistanceTwoCandidates`（首字符区间、严格距离 2、词长 ≥7、扫描上限 20000）、`SearchQuery.CompileTypo2`（词表延迟生成，空词表返回 null）、新步骤 `typo2@1`（Gate 仅 RequiresFuzzy，不参与 MinExact 短路，计数并入 fuzzy）；CLI `query --scheme`；N22/N23 由 BLOCKED 转绿；真实库 `pikasonax` → default@1 0 条 / recall@1 3 条（pass=typo2）；default@1 回放仍 changed=0 / identical=true；C# PASS 2986 / FAIL 0 / BLOCKED 6 |
+| v0.31 | 2026-11-24 | S2 explain / trace（T2.7 部分，解锁 T2.3 / T2.5）：新增 `SearchExplain.cs`（前 50 条 `explain` + `trace`，wire kind 定稿 10 档 lowerCamel）；`FtsStore.MatchesDocument` 按 kind 用步骤词元逐列探测真实字段（`resolvedField`，只读派生）；请求 / CLI `--explain` / FFI 响应接线，缓存键区分 explain；N8 由 BLOCKED 转绿（Cover 修饰不进 matched、真实字段 title），`SearchExplainTests` 覆盖只读一致性 / trace / exact / partial / typo；N10 / N11 / N18 保留 BLOCKED 并写明前置；T2.3 收口（15 条 changed=0 / identical=true）；C# PASS 3003 / FAIL 0 / KNOWN-GAP 2 / BLOCKED 5，CLI 与 FFI 0 警告 0 错误 |
+| v0.32 | 2026-11-24 | S2.5 T2.9 陈旧曲目过滤：`era_search_open` 的 `options_json.libraryDb` 透传到查询层；`SearchSession` 在返回时按 `library.db.tracks` 分批 `IN` 回查，缓存保留原始 top-k、每次派生过滤（缓存命中也不吐幽灵），库不可读失败开放并记 warn；CLI `query --library`、Dart `SearchService` 传源曲库路径；N12 转绿（含缓存路径），C# PASS 3005 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5，`dart analyze lib` 0 issue，search 相关 Flutter 测试全绿 |
+| v0.33 | 2026-11-24 | S2.5 T2.8 歌词片段下沉：新增 `SearchSnippet.cs`，`snippet=true` 时前 10 条返回 `{field,text,ranges,truncated}`；查询期只读 `library.db`（`busy_timeout=1000`）合成原文 / 译文 / 音译三层并按字面命中截取 ≤512 UTF-16 窗口，库缺失 / 锁冲突失败开放为 null；片段随结果缓存（缓存键含 `snippet`），`WithoutTracks` 同步过滤；CLI `query --snippet`、FFI / `IndexerJson` 输出接线；新增 `SearchSnippetTests` + `SearchApiTests` JSON 形状；C# PASS 3020 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5 |
 
 ---
 

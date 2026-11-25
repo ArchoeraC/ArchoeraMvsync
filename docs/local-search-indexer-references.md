@@ -1,7 +1,8 @@
 # 本地曲库索引器：外部实现参照调研
 
-> 状态：**调研完成（2026-11-16），未实施**——结论供 §12「字面零命中仍返回大量结果」
-> 与 §11「单字查询过宽」的修复选型参考。
+> 状态：**调研完成（2026-11-16）；结论已在 S2/S3 部分落地**（kind 桶序、单字/短查询门控、
+> 字面精确度与邻近度、LRC 分层置信度）。文中 FTS5 / 旧实现仅作为**外部参照**，
+> 本仓库现已不使用 FTS5（T3.13b）。
 > 关联：[local-search-recall-precision-audit.md](local-search-recall-precision-audit.md)（问题复现与量化）、
 > [local-search-index-plan.md](local-search-index-plan.md)（架构与验收基线）、
 > [licensing.md](licensing.md)、[acknowledgements.md](acknowledgements.md)。

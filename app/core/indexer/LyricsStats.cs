@@ -22,22 +22,29 @@ namespace Archoera.Indexer;
 ///   <item>内嵌 <c>tracks.lyrics</c> → <see cref="LrcReader.SplitText"/>；</item>
 ///   <item>侧车 <c>lyrics_lrc</c> / <c>lyrics_lrc_trans</c> / <c>lyrics_lrc_romaji</c>
 ///         → <see cref="LrcReader.FromRawTexts"/>（旧库无侧车列 / <c>--no-lrc</c> 时为空层）；</item>
-///   <item>每层最终文本 = <see cref="IndexerEngine.JoinLayers"/>（归一后相同只取一份）。</item>
+///   <item>每层最终文本 = <see cref="Archoera.Lyrics.LrcReader.ScoreLayers"/>（T4.2：
+///         同层按置信度取一份、不拼接；与索引器同一函数）。</item>
 /// </list>
 ///
-/// 统计项（逐曲逐层）：原始行数（按 <c>\n</c> 切、trim 后非空）、去重行数（trim 后 Ordinal 去重）、
-/// UTF-8 字节数。分位数**只在有该层的曲目上**按 nearest-rank 计算（0 值不参与，避免把 p50 压成 0）。
+/// 统计项（逐曲逐层）：原始行数（按 <c>\n</c> 切、trim 后非空）、**归一化键去重**后的唯一行数、
+/// 原始 / 去重后 UTF-8 字节数。分位数**只在有该层的曲目上**按 nearest-rank 计算
+/// （0 值不参与，避免把 p50 压成 0）。
+///
+/// <para>去重键与护栏口径**直接调用 <see cref="LyricsPreprocess"/>**（与索引路径同源）：
+/// 键 = <see cref="Analyzer.Normalize"/>（大小写 / 全半角 / 异体 / 繁简收敛），护栏按
+/// **去重后**的行数 / 字节数判定。故 <c>rawTotal - uniqueTotal</c> 与
+/// <c>guardTriggers</c> 和真实索引的压缩 / 截断一一对应。</para>
 ///
 /// stdout：一条简短汇总 JSON（含 <c>--out</c> 路径）；stderr：仅错误与告警。
 /// exit code：0=成功，1=参数 / 运行错误。输出 JSON 只写库文件名，**不含绝对路径**（隐私）。
 /// </summary>
 internal static class LyricsStats
 {
-    /// <summary>V6 护栏：每层去重行数上限（§8.1 V6）。</summary>
-    private const int GuardLineLimit = 4096;
+    /// <summary>V6 护栏：每层去重行数上限（§8.1 V6；与索引路径同源）。</summary>
+    private const int GuardLineLimit = LyricsPreprocess.MaxUniqueLines;
 
-    /// <summary>V6 护栏：每层 UTF-8 字节上限（§8.1 V6）。</summary>
-    private const int GuardByteLimit = 131072;
+    /// <summary>V6 护栏：每层去重后 UTF-8 字节上限（§8.1 V6；与索引路径同源）。</summary>
+    private const int GuardByteLimit = LyricsPreprocess.MaxUtf8Bytes;
 
     private const string Usage = """
         用法: indexer lyrics stats --library <library.db> [--out <json>] [--no-lrc]
@@ -175,6 +182,7 @@ internal static class LyricsStats
         private readonly List<int> _lineSamples = new();
         private readonly List<int> _uniqueSamples = new();
         private readonly List<int> _byteSamples = new();
+        private readonly List<int> _dedupedByteSamples = new();
 
         /// <summary>该层非空的曲目数（分位数 / emptyRatio 的分母）。</summary>
         public int TracksWithLayer { get; private set; }
@@ -182,13 +190,13 @@ internal static class LyricsStats
         /// <summary>原始行数总和（含重复行）。</summary>
         public long RawTotal { get; private set; }
 
-        /// <summary>去重后行数总和。</summary>
+        /// <summary>归一化键去重后的行数总和。</summary>
         public long UniqueTotal { get; private set; }
 
-        /// <summary>去重行数超护栏的曲目数。</summary>
+        /// <summary>去重后行数超护栏的曲目数。</summary>
         public int GuardLines { get; private set; }
 
-        /// <summary>UTF-8 字节超护栏的曲目数。</summary>
+        /// <summary>去重后 UTF-8 字节超护栏的曲目数。</summary>
         public int GuardBytes { get; private set; }
 
         /// <summary>任一项超护栏的曲目数。</summary>
@@ -197,24 +205,28 @@ internal static class LyricsStats
         public Distribution Lines => Distribution.Of(_lineSamples);
         public Distribution Unique => Distribution.Of(_uniqueSamples);
         public Distribution Bytes => Distribution.Of(_byteSamples);
+        public Distribution DedupedBytes => Distribution.Of(_dedupedByteSamples);
 
         /// <summary>累加一首曲目的一层最终文本；返回该曲该层是否触发护栏（供 combined 去重计数）。</summary>
         public (bool Lines, bool Bytes) Add(string text)
         {
             var measurement = Measure(text);
-            RawTotal += measurement.Raw;
-            UniqueTotal += measurement.Unique;
+            var layer = measurement.Layer;
+            RawTotal += layer.RawLines;
+            UniqueTotal += layer.UniqueLines;
 
             // 空层（无歌词 / 只有空白）不进入分位样本，避免 0 把 p50 压成 0。
-            if (measurement.Raw == 0) return (false, false);
+            if (layer.RawLines == 0) return (false, false);
 
             TracksWithLayer++;
-            _lineSamples.Add(measurement.Raw);
-            _uniqueSamples.Add(measurement.Unique);
-            _byteSamples.Add(measurement.Bytes);
+            _lineSamples.Add(layer.RawLines);
+            _uniqueSamples.Add(layer.UniqueLines);
+            _byteSamples.Add(measurement.RawBytes);
+            _dedupedByteSamples.Add(layer.DedupedBytes);
 
-            var lineHit = measurement.Unique > GuardLineLimit;
-            var byteHit = measurement.Bytes > GuardByteLimit;
+            // 护栏口径 = LyricsPreprocess（去重后判行数 / 字节），与索引路径逐字一致。
+            var lineHit = layer.TruncatedByLines;
+            var byteHit = layer.TruncatedByBytes;
             if (lineHit) GuardLines++;
             if (byteHit) GuardBytes++;
             if (lineHit || byteHit) GuardAny++;
@@ -240,7 +252,7 @@ internal static class LyricsStats
     /// </summary>
     private static StatsCounters Count(string libraryPath, bool includeSidecar, out bool lrcColumns)
     {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(libraryPath, readOnly: true));
+        using var conn = new SqliteConnection(LibraryDb.ConnectionString(libraryPath, readOnly: true));
         conn.Open();
 
         // 三列全在才算「新库」：缺任意一列即按旧库口径（只有 tracks.lyrics）。
@@ -262,27 +274,26 @@ internal static class LyricsStats
         while (reader.Read())
         {
             var lyrics = reader.IsDBNull(0) ? "" : reader.GetString(0);
-            var embedded = LrcReader.SplitText(lyrics);
-
-            LrcReader.LrcLayers sidecar = LrcReader.LrcLayers.Empty;
+            var lrc = "";
+            var trans = "";
+            var romaji = "";
             if (readSidecar)
             {
-                var lrc = reader.IsDBNull(1) ? "" : reader.GetString(1);
-                var trans = reader.IsDBNull(2) ? "" : reader.GetString(2);
-                var romaji = reader.IsDBNull(3) ? "" : reader.GetString(3);
-                // 与 IndexerEngine.BuildTokens 一致：三列皆空才算「无侧车」，非空层的空串传 null。
-                if (lrc.Length > 0 || trans.Length > 0 || romaji.Length > 0)
-                {
-                    sidecar = LrcReader.FromRawTexts(
-                        lrc,
-                        trans.Length > 0 ? trans : null,
-                        romaji.Length > 0 ? romaji : null);
-                }
+                lrc = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                trans = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                romaji = reader.IsDBNull(3) ? "" : reader.GetString(3);
             }
 
-            var original = IndexerEngine.JoinLayers(embedded.Original, sidecar.Original);
-            var translation = IndexerEngine.JoinLayers(embedded.Translation, sidecar.Translation);
-            var romanized = IndexerEngine.JoinLayers(embedded.Romaji, sidecar.Romaji);
+            // 与 IndexerEngine.BuildTokens 同源（T4.2）：分层 + 置信度选层后取每层最终文本。
+            var scored = LrcReader.ScoreLayers(
+                lyrics,
+                readSidecar ? lrc : null,
+                readSidecar && trans.Length > 0 ? trans : null,
+                readSidecar && romaji.Length > 0 ? romaji : null);
+
+            var original = scored.Original.Text;
+            var translation = scored.Translation.Text;
+            var romanized = scored.Romaji.Text;
 
             var (originalLines, originalBytes) = counters.Original.Add(original);
             var (translationLines, translationBytes) = counters.Translation.Add(translation);
@@ -322,21 +333,15 @@ internal static class LyricsStats
             : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 
-    /// <summary>行数 / 字节测量：按 <c>\n</c> 切、trim 后非空计原始行；trim 后 Ordinal 去重计唯一行。</summary>
-    private static (int Raw, int Unique, int Bytes) Measure(string text)
+    /// <summary>
+    /// 行数 / 字节测量：直接复用 <see cref="LyricsPreprocess"/>（trim / 丢空行 → 归一化键去重
+    /// → V6 护栏），故 <c>Unique</c> 与 <c>Truncated*</c> 和索引路径逐字一致。
+    /// <c>RawBytes</c> 保留「去重前整层 UTF-8 字节」作为描述性分布；护栏用的是去重后字节。
+    /// </summary>
+    private static (LyricLayerText Layer, int RawBytes) Measure(string text)
     {
-        if (text.Length == 0) return (0, 0, 0);
-
-        var unique = new HashSet<string>(StringComparer.Ordinal);
-        var raw = 0;
-        foreach (var line in text.Split('\n'))
-        {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0) continue;
-            raw++;
-            unique.Add(trimmed);
-        }
-        return (raw, unique.Count, Encoding.UTF8.GetByteCount(text));
+        if (text.Length == 0) return (new LyricLayerText { Text = "" }, 0);
+        return (LyricsPreprocess.Apply(text), Encoding.UTF8.GetByteCount(text));
     }
 
     /* ------------------------------------------------------------------ */
@@ -382,7 +387,9 @@ internal static class LyricsStats
 
         WriteDistribution(w, "lines", layer.Lines);
         WriteDistribution(w, "uniqueLines", layer.Unique);
+        // bytes = 去重前整层字节（描述性）；dedupedBytes = 护栏实际判定的去重后字节。
         WriteDistribution(w, "bytes", layer.Bytes);
+        WriteDistribution(w, "dedupedBytes", layer.DedupedBytes);
 
         w.WriteNumber("rawTotal", layer.RawTotal);
         w.WriteNumber("uniqueTotal", layer.UniqueTotal);

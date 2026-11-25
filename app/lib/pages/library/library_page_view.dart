@@ -14,25 +14,11 @@ extension _LibraryPageView on _LibraryPageState {
     final scheme = Theme.of(context).colorScheme;
     final l10n = context.l10n;
 
-    // 搜索结果高亮：仅在「总开关开启 + 查询非空」时构造（关闭态 / 非搜索态不
-    // 触碰 SearchService、零成本、外观不变）；查询不变时复用记忆化器，避免每次
-    // rebuild 重建缓存并让行内命中缓存（见 search_highlight.dart）。
-    final SearchHighlighter? highlighter;
-    if (SearchService.instance.enabled && state.searchQuery.trim().isNotEmpty) {
-      final existing = _highlighter;
-      if (existing == null || existing.query != state.searchQuery) {
-        // 拼音 / 首字母命中补充高亮：分析器经 SearchService 转发（未就绪返回
-        // null → 仅字面高亮，零成本）；查询不变时复用记忆化器。
-        _highlighter = SearchHighlighter(
-          state.searchQuery,
-          analyzer: SearchService.instance.analyze,
-        );
-      }
-      highlighter = _highlighter;
-    } else {
-      _highlighter = null;
-      highlighter = null;
-    }
+    // 搜索结果高亮 / 歌词片段：分页器在索引排行路径下用 C# `era_search_decorate`
+    // 按页产出（关闭态 / 非搜索态为空，不额外调用、外观不变）。
+    final searchActive = state.searchIndexActive &&
+        SearchService.instance.enabled &&
+        state.searchQuery.trim().isNotEmpty;
 
     return Scaffold(
       body: Column(
@@ -98,12 +84,14 @@ extension _LibraryPageView on _LibraryPageState {
                   onPlay: _play,
                   onContextMenu: _onTrackMenu,
                   onBatchEditMetadata: _batchEditMetadata,
-                  highlightOf: highlighter?.call,
-                  // 歌词命中片段：仅搜索态（highlighter 非空）透传查表回调；关闭态 /
-                  // 非搜索态传 null，行外观与现状逐像素一致（零成本）。
-                  lyricSnippetOf: highlighter == null
-                      ? null
-                      : (t) => state.lyricSnippets[t.id],
+                  highlightOf: searchActive
+                      ? (t) => state.searchHighlights[t.id]
+                      : null,
+                  // 歌词命中片段：仅搜索态透传查表回调；关闭态 / 非搜索态传 null，
+                  // 行外观与现状逐像素一致（零成本）。
+                  lyricSnippetOf: searchActive
+                      ? (t) => state.lyricSnippets[t.id]
+                      : null,
                   onReachBottom: () => notifier.loadMore(),
                   hasMore: state.hasMore,
                   loadingMore: state.loadingMore,

@@ -45,9 +45,12 @@
     <Compile Include="../../Pinyin.cs" Link="Pinyin.cs" />
     <Compile Include="../../PinyinSegmenter.cs" Link="PinyinSegmenter.cs" />
     <Compile Include="../../HanziData.cs" Link="HanziData.cs" />
+    <Compile Include="../../LexiconCross.cs" Link="LexiconCross.cs" />
+    <Compile Include="../../DataPack.cs" Link="DataPack.cs" />
     <Compile Include="../../Log.cs" Link="Log.cs" />
+    <Compile Include="../../MemoryTrim.cs" Link="MemoryTrim.cs" />
     <Compile Include="../../IndexStore.cs" Link="IndexStore.cs" />
-    <Compile Include="../../FtsStore.cs" Link="FtsStore.cs" />
+    <Compile Include="../../LibraryDb.cs" Link="LibraryDb.cs" />
     <!-- 查询编译器与渐进会话直接复用生产源码（v7 起）：此前 qbench 自行复刻
          BuildPasses，已多次与生产漂移（漏拼音模糊音 / 读音分档 / 模糊趟）。
          同源编译保证 harness 量到的就是生产路径。 -->
@@ -58,6 +61,20 @@
     <Compile Include="../../SearchPlan.cs" Link="SearchPlan.cs" />
     <Compile Include="../../SearchPlanCompiler.cs" Link="SearchPlanCompiler.cs" />
     <Compile Include="../../SearchSession.cs" Link="SearchSession.cs" />
+    <!-- T3.14：生产查询路径依赖完整会话闭包（explain / snippet / highlight / 分页 / 排序 / 降级）。 -->
+    <Compile Include="../../SearchExplain.cs" Link="SearchExplain.cs" />
+    <Compile Include="../../SearchSnippet.cs" Link="SearchSnippet.cs" />
+    <Compile Include="../../SearchHighlight.cs" Link="SearchHighlight.cs" />
+    <Compile Include="../../SearchPaging.cs" Link="SearchPaging.cs" />
+    <Compile Include="../../SearchScheme.cs" Link="SearchScheme.cs" />
+    <Compile Include="../../SearchRanker.cs" Link="SearchRanker.cs" />
+    <Compile Include="../../SearchFallback.cs" Link="SearchFallback.cs" />
+    <!-- SearchSession 的 EraStore 目录常量来自 IndexerEngine；增量写入同源。 -->
+    <Compile Include="../../IndexerEngine.cs" Link="IndexerEngine.cs" />
+    <Compile Include="../../IndexerJson.cs" Link="IndexerJson.cs" />
+    <Compile Include="../../SearchApi.cs" Link="SearchApi.cs" />
+    <Compile Include="../../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
     <Compile Include="../../../shared/text/ScriptRanges.cs" Link="shared/text/ScriptRanges.cs" />
   </ItemGroup>
 
@@ -82,6 +99,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="../../data/def_en2hanzi.tsv" Link="data/def_en2hanzi.tsv">
       <LogicalName>Archoera.Indexer.data.def_en2hanzi.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/manifest.json" Link="data/manifest.json">
+      <LogicalName>Archoera.Indexer.data.manifest.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/lexicon_cross.tsv" Link="data/lexicon_cross.tsv">
+      <LogicalName>Archoera.Indexer.data.lexicon_cross.tsv</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="../../data/def_hanzi2en.tsv" Link="data/def_hanzi2en.tsv">
       <LogicalName>Archoera.Indexer.data.def_hanzi2en.tsv</LogicalName>

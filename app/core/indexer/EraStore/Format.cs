@@ -36,7 +36,7 @@ internal static class EraFormat
     public const int DataStart = HeaderSize + CommitSlotCount * CommitSlotSize;
 
     /// <summary>Manifest 上限（64 KB），超出直接拒绝。</summary>
-    public const int MaxManifestBytes = 64 * 1024;
+    public const int MaxManifestBytes = 512 * 1024;
 
     /// <summary>词典块内词条数上限。</summary>
     public const int DictBlockTerms = 64;

@@ -15,6 +15,7 @@ import '../../services/search/search_service.dart';
 import '../../stores/app_prefs.dart';
 import '../widgets/common/toast.dart';
 import 'settings_widgets.dart';
+
 import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 
 /// 搜索分类：本地曲库搜索索引（**默认关闭**，设计文档 §2.4 / §9.3）。
@@ -43,7 +44,7 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
       // 空闲时按需构建（后台 isolate，不阻塞 UI；失败静默回退 LIKE）。
       unawaited(_ensureIndexThenRefresh());
     } else {
-      // 停止接管、回退 LIKE；search.db 默认保留（删索引走独立动作）。
+      // 停止接管、回退 LIKE；索引默认保留（删索引走独立动作）。
       SearchService.instance.deactivate();
     }
     setState(() {});
@@ -66,6 +67,12 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
   /// 歌词罗马音子开关切换：写偏好后触发重建（选项变化 → 索引器自动升级为全量）。
   void _onToggleRomajiLyrics(bool value) {
     ref.read(appPrefsProvider.notifier).setSearchIndex(romajiLyrics: value);
+    unawaited(_reindexThenRefresh());
+  }
+
+  /// 歌词首字母子开关切换（T3.4 V4）：写偏好后触发重建（选项位变化 → 全量）。
+  void _onToggleInitialsLyrics(bool value) {
+    ref.read(appPrefsProvider.notifier).setSearchIndex(initialsLyrics: value);
     unawaited(_reindexThenRefresh());
   }
 
@@ -112,10 +119,18 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
               enabled: enabled,
               onChanged: enabled ? _onToggleRomajiLyrics : null,
             ),
+            SettingSwitchTile(
+              icon: EtaIcons.abcOutline,
+              title: l10n.settingsSearchIndexInitials,
+              subtitle: l10n.settingsSearchIndexInitialsDesc,
+              value: prefs.initialsLyrics,
+              enabled: enabled,
+              onChanged: enabled ? _onToggleInitialsLyrics : null,
+            ),
           ],
         ),
         const SizedBox(height: 20),
-        // 关闭时**不触碰** SearchService（不构造 / 不读 search.db）。
+        // 关闭时**不触碰** SearchService（不构造 / 不读本地索引）。
         if (enabled)
           ValueListenableBuilder<IndexerProgress?>(
             valueListenable: SearchService.instance.progress,
@@ -270,12 +285,33 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
     setState(() {});
   }
 
-  /// `search.db` 体积（不存在 / 读取失败返回 null）。
+  /// 当前索引体积（EraStore 世代文件；不存在 / 读取失败返回 null）。
+  ///
+  /// T3.13 起索引本体是 `search.era/<CURRENT 指向的 .eraindex>`；旧的
+  /// `search.db` 仅作历史残留，不能再用来显示体积。
   String? _indexSizeText() {
     try {
-      final f = File(SearchService.defaultSearchDbPath());
-      if (!f.existsSync()) return null;
-      return _fmtSize(f.lengthSync());
+      final base = File(SearchService.defaultSearchDbPath());
+      final eraDir = Directory(
+        '${base.parent.path}${Platform.pathSeparator}search.era',
+      );
+      if (!eraDir.existsSync()) return null;
+
+      final current = File('${eraDir.path}${Platform.pathSeparator}CURRENT');
+      if (current.existsSync()) {
+        final name = current.readAsStringSync().trim();
+        if (name.startsWith('search-') && name.endsWith('.eraindex')) {
+          final f = File('${eraDir.path}${Platform.pathSeparator}$name');
+          if (f.existsSync()) return _fmtSize(f.lengthSync());
+        }
+      }
+
+      // CURRENT 缺失 / 损坏：退化为整个目录的可见体积（诊断用）。
+      var total = 0;
+      for (final entity in eraDir.listSync()) {
+        if (entity is File) total += entity.lengthSync();
+      }
+      return total > 0 ? _fmtSize(total) : null;
     } catch (_) {
       return null;
     }

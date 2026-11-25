@@ -7,8 +7,8 @@
 // 目的：在**单个进程内**对 search.db 反复执行一组代表查询，测量 P50 / P95，
 // 排除 `dotnet run` / 进程启动开销（设计文档 §7.3 / §7.4）。
 //
-// 直接复用生产 FtsStore、Analyzer、SearchQuery / SearchSession（查询编译器同源编译），
-// 不复制逻辑、不新增依赖。A/B 两组（拼音列开 / 关）各跑一次。
+// 直接复用生产 SearchSession（EraStore 查询路径）与查询编译器（同源编译），
+// 不复制逻辑、不新增依赖。T3.14 起测量的是完整生产路径而非 FTS5 存储层。
 //
 // 用法：
 //   qbench --index <search.db> --label A --pinyin on|off
@@ -80,42 +80,66 @@ public static class QueryBench
                 case "-h" or "--help":
                     Console.Error.WriteLine(
                         "qbench --index <search.db> --label A --pinyin on|off [--repeats N] [--warmup N] "
-                        + "[--limit N] [--cap N] [--out f.json]");
+                        + "[--limit N] [--cap N] [--out f.json]\n"
+                        + "       qbench eval --index <search.db> [--library <library.db>] [--spec f.json] "
+                        + "[--limit N] [--out f.json]   # 召回 / 排序质量（P@k / R@k / MRR / NDCG）");
                     return 0;
             }
         }
 
-        if (index is null || !File.Exists(index))
+        if (index is null)
         {
-            Console.Error.WriteLine("缺少有效 --index <search.db>");
+            Console.Error.WriteLine("缺少 --index <search.db 路径>（EraStore 位于同目录 search.era/）");
             return 1;
         }
         if (repeats <= 0) repeats = 1;
 
         var withPinyin = !string.Equals(pinyinMode, "off", StringComparison.OrdinalIgnoreCase);
 
-        using var store = new FtsStore();
-        store.Open(index, build: false);
+        // T3.13 / T3.14：直接走生产查询入口（SearchSession → EraStore），不再用 FTS5。
+        // Cache=false：重复同一查询必须真实执行，否则测到的是结果缓存。
+        var eraDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(index)) ?? ".", "search.era");
+        if (EraStore.CurrentPointer.Read(eraDir) is null)
+        {
+            Console.Error.WriteLine($"缺少 EraStore 索引（{eraDir}/CURRENT）");
+            return 1;
+        }
 
         var queries = new List<object>();
         var pooled = new List<double>(Cases.Length * repeats);
 
         foreach (var q in Cases)
         {
-            var passes = BuildPasses(q, store.LoadFuzzyVocabulary());
-            var expr = passes[0];
             var rows = 0;
-            var usedPasses = 1;
+            var passes = 0;
 
             for (var i = 0; i < warmup; i++)
-                (rows, usedPasses) = RunProgressive(store, passes, limit);
+            {
+                var warm = SearchSession.Run(index, new SearchRequest
+                {
+                    Query = q.Text,
+                    Limit = limit,
+                    Fuzzy = true,
+                    Cache = false,
+                });
+                rows = warm.Items.Count;
+                passes = TotalPasses(warm.Passes);
+            }
 
             var samples = new List<double>(repeats);
             for (var i = 0; i < repeats; i++)
             {
                 var t0 = Stopwatch.GetTimestamp();
-                (rows, usedPasses) = RunProgressive(store, passes, limit);
+                var result = SearchSession.Run(index, new SearchRequest
+                {
+                    Query = q.Text,
+                    Limit = limit,
+                    Fuzzy = true,
+                    Cache = false,
+                });
                 var t1 = Stopwatch.GetTimestamp();
+                rows = result.Items.Count;
+                passes = TotalPasses(result.Passes);
                 samples.Add((t1 - t0) * 1000.0 / Stopwatch.Frequency);
             }
 
@@ -130,8 +154,8 @@ public static class QueryBench
             {
                 name = q.Name,
                 text = q.Text,
-                match = expr,
-                passes = usedPasses,
+                match = q.Text,
+                passes,
                 rows,
                 count = samples.Count,
                 p50_ms = Round(p50),
@@ -142,8 +166,8 @@ public static class QueryBench
             });
 
             Console.WriteLine(
-                $"[{label}] {q.Name,-16} rows={rows,6} passes={usedPasses} " +
-                $"p50={p50,8:F3}ms p95={p95,8:F3}ms  expr={expr}");
+                $"[{label}] {q.Name,-16} rows={rows,6} passes={passes} " +
+                $"p50={p50,8:F3}ms p95={p95,8:F3}ms");
         }
 
         pooled.Sort();
@@ -179,62 +203,11 @@ public static class QueryBench
     }
 
     /// <summary>候选上限（**历史参数，已不再生效**；`--cap` 仍可传但结果不受影响）。</summary>
-    private static int _candidateCap = FtsStore.DefaultCandidateCap;
+    private static int _candidateCap = 5000;
 
-    private static int RunOnce(FtsStore store, string matchExpr, int limit)
-        => store.Search(matchExpr, limit, 0, _candidateCap).Count;
-
-    /// <summary>
-    /// 按生产短路语义依次跑各趟，返回（命中数, 实际执行趟数）：**第一个非空趟即停**
-    /// （生产侧命中 ≥1 即短路，见 `SearchIndex.search`）。
-    /// </summary>
-    private static (int Rows, int Passes) RunProgressive(
-        FtsStore store, List<string> passes, int limit)
-    {
-        for (var i = 0; i < passes.Count; i++)
-        {
-            var rows = RunOnce(store, passes[i], limit);
-            if (rows > 0) return (rows, i + 1);
-        }
-        return (0, passes.Count);
-    }
-
-    /// <summary>
-    /// 构造**渐进查询趟**——直接调用生产查询编译器，顺序与 <see cref="SearchSession.Execute"/>
-    /// 完全一致（主趟 → 拼音宽松 → 日文读音 → 跨语言 → 模糊 → 中文容错）。
-    /// 生产侧命中 ≥1 即短路，本 harness 用「第一个非空趟」复现同一行为与代价。
-    /// </summary>
-    private static List<string> BuildPasses(QueryCase q, IReadOnlyList<string> vocabulary)
-    {
-        var tokens = Analyzer.AnalyzeQuery(q.Text);
-        var passes = new List<string>();
-        void Add(string? expression)
-        {
-            if (expression is not null) passes.Add(expression);
-        }
-
-        Add(SearchQuery.CompileMatch(tokens, metadata: false));
-        Add(SearchQuery.CompilePinyinLoose(tokens, metadata: false));
-        Add(SearchQuery.CompileReading(tokens, metadata: false));
-        Add(SearchQuery.CompileCrossLingual(tokens, metadata: false));
-        if (SearchQuery.HasFuzzyEligible(tokens))
-            Add(SearchQuery.CompileFuzzy(tokens, metadata: false, vocabulary));
-
-        // 中文容错趟：与 SearchSession 一样，把每个变体的主趟表达式 OR 进同一趟。
-        var compiled = new List<string>();
-        foreach (var variant in SearchQuery.CjkVariants(q.Text))
-        {
-            var expression = SearchQuery.CompileMatch(Analyzer.AnalyzeQuery(variant), metadata: false);
-            if (expression is not null) compiled.Add(expression);
-        }
-        if (compiled.Count > 0)
-            passes.Add(compiled.Count == 1
-                ? compiled[0]
-                : "(" + string.Join(" OR ", compiled) + ")");
-
-        if (passes.Count == 0) passes.Add("\"\"");
-        return passes;
-    }
+    /// <summary>兜底趟实际执行次数（PassCounts 是各趟类型的计数，逐项求和即可）。</summary>
+    private static int TotalPasses(PassCounts p)
+        => p.DropTokens + p.PinyinLoose + p.Reading + p.CrossLingual + p.Fuzzy + p.CjkFuzzy;
 
     /// <summary>最近秩（nearest-rank）百分位；列表须已升序。</summary>
     private static double Percentile(List<double> sorted, double p)

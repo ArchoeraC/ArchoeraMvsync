@@ -28,6 +28,12 @@ internal sealed class VerifyReport
     /// <summary>Manifest 声明的文档数。</summary>
     public uint Docs;
 
+    /// <summary>索引 Manifest 记录的数据包 id（<c>anchors.dataPackId</c>；旧索引为空）。</summary>
+    public string DataPackId = "";
+
+    /// <summary><c>--data</c>：磁盘数据包的全量校验结果（未请求时为 null，键不输出）。</summary>
+    public DataPackVerification? DataPack;
+
     /// <summary>人类可读错误（带段号 / 段类型）。</summary>
     public List<string> Errors = new();
 
@@ -43,6 +49,30 @@ internal sealed class VerifyReport
             w.WriteNumber("segments", Segments);
             w.WriteNumber("sections", Sections);
             w.WriteNumber("docs", Docs);
+            w.WriteString("dataPackId", DataPackId);
+            if (DataPack is not null)
+            {
+                w.WritePropertyName("dataPack");
+                w.WriteStartObject();
+                w.WriteBoolean("ok", DataPack.Ok);
+                w.WriteString("id", DataPack.Id);
+                w.WriteString("embeddedId", DataPack.EmbeddedId);
+                w.WriteBoolean("match", DataPack.Match);
+                w.WriteBoolean("present", DataPack.Present);
+                w.WriteStartArray("missing");
+                foreach (var name in DataPack.Missing) w.WriteStringValue(name);
+                w.WriteEndArray();
+                w.WriteStartArray("corrupt");
+                foreach (var name in DataPack.Corrupt) w.WriteStringValue(name);
+                w.WriteEndArray();
+                w.WriteStartArray("degradedCapabilities");
+                foreach (var capability in DataPack.Degraded) w.WriteStringValue(capability);
+                w.WriteEndArray();
+                w.WriteStartArray("errors");
+                foreach (var error in DataPack.Errors) w.WriteStringValue(error);
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
             w.WriteStartArray("errors");
             foreach (var error in Errors) w.WriteStringValue(error);
             w.WriteEndArray();
@@ -86,12 +116,17 @@ internal static class IndexPaths
 /// </summary>
 internal static class IndexVerifier
 {
-    /// <summary>接受目录或 <c>.eraindex</c> 文件路径。</summary>
-    public static VerifyReport Verify(string indexPath)
+    /// <summary>
+    /// 接受目录或 <c>.eraindex</c> 文件路径。
+    ///
+    /// <paramref name="dataPack"/> 非空时把磁盘数据包的全量校验结果一并写入报告
+    /// （<c>verify --data</c>）；普通 <c>verify</c> 只回显索引记录的 <c>dataPackId</c>。
+    /// </summary>
+    public static VerifyReport Verify(string indexPath, DataPackVerification? dataPack = null)
     {
         var path = IndexPaths.Resolve(indexPath);
         var raw = File.ReadAllBytes(path);
-        var report = new VerifyReport();
+        var report = new VerifyReport { DataPack = dataPack };
 
         IndexFile file;
         try
@@ -117,14 +152,32 @@ internal static class IndexVerifier
 
             var manifest = file.Current;
             report.Docs = manifest.DocCount;
+            report.DataPackId = manifest.Anchors.DataPackId;
             report.Sections = manifest.Sections.Count;
             report.Segments = manifest.Sections.Select(s => (int)s.SegmentId).Distinct().Count();
 
             var manifestStart = CurrentManifestOffset(file, raw.Length);
             VerifySections(raw, manifest, manifestStart, report);
-            report.Ok = report.Errors.Count == 0;
+            report.Ok = report.Errors.Count == 0 && (dataPack is null || dataPack.Ok);
             return report;
         }
+    }
+
+    /// <summary>
+    /// 只校验磁盘数据包（<c>verify --data --data-dir …</c>，不要求索引存在）：
+    /// 逐文件 sha256 + TSV 结构 + 与索引器内嵌数据包的 id 一致性。
+    /// </summary>
+    public static VerifyReport VerifyDataPack(DataPack pack)
+    {
+        var verification = pack.VerifyAll(validateTables: true);
+        var report = new VerifyReport
+        {
+            DataPack = verification,
+            DataPackId = pack.Id,
+            Ok = verification.Ok,
+        };
+        report.Errors.AddRange(verification.Errors);
+        return report;
     }
 
     /// <summary>

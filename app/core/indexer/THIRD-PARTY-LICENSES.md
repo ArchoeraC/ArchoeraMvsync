@@ -13,6 +13,7 @@
 | `data/def_en2hanzi.tsv` / `data/def_hanzi2en.tsv` | Unihan **`kDefinition`** | **Unicode License** | 跨语言释义候选（T1，查询侧） |
 | `data/ja_readings.tsv` | Unihan **`kJapanese`** | **Unicode License** | 日文音读 + 训读（假名；索引期转罗马字写入 `reading_meta_tok`） |
 | `data/kana_romaji.tsv` | **自研**（标准罗马字事实） | 同本项目（AGPL-3.0-or-later） | 假名 → 罗马字（Hepburn 主拼 + Kunrei 变体，含助词 は/へ 双写） |
+| `data/lexicon_cross.tsv` | **自建**（公开艺人 / 乐队名称的事实性对照，seed） | **CC0-1.0** | 跨语言专名扩展（T4.1，查询侧；每源 ≤4 目标、单字源禁止） |
 
 > **生成方式**：**全部 6 张表**由纯 .NET 的 `tools/gen_tables` 生成
 > （`cd app/core/indexer && dotnet run --project tools/gen_tables`），不依赖 Python；

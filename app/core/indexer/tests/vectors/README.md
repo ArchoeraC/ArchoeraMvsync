@@ -17,6 +17,11 @@
 | `analyzer.tsv` | 索引侧 | `Analyzer.Analyze(input)` | 索引期词元 / 拼音 / 首字母 |
 | `query.tsv` | 查询侧 | `Analyzer.AnalyzeQuery(input)` | 含连写全拼切分；纯拉丁 `initials` 为 `null` |
 
+> **v15（T3.9）口径**：`initials` 列仍是**人类可读**的每段首字母串，但拉丁 / 数字段不再
+> 进入该列（行尾空列即断言空串）。索引列真正写入的是相邻两两 bigram
+> （`wanzg` → `wa an nz zg`），由 `Program.cs` 直接断言 `AnalysisResult.InitialsBigrams`，
+> 不放进 tsv（避免把「可读列」与「倒排列」混为一谈）。
+
 分派规则不是后缀，而是**文件名前缀**：`query*.tsv` 走查询侧，其余 `*.tsv` 走索引侧
 （`tests/Program.cs` 的 `RunVectorFile`）。
 
@@ -64,7 +69,7 @@ vectors 目录解析（ResolveVectorsDir）：
 
 ---
 
-## 2. 新增向量（Plan 已接线；Rank / Negative 待实现）
+## 2. 新增向量（Plan / Rank 已接线）
 
 三层都断言**期望结构**（term、step、排序 id、bucket 元组），
 **不是**期望字符串，也**不是**整份响应 JSON。禁止把段号、文件偏移、物理 `doc_id`、
@@ -165,9 +170,9 @@ N-SYN-003	synthetic/title-only	晴天	lyrics	default@1	*	*	true
 
 | 档 | 含义 | 条目 |
 |---|---|---|
-| **绿** | 要求当前已成立；行为变化会失败 | N1–N7、N9、N13、N14、N16、N17（N6 用纯英文库） |
-| **KNOWN-GAP** | 要求尚未成立；不增 FAIL，修好后自动变 PASS | **N12** 幽灵曲目未过滤；**N15** 200 码点未截断（仍跑 fuzzy） |
-| **BLOCKED** | 缺 plan / explain / typo2，无法断言归因 | N8、N10、N11、N18、N19、N20、N22、N23 |
+| **绿** | 要求当前已成立；行为变化会失败 | N1–N9、N12–N17、N21–N24（N6 用纯英文库；N12 含缓存路径） |
+| **KNOWN-GAP** | 要求尚未成立；不增 FAIL，修好后自动变 PASS | **0 条**（N12 / N15 已转绿） |
+| **BLOCKED** | 语义缺口尚未实现，无法断言 | N10（per-track 语言画像）、N11（单字歌词召回语义）、N18（计划期 df 预算） |
 
 - `KNOWN-GAP` / `BLOCKED` 只打印，不计入 `FAIL`；测试运行器摘要会单列这两个计数。
 - S1 接线 plan / explain 后，必须把 N8 / N10 / N11 / N18 转成正式断言；
@@ -211,7 +216,8 @@ N-SYN-003	synthetic/title-only	晴天	lyrics	default@1	*	*	true
 - **已接线**：`tests/Program.cs` 的 `Main` 调用 `PlanVectorTests.Run()`，PASS / FAIL 并入现有计数。
 - **复制规则**：`IndexerTests.csproj` 增加 `vectors/plan/*.jsonl` 的
   `CopyToOutputDirectory`；加载器仍优先按「程序集目录 → 向上逐级找 `tests/vectors/plan`」定位。
-- `rank` / `negative` 的加载器仍未实现；对应向量格式仍是 §2.2 / §2.3 的建议。
+- `rank` 向量已由 `tests/SearchRankerTests.cs` 接线（读 `vectors/rank/*.jsonl`，覆盖 7 键比较器与证据合并）。
+- `negative` 不走向量加载器：`tests/NegativeBaselineTests.cs` 用临时合成库 + 生产 `SearchSession` 直接断言（绿 / KNOWN-GAP / BLOCKED 三档）。
 - 运行方式（本地，不进 CI）：
 
   ```bash

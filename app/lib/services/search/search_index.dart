@@ -7,13 +7,12 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:sqlite3/sqlite3.dart';
 
 import 'indexer_ffi.dart';
 import 'query_log.dart';
 import 'search_models.dart';
 
-/// `search.db` 只读查询视图（**薄 FFI 客户端**）。
+/// 本地搜索索引（`search.era/`）的只读查询视图（**薄 FFI 客户端**）。
 ///
 /// 查询能力（词法 / 拼音 / 首字母 / 日文读音 / 跨语言表达式编译、渐进兜底、
 /// bm25 排序、`doc_id → track_id` 映射）全部在 C# 索引器内完成（ABI v2：
@@ -28,10 +27,6 @@ import 'search_models.dart';
 /// （Windows 上残留只读句柄会阻塞 `File.Move`）。
 class SearchIndex {
   SearchIndex._(this._dbPath, this._lib, this._handle);
-
-  /// 期望的 `search_meta.schema_version`（与 C# `FtsStore.SchemaVersionValue` 一致；
-  /// 不符则视为不可用，触发重建）。
-  static const int expectedSchemaVersion = 7;
 
   final String _dbPath;
   final IndexerLibrary _lib;
@@ -78,34 +73,43 @@ class SearchIndex {
     cjkFuzzy: cjkFuzzyQueries,
   );
 
-  /// 打开 `search.db`（只读）。文件缺失 / schema 版本不符 / 句柄打开失败返回 null。
+  /// 打开 `<数据库目录>/search.era/`（只读）。索引缺失 / 句柄打开失败返回 null。
   ///
-  /// 先用 SQLite 做轻量探针（`search_meta` 版本），再经 `era_search_open` 建立
-  /// C# 侧只读句柄（方案 / 能力协商在 open 时完成）。
-  static SearchIndex? open(String dbPath, {required IndexerLibrary lib}) {
+  /// T3.13：查询只依赖 `search.era/CURRENT`；`search.db` 仅作为历史路径参数保留。
+  /// 真正的就绪检查（Manifest / metaVersion）由 `era_search_open` 在 C# 侧完成。
+  ///
+  /// [libraryDbPath] 非空时经 `options_json.libraryDb` 传给索引器，查询期过滤源曲库
+  /// 已删除的曲目（T2.9）；库不可读时索引器失败开放（不过滤）。
+  static SearchIndex? open(
+    String dbPath, {
+    required IndexerLibrary lib,
+    String? libraryDbPath,
+  }) {
     if (!isAvailable(dbPath)) return null;
-    final handle = lib.openSearch(dbPath);
+    final optionsJson = (libraryDbPath == null || libraryDbPath.isEmpty)
+        ? ''
+        : jsonEncode({'libraryDb': libraryDbPath});
+    final handle = lib.openSearch(dbPath, optionsJson: optionsJson);
     if (handle == nullptr) return null;
     return SearchIndex._(dbPath, lib, handle);
   }
 
-  /// `search.db` 是否存在且 schema 版本匹配。
+  /// EraStore 是否已就绪（`<dir>/search.era/CURRENT` 存在）。
+  ///
+  /// 不解析 Manifest / 不读 SQLite：版本与损坏由 `era_search_open` 判定，
+  /// Dart 只做「是否值得尝试打开」的轻量门禁。
   static bool isAvailable(String dbPath) {
-    if (!File(dbPath).existsSync()) return false;
-    Database? db;
-    try {
-      db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
-      return _hasExpectedSchema(db);
-    } catch (_) {
-      return false;
-    } finally {
-      db?.close();
-    }
+    final dir = File(dbPath).parent.path;
+    final sep = Platform.pathSeparator;
+    return File('$dir${sep}search.era${sep}CURRENT').existsSync();
   }
 
-  /// 当前视图是否可用（未关闭、句柄在、库文件仍在）。
-  bool get available =>
-      !_closed && _handle != null && File(_dbPath).existsSync();
+  /// 当前视图是否可用（未关闭、句柄在、EraStore 仍存在）。
+  ///
+  /// T3.13 起生产索引是 `<dir>/search.era/`，**不再产生 `search.db`**；
+  /// 这里曾经检查 `File(_dbPath).existsSync()`，会让 [available] 恒为 false，
+  /// 进而让 [SearchService] 每次搜索都重新走「构建 + 重开」。
+  bool get available => !_closed && _handle != null && isAvailable(_dbPath);
 
   /// 执行一次搜索，返回按 BM25 相关度升序（最佳在前）的命中列表。
   ///
@@ -207,16 +211,4 @@ class SearchIndex {
 
   static int _intOf(Object? value) => value is num ? value.toInt() : 0;
 
-  static bool _hasExpectedSchema(Database db) {
-    try {
-      final rows = db.select(
-        "SELECT value FROM search_meta WHERE key = 'schema_version'",
-      );
-      if (rows.isEmpty) return false;
-      final version = int.tryParse(rows.first['value'] as String? ?? '');
-      return version == expectedSchemaVersion;
-    } catch (_) {
-      return false;
-    }
-  }
 }

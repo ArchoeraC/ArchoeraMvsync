@@ -1412,6 +1412,8 @@
   "settingsSearchIndexLrcDesc": "同時索引與音訊同名的 .lrc 歌詞（需先啟用總開關）",
   "settingsSearchIndexRomaji": "產生歌詞羅馬音索引",
   "settingsSearchIndexRomajiDesc": "日語歌詞沒有音譯時自動產生羅馬音，可用羅馬字搜尋（索引體積約增加一倍）",
+  "settingsSearchIndexInitials": "索引歌詞首字母",
+  "settingsSearchIndexInitialsDesc": "歌詞也能用拼音首字母搜尋（如 wanzg）；關閉可縮小索引體積（變更後需重建索引）",
   "settingsSearchIndexNote": "索引是衍生資料：預設關閉零成本；開啟後首次建立會占用時間與磁碟（隨曲庫成長，約數百 MB @ 萬首），建立失敗會自動回退基本搜尋。",
   "settingsSectionSearchIndexStatus": "狀態與維護",
   "settingsSearchIndexStatusDisabled": "未啟用",

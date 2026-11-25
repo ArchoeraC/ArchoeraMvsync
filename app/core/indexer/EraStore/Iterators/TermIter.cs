@@ -15,6 +15,9 @@ internal sealed class TermIter : IDocIter
 {
     private readonly PostingsCursor? _cursor;
 
+    /// <summary>该 term 在词典中的文档频率（df）；词典未命中时为 0。</summary>
+    public int Df { get; }
+
     public TermIter(TermDictReader dict, PostingsReader postings, FieldId field, string term)
     {
         ArgumentNullException.ThrowIfNull(dict);
@@ -22,7 +25,10 @@ internal sealed class TermIter : IDocIter
         ArgumentNullException.ThrowIfNull(term);
 
         if (dict.TryFind(field, term, out var info))
+        {
             _cursor = postings.Open(info.PostOffset, info.Df);
+            Df = (int)info.Df;
+        }
     }
 
     /// <summary>直接以已命中的词典条目建游标（供 <see cref="PrefixIter"/> 复用，避免二次查找）。</summary>
@@ -30,6 +36,7 @@ internal sealed class TermIter : IDocIter
     {
         ArgumentNullException.ThrowIfNull(postings);
         _cursor = postings.Open(info.PostOffset, info.Df);
+        Df = (int)info.Df;
     }
 
     /// <inheritdoc />

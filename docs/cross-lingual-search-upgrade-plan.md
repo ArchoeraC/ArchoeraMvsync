@@ -1,5 +1,9 @@
 # 跨语言搜索增强灰度计划
 
+> 状态（2026-11-25）：T1 系列已落地；S4 的 **T4.1 策展专名表**
+> （`data/lexicon_cross.tsv`，CC0-1.0、自建 seed）与 **T4.3 数据包 manifest / 同源校验**
+> 已实施，见 `local-search-indexer-rewrite-plan.md` §S4 进度与 `local-search-indexer-t314-gate.md`。
+>
 > 策略：**在 ArchoeraMvsync 索引器内分批落地并验证这批纯规则跨语言技术**，
 > 用真实曲库与测试基建控制风险。
 > 搜索的硬性要求是「快」：所有方案都在现有「渐进兜底趟」架构内做加法，不加常驻查询成本。

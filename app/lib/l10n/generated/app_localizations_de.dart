@@ -4715,6 +4715,13 @@ class AppLocalizationsDe extends AppLocalizations {
       'Romanisierung für japanische Liedtexte ohne Umschrift automatisch erzeugen, damit sie per Romaji gefunden werden (etwa doppelte Indexgröße)';
 
   @override
+  String get settingsSearchIndexInitials => 'Liedtext-Initialen indexieren';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      'Liedtexte auch über Pinyin-Initialen durchsuchbar machen (z. B. wanzg); ausschalten verkleinert den Index (Änderung erfordert Neuaufbau)';
+
+  @override
   String get settingsSearchIndexNote =>
       'Der Index ist abgeleitet: standardmäßig aus und kostenlos; beim Aktivieren werden im Hintergrund Zeit und Speicher belegt (bei 10.000 Titeln einige hundert MB); bei Fehlern wird automatisch auf die einfache Suche zurückgefallen.';
 

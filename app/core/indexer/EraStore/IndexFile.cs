@@ -116,6 +116,23 @@ internal sealed class IndexFile : IDisposable
         }
     }
 
+    /// <summary>读取指定 section 的段体（用于增量写入时读墓碑 / track 列）。</summary>
+    public byte[] ReadSection(SectionRef section)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (section.Length == 0) return Array.Empty<byte>();
+            var end = section.Offset + section.Length;
+            if (end < section.Offset || end > (ulong)_stream.Length)
+                throw new InvalidDataException($"段引用越界（off={section.Offset}, len={section.Length}）");
+            var buffer = new byte[section.Length];
+            ReadAt((long)section.Offset, buffer);
+            return buffer;
+        }
+    }
+
     /// <summary>
     /// 提交新 Manifest：落盘数据段 → 追加 Manifest → 落盘 → 覆盖较旧槽 → 落盘。
     /// <see cref="Manifest.Gen"/> 必须大于当前 <see cref="Gen"/>。
@@ -128,6 +145,10 @@ internal sealed class IndexFile : IDisposable
             ThrowIfDisposed();
             if (manifest.Gen <= _gen)
                 throw new ArgumentException($"新 gen {manifest.Gen} 必须大于当前 {_gen}", nameof(manifest));
+            // 防「写出打不开的索引」：读取侧只接受 ≤64 条段引用，写侧必须先拒绝。
+            if (manifest.Sections.Count > Manifest.MaxSections)
+                throw new InvalidOperationException(
+                    $"Manifest 段引用 {manifest.Sections.Count} 超过 {Manifest.MaxSections}");
 
             var json = manifest.ToJsonBytes();
             if (json.Length > EraFormat.MaxManifestBytes)
@@ -297,7 +318,7 @@ internal sealed class IndexFile : IDisposable
         return w.ToArray();
     }
 
-    private static void ValidateHeader(ReadOnlySpan<byte> header)
+    internal static void ValidateHeader(ReadOnlySpan<byte> header)
     {
         if (header.Length < EraFormat.HeaderSize)
             throw new InvalidDataException("Header 长度不足");

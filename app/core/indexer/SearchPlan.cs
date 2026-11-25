@@ -85,7 +85,8 @@ internal sealed record Step(
     bool NeedsFuzzyVocabulary = false,
     bool CountPassOnNullExpression = false,
     IReadOnlyList<string[]>? ReadingSequences = null,
-    int DropIndex = -1);
+    int DropIndex = -1,
+    bool Typo2 = false);
 
 /// <summary>
 /// 一次查询的完整计划（纯数据，可 <c>System.Text.Json</c> 序列化用于诊断 / 向量）。
