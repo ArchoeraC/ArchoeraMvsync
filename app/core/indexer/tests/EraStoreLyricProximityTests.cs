@@ -288,6 +288,10 @@ internal static class EraStoreLyricProximityTests
             MinExact = 1,
             Limit = 50,
             Explain = true,
+            // Q4（default@1 / fast@1）在主趟只有弱证据时会继续跑丢词趟；单 term 丢词证据的
+            // proximity=0 会覆盖字面步算出的真实跨度。本套用例只验证字面邻近度，固定到
+            // fast@1（无 drop matcher），避免把 Q4 的合并副作用当成 Q2 回归。
+            Scheme = SchemeIds.Fast,
             // 能力覆盖测试会改全局 Cap：结果缓存必须关掉，否则会命中旧解释。
             Cache = false,
         });

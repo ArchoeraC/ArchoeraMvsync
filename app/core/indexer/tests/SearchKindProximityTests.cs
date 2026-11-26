@@ -190,7 +190,8 @@ internal static class SearchKindProximityTests
 
         // 歌词族（Q2）：散落 AND 同样按真实位置算跨度。k3 歌词 “hello world hello”
         // → hello@2 / world@1，最小窗口 = 1（wire 上是真实值，不再是 -1）。
-        var lyrics = Query(index, "hello world", metadata: false, lyrics: true, explain: true);
+        var lyrics = Query(index, "hello world", metadata: false, lyrics: true, explain: true,
+            scheme: SchemeIds.Fast);
         Program.Check("proximity: 歌词散落 AND = 最小跨度（1）",
             lyrics.Explanations.TryGetValue("k3", out var lyric) && lyric.Proximity == 1,
             lyrics.Explanations.TryGetValue("k3", out var lyric2) ? lyric2.Proximity.ToString() : "missing");
