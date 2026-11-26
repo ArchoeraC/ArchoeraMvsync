@@ -785,9 +785,16 @@ int32_t apl_system_accent_set_events(int32_t on);
 - **Dart**：`SystemWindow.size`（`WindowSize?`）+ `FfiSystemWindow` 绑定；Noop 返回 null。
   用途：① 退出时持久化窗口几何（`setWindowGeometry`），启动恢复；② macOS 原生
   `start_resize` 不支持时的手势缩放回退（`window_resize.dart` 纯几何 + 单测）。
+- **持久化时机**：统一退出（`quitApplicationWith`）与**关闭到托盘**（`_hideToTray`，常驻进程
+  可能被系统直接杀掉）各写一次；判定统一走 `window_geometry.dart` 的
+  `windowGeometryToPersist`（最大化 / 全屏 / 无尺寸 → 不写），单测覆盖判定矩阵。
 - **验证**：Linux CMake 构建通过，`nm` 可见 21 个 `apl_window_*` 与 `apl_abi_version=11`；
-  macOS arm64/x86_64 交叉编译 + 链接通过；`native_platform_abi_test` 常量 / 符号守卫
-  通过；`window_resize_test` 覆盖几何回退与偏好往返。
-- **未覆盖**：本机无 `msvc-wine`（`verify_windows.sh` 直接失败），**Windows 本轮未编译**，
-  仅按现有 `GetWindowRect` / `pxToDip` 同源写法落地，需在真机或 CI 的 Windows 构建里补一次；
-  macOS 的 `dispatch_sync` 读尺寸与 Dart 手动缩放回退也仍需真机确认（多显示器 / 无抖动）。
+  macOS arm64/x86_64 交叉编译 + 链接通过；**Windows 用 `verify_windows.sh` 的 zig 降级路径
+  编译 + 链接 + 导出表校验通过**（21 个 `apl_window_*` 齐、含 `get_size`）；
+  `native_platform_abi_test` 常量 / 符号守卫通过；`window_resize_test` / `window_geometry_test`
+  覆盖几何回退与持久化判定。
+- **未覆盖**：zig/mingw-w64 **不是 MSVC 验收**（WinRT/SMTC/Toast 分支未编译、无 `/permissive-`），
+  Windows 严格语义仍以 CI Windows runner 为准；`msvc-wine` 缺失时脚本自动降级并在输出里
+  明示。macOS 的 `dispatch_sync` 读尺寸与 Dart 手动缩放回退仍需真机确认（多显示器 / 无抖动）。
+  Linux 侧的真机几何往返（GTK 窗口）在本机无法跑：无 Xvfb，且直接 `gtk_init` 连
+  `DISPLAY=:0` 会阻塞（沙箱限制），因此 Linux 只做了编译级 + 纯几何单测验证。

@@ -15,6 +15,7 @@ import '../../services/platform/platform_capabilities.dart';
 import '../../services/platform/platform_failure.dart';
 import '../../services/platform/system_tray.dart';
 import '../../services/platform/system_window.dart';
+import '../../services/platform/window_geometry.dart';
 import '../../services/playback/playback_notifier.dart';
 import '../../services/power/power_saver.dart' show powerSaverProvider;
 import '../../stores/app_prefs.dart';
