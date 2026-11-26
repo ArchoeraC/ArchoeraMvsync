@@ -4789,6 +4789,69 @@ class AppLocalizationsDe extends AppLocalizations {
       'Index-Neuerstellung gestartet';
 
   @override
+  String get settingsSearchIndexDiagVersions => 'Index-Generation & Versionen';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return 'Generation $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'Schema $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'Analysator $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => 'Suchdatenpaket';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'Paket $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'passt zum Index';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch =>
+      'von anderem Paket erstellt';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => 'vorhanden';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => 'fehlt';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => 'Grundtabellen ok';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => 'Grundtabellen fehlen';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '$count eingeschränkte Funktionen';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => 'Lyrics-Konfidenz';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return 'Hoch $high · Mittel $medium · Niedrig $low · Keine $none';
+  }
+
+  @override
   String get libraryFullScan => 'Vollständiger Scan';
 
   @override

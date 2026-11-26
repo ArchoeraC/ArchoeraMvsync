@@ -8349,6 +8349,101 @@ abstract class AppLocalizations {
   /// **'已开始重建索引'**
   String get settingsSearchIndexRebuildStarted;
 
+  /// No description provided for @settingsSearchIndexDiagVersions.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引世代与版本'**
+  String get settingsSearchIndexDiagVersions;
+
+  /// No description provided for @settingsSearchIndexDiagGen.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'世代 {gen}'**
+  String settingsSearchIndexDiagGen({required int gen});
+
+  /// No description provided for @settingsSearchIndexDiagSchema.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'格式 {version}'**
+  String settingsSearchIndexDiagSchema({required int version});
+
+  /// No description provided for @settingsSearchIndexDiagAnalyzer.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'分析器 {version}'**
+  String settingsSearchIndexDiagAnalyzer({required int version});
+
+  /// No description provided for @settingsSearchIndexDiagDataPack.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'搜索数据包'**
+  String get settingsSearchIndexDiagDataPack;
+
+  /// No description provided for @settingsSearchIndexDiagPackId.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'数据包 {id}'**
+  String settingsSearchIndexDiagPackId({required String id});
+
+  /// No description provided for @settingsSearchIndexDiagPackMatch.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'与索引同源'**
+  String get settingsSearchIndexDiagPackMatch;
+
+  /// No description provided for @settingsSearchIndexDiagPackMismatch.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引由其它数据包构建'**
+  String get settingsSearchIndexDiagPackMismatch;
+
+  /// No description provided for @settingsSearchIndexDiagPackPresent.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'存在'**
+  String get settingsSearchIndexDiagPackPresent;
+
+  /// No description provided for @settingsSearchIndexDiagPackMissing.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'缺失'**
+  String get settingsSearchIndexDiagPackMissing;
+
+  /// No description provided for @settingsSearchIndexDiagPackFoundation.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'基础表可用'**
+  String get settingsSearchIndexDiagPackFoundation;
+
+  /// No description provided for @settingsSearchIndexDiagPackFoundationBad.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'基础表缺失'**
+  String get settingsSearchIndexDiagPackFoundationBad;
+
+  /// No description provided for @settingsSearchIndexDiagDegraded.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'降级能力 {count} 项'**
+  String settingsSearchIndexDiagDegraded({required int count});
+
+  /// No description provided for @settingsSearchIndexDiagLyrics.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词置信度'**
+  String get settingsSearchIndexDiagLyrics;
+
+  /// No description provided for @settingsSearchIndexDiagConfidence.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'高 {high} · 中 {medium} · 低 {low} · 无 {none}'**
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  });
+
   /// No description provided for @libraryFullScan.
   ///
   /// In zh_CN, this message translates to:

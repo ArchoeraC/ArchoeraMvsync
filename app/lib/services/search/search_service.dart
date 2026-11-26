@@ -135,6 +135,55 @@ class SearchService {
   /// 最近一次构建结果摘要（诊断 / 设置页展示用）。
   IndexerRunResult? lastResult;
 
+  /// 最近一次 `era_search_health` 的原始载荷（设置页诊断块的数据来源）。
+  ///
+  /// 在索引打开 / 数据包校验时填充（[_checkDataPackLocked]），**UI 线程只读缓存**，
+  /// 不在 `build` 里发起 FFI / IO。未就绪或调用失败时为 null。
+  Map<String, dynamic>? _healthSnapshot;
+
+  /// 健康快照（只读；可为 null）。供 `SearchIndexDiagnostics.fromHealth` 解析。
+  Map<String, dynamic>? get healthSnapshot => _healthSnapshot;
+
+  /// 刷新健康快照（诊断用）：在**后台 isolate**读 `era_search_health`，
+  /// 绝不抛异常。
+  ///
+  /// - 未启用 / 模块未加载 / 构建门被占用：只返回现有缓存（可能为 null），
+  ///   不抢占构建资源；
+  /// - 读取失败：记录 warn 后返回旧缓存；成功则替换缓存。
+  ///
+  /// 生产常态是：索引打开时 [_checkDataPackLocked] 已填充快照，这里只用于
+  /// 「设置页打开 / 重建完成」时按需补一次，避免 UI 线程做 IO。
+  Future<Map<String, dynamic>?> refreshHealth() async {
+    if (_disposed) return _healthSnapshot;
+
+    // 测试接缝优先：用假载荷直接填充，不触碰原生库（与数据包校验同一 seam）。
+    final override = debugDataPackHealthOverride;
+    if (override != null) {
+      try {
+        _healthSnapshot = override();
+      } catch (err) {
+        Log.w('search', '健康快照接缝失败（保留旧值）: $err');
+      }
+      return _healthSnapshot;
+    }
+
+    if (!enabled || _gateBusy) return _healthSnapshot;
+    final soPath = _soPath;
+    if (soPath == null) return _healthSnapshot;
+    try {
+      final snapshot = await IndexerLibrary.healthInIsolate(
+        soPath: soPath,
+        indexPath: defaultSearchDbPath(),
+      );
+      if (_disposed) return null;
+      _healthSnapshot = snapshot;
+      return snapshot;
+    } catch (err) {
+      Log.w('search', '健康快照刷新失败（保留旧值）: $err');
+      return _healthSnapshot;
+    }
+  }
+
   /// 最近一次构建失败的**具体**原因（`era_index_run` 退出信息 / isolate 异常文本）；
   /// 未构建或成功时为 null。
   ///
@@ -492,6 +541,7 @@ class SearchService {
     if (_disposed) return;
     cancel();
     _closeIndexLocked();
+    _healthSnapshot = null;
     _status = LocalSearchStatus.disabled;
   }
 
@@ -502,6 +552,7 @@ class SearchService {
     await _serialize(() async {
       if (_disposed) return;
       _closeIndexLocked();
+      _healthSnapshot = null;
       final path = defaultSearchDbPath();
       // T3.13 起索引本体是 search.era/（CURRENT + 世代文件）；旧的 search.db
       // 及其 WAL 侧车只作残留清理，不能只删 search.db。
@@ -534,6 +585,7 @@ class SearchService {
     _disposed = true;
     cancel();
     _closeIndexLocked();
+    _healthSnapshot = null;
     if (!_progressDisposed) {
       _progressDisposed = true;
       progress.dispose();
@@ -561,6 +613,7 @@ class SearchService {
     _status = LocalSearchStatus.disabled;
     lastResult = null;
     _buildFailure = null;
+    _healthSnapshot = null;
     debugReindexOverride = null;
     debugBuildExecutor = null;
     debugCancelOverride = null;
@@ -692,18 +745,23 @@ class SearchService {
     final override = debugDataPackHealthOverride;
     if (override != null) {
       final payload = override();
+      // 无论是否一致都保留载荷：设置页诊断块需要它展示版本 / 数据包状态。
+      _healthSnapshot = payload;
       return payload == null ? null : checkDataPackHealth(payload);
     }
     final lib = _lib;
     if (lib == null) return null;
     try {
       final health = lib.health(defaultSearchDbPath());
+      // 打开 / 校验即缓存健康快照，UI 只读缓存（不在设置页做 IO）。
+      _healthSnapshot = health;
       if (health == null) {
         Log.w('search', 'era_search_health 无可用载荷：跳过数据包校验');
         return null;
       }
       return checkDataPackHealth(health);
     } catch (err) {
+      _healthSnapshot = null;
       Log.w('search', '数据包校验异常（已忽略）: $err');
       return null;
     }

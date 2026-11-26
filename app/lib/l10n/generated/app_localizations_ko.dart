@@ -4583,6 +4583,68 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsSearchIndexRebuildStarted => '인덱스 재구축을 시작했습니다';
 
   @override
+  String get settingsSearchIndexDiagVersions => '인덱스 세대 및 버전';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '세대 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '스키마 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '분석기 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '검색 데이터 팩';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '팩 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '인덱스와 일치';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '다른 팩으로 생성됨';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '존재';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '없음';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '기반 테이블 정상';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '기반 테이블 누락';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '저하된 기능 $count개';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '가사 신뢰도';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '높음 $high · 보통 $medium · 낮음 $low · 없음 $none';
+  }
+
+  @override
   String get libraryFullScan => '전체 스캔';
 
   @override

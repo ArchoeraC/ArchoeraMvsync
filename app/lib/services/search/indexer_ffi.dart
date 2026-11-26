@@ -224,6 +224,25 @@ class IndexerLibrary {
     });
   }
 
+  /// 在**子 isolate** 内读 `era_search_health`（设置页诊断快照刷新用）。
+  ///
+  /// 与 [runInIsolate] 同因：`DynamicLibrary` 实例不可跨 isolate 发送，子 isolate
+  /// 重新 load 同一共享库（句柄进程共享）。失败一律返回 null，绝不抛异常；
+  /// 调用方应只在异步动作里使用，避免 UI 线程做 IO。
+  static Future<Map<String, dynamic>?> healthInIsolate({
+    required String soPath,
+    required String indexPath,
+  }) {
+    return Isolate.run(() {
+      try {
+        final lib = IndexerLibrary.load(soPath: soPath);
+        return lib.health(indexPath);
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
   /// 请求取消进行中的构建（任意线程/isolate 可调）。返回 false 表示无进行中构建。
   bool cancel() => _cancel() == 0;
 
