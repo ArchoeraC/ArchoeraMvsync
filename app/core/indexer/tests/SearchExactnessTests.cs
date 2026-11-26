@@ -109,7 +109,8 @@ internal static class SearchExactnessTests
 
         var lyrics = Step("lexical@1", FieldFamily.Mixed, "\"晴天\" AND \"晴\" AND \"天*\"",
             MatchOp.And);
-        Program.Check("proximity: 混合 / 歌词族 = 算不出（宁可排低）",
+        // Q2：形状层对散落多 term 不猜（任何族都记算不出），真实跨度由引擎读位置块填充。
+        Program.Check("proximity: 形状层散落多 term = 算不出（引擎填充）",
             SearchRanker.FromStep(lyrics, 3).Proximity == SearchRanker.ProximityUnknown,
             SearchRanker.FromStep(lyrics, 3).Proximity.ToString());
     }

@@ -1024,18 +1024,18 @@ internal sealed class SearchSession : IDisposable
         var eraCandidates = hits.Candidates;
         if (eraCandidates.Count == 0) return new List<Candidate>();
 
-        // 邻近度（§4.2 第 5 键）：散落多 term 的**元数据**步才按真实位置算最小跨度。
-        // 歌词族不读原文（spec：算不出），拼音 / 首字母 / 读音族的位置语义不同源，均跳过。
+        // 邻近度（§4.2 第 5 键）：散落多 term 的字面步按真实位置算最小跨度。
+        // 有字段集映射的族（元数据 / 歌词原文·译文·音译 / 混合 / 读音 / 模糊）读位置块；
+        // 拼音 / 首字母 / 跨语言族的 term 不是其列的字面 token，位置语义不同源，跳过。
         // 成本护栏与精确度复核同口径：单步候选 ≤ Cap 才读位置块，且游标在一次调用内复用。
         // 「真实词」剔除 analyzer 追加的段首 / 段尾 unigram：单真实词按 spec 记 0
         // （不按词在标题里的位置记惩罚）。
-        var proximityTerms = step.Family == FieldFamily.Meta
-            ? SearchQuery.ProximityTerms(step.Terms)
-            : Array.Empty<string>();
-        if (proximityTerms.Count > 1)
+        var proximityTerms = SearchQuery.ProximityTerms(step.Terms);
+        var proximitySupported = EraStore.EraProximity.Supports(step.Family);
+        if (proximitySupported && proximityTerms.Count > 1)
         {
             EraStore.EraProximity.Fill(
-                _era, proximityTerms, eraCandidates, SearchExactness.Cap);
+                _era, proximityTerms, eraCandidates, SearchExactness.Cap, step.Family);
         }
 
         // 复核判定用「未截断命中数」而不是返回条数：翻页请求 take=-1、首页 take=limit+offset，
@@ -1062,11 +1062,11 @@ internal sealed class SearchSession : IDisposable
             var stepEvidence = evidence with { Positioned = positioned };
             if (readingSequences is { Count: > 0 })
                 stepEvidence = stepEvidence with { Exactness = SearchRanker.ReadingExactness(ec.Tier) };
-            // 引擎算出真实跨度时才覆盖形状层的兜底值；元数据步的「单真实词」记 0，
-            // 其余（歌词 / 转写族、算不出的散落窗口）保持 ProximityOf 的结论。
+            // 引擎算出真实跨度时才覆盖形状层的兜底值；有字段集的族「单真实词」记 0，
+            // 其余（不支持的族、算不出的散落窗口）保持 ProximityOf 的结论。
             if (ec.Proximity != SearchRanker.ProximityUnknown)
                 stepEvidence = stepEvidence with { Proximity = ec.Proximity };
-            else if (proximityTerms.Count == 1)
+            else if (proximitySupported && proximityTerms.Count == 1)
                 stepEvidence = stepEvidence with { Proximity = 0 };
             if (segments is not null
                 && segments.TryGetValue(ec.SegmentId, out var segment)
