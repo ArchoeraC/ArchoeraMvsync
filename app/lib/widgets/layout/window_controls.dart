@@ -21,11 +21,27 @@ import '../../app/app_quit.dart';
 import '../../l10n/l10n.dart';
 import '../../services/platform/platform_capabilities.dart';
 import '../../services/platform/system_window.dart';
+import '../../services/platform/window_resize.dart';
 import '../common/tray_integration.dart';
 import '../player/s_controls.dart';
 
 /// 自绘标题条高度（逻辑像素），与旧第三方窗口插件的 `kWindowCaptionHeight` 一致。
 const double kWindowCaptionHeight = 32;
+
+/// 桥接是否提供窗口控制（`setSize` / `setMaximized` / `startResize` / 显隐…）。
+///
+/// 纯 Wayland 且无 `libgtk-3`、或 native 契约版本不符时桥接整体 Noop：
+/// 此时自绘缩放热区与最小化/最大化按钮「能命中却什么也做不了」，必须隐藏，
+/// 否则 8px 边缘带会白白吞掉点击。关闭按钮不受影响（走 Dart 的退出/托盘策略，
+/// 无需窗口控制能力），因此保留。
+///
+/// 单测环境恒视为不可用：避免 widget 测试的结果取决于本机是否恰好构建了
+/// 原生桥接（`FLUTTER_TEST` 下 `PlatformCapabilities.instance()` 可能真的
+/// 加载到 `libarchoera_platform.so`）。
+bool get windowControlAvailable {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) return false;
+  return PlatformCapabilities.instance().windowControlAvailable;
+}
 
 /// 铺满父级的「拖动窗口」手势层，位于内容**之下**。
 ///
@@ -166,22 +182,13 @@ class WindowResizeArea extends StatelessWidget {
   bool _enabled(WindowResizeEdge edge) =>
       enableResizeEdges?.contains(edge) ?? true;
 
-  void _startResize(WindowResizeEdge edge) {
-    PlatformCapabilities.instance().window.startResize(edge);
-  }
-
-  Widget _handle(WindowResizeEdge edge, MouseCursor cursor) {
-    return MouseRegion(
-      cursor: cursor,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => _startResize(edge),
-      ),
-    );
-  }
+  Widget _handle(WindowResizeEdge edge, MouseCursor cursor) =>
+      _ResizeHandle(edge: edge, cursor: cursor);
 
   @override
   Widget build(BuildContext context) {
+    // 无窗口控制能力：不渲染热区（否则边缘 8px 带会吞点击却无法缩放）。
+    if (!windowControlAvailable) return child;
     final margin = resizeEdgeMargin ?? EdgeInsets.zero;
     final s = resizeEdgeSize;
     final left = margin.left;
@@ -376,6 +383,20 @@ class _WindowControlsState extends ConsumerState<WindowControls> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    // 桥接无窗口控制：最小化/最大化是纯原生操作（点了没反应），隐藏；关闭按钮
+    // 仍走 Dart 的关闭策略（托盘常驻 / 退出），保留可用。
+    if (!windowControlAvailable) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _button(
+            tooltip: l10n.windowClose,
+            icon: Icons.close,
+            onPressed: _close,
+          ),
+        ],
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -397,6 +418,93 @@ class _WindowControlsState extends ConsumerState<WindowControls> {
           onPressed: _close,
         ),
       ],
+    );
+  }
+}
+
+/// 单个边缘/角热区：优先走原生 `startResize`（Windows / Linux 的模态缩放），
+/// 原生不支持时（macOS 返回 `APL_ERR_UNSUPPORTED`）退回
+/// `getSize / getPosition → setSize / setPosition` 的纯 Dart 缩放。
+class _ResizeHandle extends StatefulWidget {
+  const _ResizeHandle({required this.edge, required this.cursor});
+
+  final WindowResizeEdge edge;
+  final MouseCursor cursor;
+
+  @override
+  State<_ResizeHandle> createState() => _ResizeHandleState();
+}
+
+class _ResizeHandleState extends State<_ResizeHandle> {
+  SystemWindow get _window => PlatformCapabilities.instance().window;
+
+  /// 原生模态缩放已接管：后续 pan 事件全部忽略。
+  bool _native = false;
+
+  /// 手动缩放起点（null = 未开始 / 不可用）。
+  WindowRect? _start;
+  int _dx = 0;
+  int _dy = 0;
+
+  void _onStart(DragStartDetails _) {
+    _native = false;
+    _start = null;
+    _dx = 0;
+    _dy = 0;
+    final window = _window;
+    if (window.startResize(widget.edge)) {
+      _native = true;
+      return;
+    }
+    final size = window.size;
+    final position = window.position;
+    if (size == null || position == null) return;
+    _start = WindowRect(
+      x: position.x,
+      y: position.y,
+      width: size.width,
+      height: size.height,
+    );
+  }
+
+  void _onUpdate(DragUpdateDetails details) {
+    final start = _start;
+    if (_native || start == null) return;
+    _dx += details.delta.dx.round();
+    _dy += details.delta.dy.round();
+    final rect = resizeWindowRect(
+      edge: widget.edge,
+      start: start,
+      dx: _dx,
+      dy: _dy,
+      minWidth: kWindowMinWidth,
+      minHeight: kWindowMinHeight,
+    );
+    final window = _window;
+    window.setSize(rect.width, rect.height);
+    if (rect.x != start.x || rect.y != start.y) {
+      window.setPosition(rect.x, rect.y);
+    }
+  }
+
+  void _onEnd() {
+    _native = false;
+    _start = null;
+    _dx = 0;
+    _dy = 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.cursor,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: _onStart,
+        onPanUpdate: _onUpdate,
+        onPanEnd: (_) => _onEnd(),
+        onPanCancel: _onEnd,
+      ),
     );
   }
 }

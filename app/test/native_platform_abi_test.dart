@@ -330,7 +330,7 @@ void main() {
     );
   });
 
-  test('ABI v10 版本 / 能力位 / 关闭事件常量与 Dart 绑定一致', () {
+  test('ABI v11 版本 / 能力位 / 关闭事件 / 尺寸读取常量与 Dart 绑定一致', () {
     if (srcDir == null) {
       markTestSkipped('未找到 app/native/platform/src（非仓库内运行？）');
       return;
@@ -343,8 +343,8 @@ void main() {
       '${appRoot.path}/lib/services/platform/platform_bindings.dart',
     ).readAsStringSync();
 
-    expect(apl, contains('constexpr int32_t kAbiVersion = 10;'));
-    expect(bindings, contains('const int aplAbiVersion = 10;'));
+    expect(apl, contains('constexpr int32_t kAbiVersion = 11;'));
+    expect(bindings, contains('const int aplAbiVersion = 11;'));
     expect(
       header,
       contains(RegExp(r'#define\s+APL_CAP_WINDOW_CONTROL\s+\(1u\s*<<\s*16\)')),
@@ -355,5 +355,9 @@ void main() {
       contains(RegExp(r'APL_EVENT_WINDOW_CLOSE_REQUEST\s*=\s*14')),
     );
     expect(bindings, contains('const int aplEventWindowCloseRequest = 14;'));
+    // v11：尺寸读取与 Dart 绑定、常量守卫同步（漏一处会在运行期 Noop）。
+    expect(header, contains('apl_window_get_size'));
+    expect(bindings, contains("'apl_window_get_size'"));
+    expect(bindings, contains('int windowGetSize('));
   });
 }

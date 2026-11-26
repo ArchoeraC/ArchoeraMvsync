@@ -2094,6 +2094,19 @@ int32_t windowSetPosition(int32_t x, int32_t y) {
     return OK;
 }
 
+// ABI v11：外框尺寸（与 windowSetSize 的 SetWindowPos 口径一致），DIP。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    RECT wr{};
+    if (::GetWindowRect(hwnd, &wr) == 0) return ERR_BACKEND;
+    const UINT dpi = windowDpi(hwnd);
+    *w = pxToDip(static_cast<int32_t>(wr.right - wr.left), dpi);
+    *h = pxToDip(static_cast<int32_t>(wr.bottom - wr.top), dpi);
+    return OK;
+}
+
 // 自绘标题栏拖拽：走 Win32 非客户区命中测试，获得系统原生拖拽/吸附行为。
 int32_t windowStartDrag() {
     HWND hwnd = windowHandle();

@@ -169,6 +169,10 @@ APL_API int32_t apl_window_set_resizable(int32_t on);
 APL_API int32_t apl_window_set_decor(int32_t mode);  /* APL_WINDOW_DECOR_* */
 APL_API int32_t apl_window_get_position(int32_t* x, int32_t* y);
 APL_API int32_t apl_window_set_position(int32_t x, int32_t y);
+/* ABI v11：读取当前窗口逻辑尺寸（与 apl_window_set_size 同一口径：
+ * Windows 为含边框的外框、Linux/macOS 为内容区）。用于几何持久化 /
+ * 自绘缩放回退；未 init / 无窗口返回负值。 */
+APL_API int32_t apl_window_get_size(int32_t* w, int32_t* h);
 /* 原生标题栏拖拽 / 边缘缩放：在鼠标按下时调用（自绘标题栏 / 无边框窗口）。 */
 APL_API int32_t apl_window_start_drag(void);
 APL_API int32_t apl_window_start_resize(int32_t edge); /* APL_WINDOW_EDGE_* */

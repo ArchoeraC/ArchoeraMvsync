@@ -169,6 +169,20 @@ class FfiSystemWindow implements SystemWindow {
   }
 
   @override
+  WindowSize? get size {
+    final w = calloc<Int32>();
+    final h = calloc<Int32>();
+    try {
+      if (_b.windowGetSize(w, h) != aplOk) return null;
+      if (w.value <= 0 || h.value <= 0) return null;
+      return WindowSize(w.value, h.value);
+    } finally {
+      calloc.free(w);
+      calloc.free(h);
+    }
+  }
+
+  @override
   bool setPosition(int x, int y) => _b.windowSetPosition(x, y) == aplOk;
 
   @override

@@ -14,6 +14,8 @@
 #include <cstring>
 
 namespace {
+// v11：新增 apl_window_get_size（窗口逻辑尺寸读取，与 set_size 同口径）；
+// 纯加法，事件 / 能力位 / 既有符号不变。
 // v10：新增窗口控制 API（apl_window_set_size / set_min_size / center / show /
 // hide / minimize / restore / set_maximized / set_fullscreen / set_always_on_top /
 // set_resizable / set_decor / get_position / set_position / start_drag /
@@ -26,7 +28,7 @@ namespace {
 // v8：新增 APL_EVENT_SESSION_END / APL_CAP_SESSION_END（系统关机/注销事件；
 // 向后兼容的加法，但事件常量与能力位属于同一契约，版本号同步抬升）。
 // v7：移除 apl_open_url / APL_CAP_OPEN_URL（破坏性 ABI 变更，2026-11-09）。
-constexpr int32_t kAbiVersion = 10;
+constexpr int32_t kAbiVersion = 11;
 
 // SEC-31：reveal 路径输入契约——仅接受应用内已解析的**绝对本地路径**。
 // 拒绝空串、URI（`scheme://`，含 `file://`/`http://`）与相对路径；C 串天然在 NUL 截断。
@@ -187,6 +189,12 @@ int32_t apl_window_get_position(int32_t* x, int32_t* y) {
     if (!archoera::isInitialized()) return archoera::ERR_STATE;
     if (x == nullptr || y == nullptr) return archoera::ERR_STATE;
     return archoera::windowGetPosition(x, y);
+}
+
+int32_t apl_window_get_size(int32_t* w, int32_t* h) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (w == nullptr || h == nullptr) return archoera::ERR_STATE;
+    return archoera::windowGetSize(w, h);
 }
 
 int32_t apl_window_set_position(int32_t x, int32_t y) {

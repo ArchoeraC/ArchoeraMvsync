@@ -1091,6 +1091,10 @@ std::atomic<bool> g_hidden{false};
 // 供 Dart 任意线程 apl_window_get_position 立即往返。
 std::atomic<int32_t> g_pos_x{0};
 std::atomic<int32_t> g_pos_y{0};
+// 窗口尺寸（内容区，GTK 口径）：poll / configure-event 刷新，供任意线程
+// apl_window_get_size 读取（GTK 只能在主循环线程调用）。
+std::atomic<int32_t> g_size_w{0};
+std::atomic<int32_t> g_size_h{0};
 // 最近一次鼠标按下的 GTK 事件时间（Wayland 的 begin_move_drag 需要有效 serial；
 // 拖拽在 idle 回调里启动，`gtk_get_current_event_time()` 此时通常已为 0）。
 std::atomic<unsigned> g_last_event_time{0};
@@ -1268,6 +1272,15 @@ int poll(void*) {
         gtk_window_get_position(g_win, &px, &py);
         g_pos_x.store(px, std::memory_order_release);
         g_pos_y.store(py, std::memory_order_release);
+    }
+    if (gtk_window_get_size != nullptr) {
+        int ww = 0;
+        int wh = 0;
+        gtk_window_get_size(g_win, &ww, &wh);
+        if (ww > 0 && wh > 0) {
+            g_size_w.store(ww, std::memory_order_release);
+            g_size_h.store(wh, std::memory_order_release);
+        }
     }
     const bool hidden = gtk_widget_get_visible(g_win) == 0;
     const bool maximized =
@@ -2712,6 +2725,18 @@ int32_t windowGetPosition(int32_t* x, int32_t* y) {
     if (!gtkwin::hasWindow()) return ERR_BACKEND;
     *x = gtkwin::g_pos_x.load(std::memory_order_acquire);
     *y = gtkwin::g_pos_y.load(std::memory_order_acquire);
+    return OK;
+}
+
+// ABI v11：内容区尺寸（GTK 口径，与 windowSetSize 的 gtk_window_resize 一致）。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    if (!gtkwin::hasWindow()) return ERR_BACKEND;
+    const int32_t ww = gtkwin::g_size_w.load(std::memory_order_acquire);
+    const int32_t wh = gtkwin::g_size_h.load(std::memory_order_acquire);
+    if (ww <= 0 || wh <= 0) return ERR_STATE;
+    *w = ww;
+    *h = wh;
     return OK;
 }
 

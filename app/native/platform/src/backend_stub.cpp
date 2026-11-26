@@ -40,6 +40,7 @@ int32_t windowSetResizable(int32_t) { return ERR_UNSUPPORTED; }
 int32_t windowSetDecor(int32_t) { return ERR_UNSUPPORTED; }
 int32_t windowGetPosition(int32_t*, int32_t*) { return ERR_UNSUPPORTED; }
 int32_t windowSetPosition(int32_t, int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowGetSize(int32_t*, int32_t*) { return ERR_UNSUPPORTED; }
 int32_t windowStartDrag() { return ERR_UNSUPPORTED; }
 int32_t windowStartResize(int32_t) { return ERR_UNSUPPORTED; }
 int32_t windowRequestClose() { return ERR_UNSUPPORTED; }

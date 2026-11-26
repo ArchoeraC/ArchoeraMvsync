@@ -1041,6 +1041,35 @@ int32_t windowSetPosition(int32_t x, int32_t y) {
     return OK;
 }
 
+// ABI v11：内容区尺寸（与 windowSetSize 的 setContentSize 口径一致）。
+// AppKit 视图属性只能在主线程读 → 非主线程走 dispatch_sync，避免帧读取竞态。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    __block int32_t ww = 0;
+    __block int32_t hh = 0;
+    __block bool ok = false;
+    void (^read)(void) = ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      NSView* content = win.contentView;
+      if (content == nil) return;
+      const NSRect frame = content.frame;
+      ww = static_cast<int32_t>(std::lround(frame.size.width));
+      hh = static_cast<int32_t>(std::lround(frame.size.height));
+      ok = ww > 0 && hh > 0;
+    };
+    if ([NSThread isMainThread]) {
+        read();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), read);
+    }
+    if (!ok) return ERR_BACKEND;
+    *w = ww;
+    *h = hh;
+    return OK;
+}
+
 // 系统标题栏拖拽：把当前鼠标事件交给窗口（AppKit 自己处理跨屏/吸附）。
 // 自绘标题栏在 mouseDown 时调用；无当前事件时静默忽略。
 int32_t windowStartDrag() {

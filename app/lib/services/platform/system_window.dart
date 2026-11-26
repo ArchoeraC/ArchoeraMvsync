@@ -10,7 +10,7 @@
 /// 走本契约（它既不监听也不控制窗口）。
 ///
 /// ABI v9 起 `flags` 是权威状态值；ABI v10 起新增窗口控制 API 与关闭请求事件
-/// （能力位 `APL_CAP_WINDOW_CONTROL`）。
+/// （能力位 `APL_CAP_WINDOW_CONTROL`）；ABI v11 起补 `size`（`apl_window_get_size`）。
 ///
 /// 桥接未置能力位（纯 Wayland 等）时由工厂注入 [NoopSystemWindow]，调用方
 /// 可回退既有路径（Noop 全部控制返回 false、事件为空流）。
@@ -89,6 +89,26 @@ class WindowCloseRequest {
   final WindowCloseReason reason;
 }
 
+/// 窗口逻辑尺寸（DIP；ABI v11 `apl_window_get_size`）。
+///
+/// 与 [SystemWindow.setSize] 同一口径：Windows 为含边框外框、Linux/macOS 为内容区。
+class WindowSize {
+  const WindowSize(this.width, this.height);
+
+  final int width;
+  final int height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is WindowSize && other.width == width && other.height == height;
+
+  @override
+  int get hashCode => Object.hash(width, height);
+
+  @override
+  String toString() => 'WindowSize($width×$height)';
+}
+
 /// 窗口状态与控制契约。
 abstract interface class SystemWindow {
   /// 开/关事件订阅。返回是否成功生效（失败时调用方仅 debug 日志回落，
@@ -143,6 +163,9 @@ abstract interface class SystemWindow {
   ({int x, int y})? get position;
 
   bool setPosition(int x, int y);
+
+  /// 当前窗口尺寸（ABI v11；与 [setSize] 同口径，失败 / 不可用返回 null）。
+  WindowSize? get size;
 
   /// 原生标题栏拖拽（鼠标按下时调用；自绘标题栏 / 无边框窗口）。
   bool startDrag();
@@ -220,6 +243,9 @@ class NoopSystemWindow implements SystemWindow {
 
   @override
   bool setPosition(int x, int y) => false;
+
+  @override
+  WindowSize? get size => null;
 
   @override
   bool startDrag() => false;
