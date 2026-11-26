@@ -41,6 +41,7 @@ public static class Program
         SearchRankerTests.Run();
         SearchExactnessTests.Run();
         SchemeRegistryTests.Run();
+        QuerySemanticsTests.Run();
         SearchExplainTests.Run();
         SearchKindProximityTests.Run();
         EraStoreLyricProximityTests.Run();

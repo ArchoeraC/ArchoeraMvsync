@@ -30,6 +30,8 @@ internal static class SearchPlanCompiler
         SearchRequest request, QueryTokens tokens, StoreMeta meta, SearchScheme scheme)
     {
         var policy = scheme.Policy;
+        // Q5：只有声明 prefix matcher 的方案才生成 `*`（minimal@1 只声明 exact）。
+        var includePrefix = scheme.Allows(SchemeMatchers.Prefix);
         var terms = new List<QueryTerm>(tokens.Lexical.Count);
         foreach (var token in tokens.Lexical)
         {
@@ -57,14 +59,15 @@ internal static class SearchPlanCompiler
                 request.MinExact,
                 scheme.Id,
                 Array.Empty<string>(),
-                policy);
+                policy,
+                includePrefix);
         }
 
         // 1) 主趟：精确表达式（词法 / 拼音 / 首字母）。expression 为 null 也保留 step：
         //    旧代码 Merge(null) 之后仍会继续跑兜底，step 存在才不改变后续门的判定顺序。
         //    kind 由表达式形状决定（T2.5）：单字面 Exact / 短语 Phrase / 前缀 Prefix /
         //    散落 AND Partial / 纯拼音 Pinyin* / 首字母串 Initials。
-        var shape = SearchQuery.ShapeOf(tokens);
+        var shape = SearchQuery.ShapeOf(tokens, includePrefix);
         steps.Add(new Step(
             "lexical@1",
             KindOf(shape.Kind),
@@ -76,7 +79,9 @@ internal static class SearchPlanCompiler
             SearchPassNames.Lexical,
             StepGate.None,
             WrapLyrics(SearchQuery.CompileMatch(
-                tokens, request.Metadata, lyricsInitials: meta.InitialsLyrics), request.Lyrics)));
+                tokens, request.Metadata, lyricsInitials: meta.InitialsLyrics,
+                includePrefix: includePrefix,
+                minPinyinPrefixLength: policy.MinPinyinPrefixTokenLength), request.Lyrics)));
 
         // 1.5) 计划期收缩（RP §3.5.7 / N15）：查询可见码点数 ≥ 策略上限时只保留字面主趟。
         //      不生成丢词 / 拼音 / 读音 / 跨语言 / 容错 step——这些 step 的候选数随查询长度
@@ -91,7 +96,8 @@ internal static class SearchPlanCompiler
                 request.MinExact,
                 scheme.Id,
                 Array.Empty<string>(),
-                policy);
+                policy,
+                includePrefix);
         }
 
         // 2) 丢词降级：候选集含「编译为 null」的丢法（仍参与字段亲和度重排），
@@ -104,7 +110,7 @@ internal static class SearchPlanCompiler
             {
                 var expression = SearchQuery.CompileDropTokens(
                     tokens, request.Query, request.Metadata, dropIndex,
-                    meta.InitialsLyrics);
+                    meta.InitialsLyrics, includePrefix);
                 if (expression is null) continue;
                 expression = WrapLyrics(expression, request.Lyrics);
 
@@ -128,7 +134,8 @@ internal static class SearchPlanCompiler
 
         // 3) 拼音宽松兜底（音节位置无关 AND + 模糊音扩展）。
         var pinyinLoose = scheme.Allows(SchemeMatchers.PhoneticMeta)
-            ? WrapLyrics(SearchQuery.CompilePinyinLoose(tokens, request.Metadata), request.Lyrics)
+            ? WrapLyrics(SearchQuery.CompilePinyinLoose(
+                tokens, request.Metadata, includePrefix), request.Lyrics)
             : null;
         if (pinyinLoose is not null)
         {
@@ -244,7 +251,8 @@ internal static class SearchPlanCompiler
                 {
                     var expression = SearchQuery.CompileMatch(
                         Analyzer.AnalyzeQuery(variant), metadata: false,
-                        lyricsInitials: meta.InitialsLyrics);
+                        lyricsInitials: meta.InitialsLyrics, includePrefix: includePrefix,
+                        minPinyinPrefixLength: policy.MinPinyinPrefixTokenLength);
                     if (expression is not null) parts.Add(expression);
                 }
 
@@ -279,7 +287,8 @@ internal static class SearchPlanCompiler
             request.MinExact,
             scheme.Id,
             Array.Empty<string>(),
-            policy);
+            policy,
+            includePrefix);
     }
 
     /// <summary>
@@ -315,7 +324,9 @@ internal static class SearchPlanCompiler
     /// </summary>
     public static string? ResolveDeferredExpression(
         Step step, QueryTokens tokens, bool metadata, bool lyrics, bool lyricsInitials,
-        Func<IReadOnlyList<string>?> loadVocabulary)
+        Func<IReadOnlyList<string>?> loadVocabulary,
+        bool includePrefix = true,
+        int minPinyinPrefixLength = SearchQuery.MinPinyinPrefixTokenLength)
     {
         if (step.NeedsFuzzyVocabulary)
         {
@@ -323,7 +334,10 @@ internal static class SearchPlanCompiler
             return WrapLyrics(
                 step.Typo2
                     ? SearchQuery.CompileTypo2(tokens, metadata, vocabulary)
-                    : SearchQuery.CompileFuzzy(tokens, metadata, vocabulary, lyricsInitials: lyricsInitials),
+                    : SearchQuery.CompileFuzzy(
+                        tokens, metadata, vocabulary, lyricsInitials: lyricsInitials,
+                        includePrefix: includePrefix,
+                        minPinyinPrefixLength: minPinyinPrefixLength),
                 lyrics);
         }
         return step.Expression;

@@ -90,6 +90,34 @@ internal sealed record SearchPolicy
     /// <summary>对应 <see cref="SearchQuery.MinPrefixTokenLength"/>。</summary>
     public int MinPrefixTokenLength { get; init; } = SearchQuery.MinPrefixTokenLength;
 
+    /// <summary>
+    /// 单音节拼音前缀的最小长度（Q3）：对应 <see cref="SearchQuery.MinPinyinPrefixTokenLength"/>。
+    /// 只作用于拼音支，不动字面 / 模糊前缀门槛（<see cref="MinPrefixTokenLength"/>）。
+    /// </summary>
+    public int MinPinyinPrefixTokenLength { get; init; } = SearchQuery.MinPinyinPrefixTokenLength;
+
+    /// <summary>
+    /// 主趟短路是否要求「强证据」（Q4）：为 <c>true</c> 时，主趟命中数达到
+    /// <c>MinExact</c> 但只有 <see cref="MatchKind.Partial"/>（散落 AND）这类弱证据时，
+    /// 仍继续执行拼音宽松 / 丢词 / 读音等兜底趟；强证据（Exact / Phrase / Prefix /
+    /// PinyinExact / PinyinPhrase / Initials）一旦出现就照旧短路。<c>MinExact</c> 语义不变。
+    /// </summary>
+    public bool RequireStrongKindForShortCircuit { get; init; } = false;
+
+    /// <summary>
+    /// 步骤 df 预算（Q8）：&gt; 0 时，执行前按表达式估算 df，超过
+    /// <c>DfBudgetFactor × step.Cap × DfBudgetCapMultiplier</c> 的步骤跳过并记
+    /// <c>df_budget</c>；默认 0 关闭，召回不变。估算为墓碑无关的近似（见
+    /// <see cref="EraStore.StoreReader.EstimateDf"/>）。
+    /// </summary>
+    public double DfBudgetFactor { get; init; } = 0;
+
+    /// <summary>
+    /// 步骤 df 预算的 cap 倍率（Q8）：与 <see cref="DfBudgetFactor"/> 相乘，默认 4 即
+    /// 「估算 df &gt; 4×cap 才跳过」（对应设计文档 Q8 的 <c>est &gt; 4×cap</c>）。
+    /// </summary>
+    public int DfBudgetCapMultiplier { get; init; } = 4;
+
     /// <summary>对应 <see cref="SearchQuery.PairExactWithPrefix"/>。</summary>
     public bool PairExactWithPrefix { get; init; } = SearchQuery.PairExactWithPrefix;
 
@@ -101,4 +129,12 @@ internal sealed record SearchPolicy
 
     /// <summary>v7 行为等价方案（唯一默认策略）。</summary>
     public static SearchPolicy Default { get; } = new();
+
+    /// <summary>
+    /// Q4 生效策略：与 <see cref="Default"/> 只差「短路要求强证据」。5k qbench eval 实测
+    /// P@1 / NDCG@10 / R@50 全部不变（只有兜底趟计数增加），因此给 <c>default@1</c> /
+    /// <c>fast@1</c> 启用；<c>recall@1</c> / <c>minimal@1</c> 保持 <see cref="Default"/>。
+    /// </summary>
+    public static SearchPolicy StrongShortCircuit { get; }
+        = Default with { RequireStrongKindForShortCircuit = true };
 }

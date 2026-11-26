@@ -152,6 +152,17 @@ internal static class SearchRanker
     /// <summary>kind 档位：枚举声明顺序即偏序（Exact 最好 … Typo 最差）。</summary>
     public static int KindRank(MatchKind kind) => (int)kind;
 
+    /// <summary>
+    /// 「强证据」集合（Q4）：字面精确 / 短语 / 前缀，以及拼音 / 首字母这类**定向**证据。
+    ///
+    /// <para>不包含 <see cref="MatchKind.Partial"/>（散落 AND：各词分别命中、彼此不相邻）
+    /// 与读音 / 跨语言 / 容错兜底。短路策略要求强证据时，只有主趟出现这些 kind 才停止兜底；
+    /// 这与 <see cref="KindRank"/> 的偏序无关（Partial 排在拼音之前，但它是弱证据）。</para>
+    /// </summary>
+    public static bool IsStrongKind(MatchKind kind) => kind
+        is MatchKind.Exact or MatchKind.Phrase or MatchKind.Prefix
+        or MatchKind.PinyinExact or MatchKind.PinyinPhrase or MatchKind.Initials;
+
     /// <summary>字段档位：枚举声明顺序即偏序（Title 最好 … LyricsRom 最差）。</summary>
     public static int FieldRank(FieldKind field) => (int)field;
 

@@ -26,7 +26,7 @@ internal static class EraQueryPlan
     private const int MaxTopK = 16_384;
 
     /// <summary>FTS 列名 → <see cref="FieldId"/>（FTS 声明顺序与 FieldId 编号不同）。</summary>
-    private static readonly Dictionary<string, FieldId> ColumnFields = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, FieldId> ColumnFields = new(StringComparer.Ordinal)
     {
         ["title_tok"] = FieldId.Title,
         ["artist_tok"] = FieldId.Artist,
