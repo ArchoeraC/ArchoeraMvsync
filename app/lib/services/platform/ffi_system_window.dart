@@ -204,9 +204,7 @@ class FfiSystemWindow implements SystemWindow {
   }
 
   @override
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close}) =>
-      // 原生 ABI 无 reason 参数：桥接自行投递关闭请求，Dart 侧只表达意图。
-      _b.windowRequestClose() == aplOk;
+  bool requestClose() => _b.windowRequestClose() == aplOk;
 
   @override
   Future<void> dispose() async {

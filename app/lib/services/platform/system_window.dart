@@ -173,8 +173,13 @@ abstract interface class SystemWindow {
   /// 原生边缘缩放（鼠标按下时调用）。
   bool startResize(WindowResizeEdge edge);
 
-  /// 请求关闭：原生只投递 [WindowCloseRequest]，不自行关窗 / 退出。
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close});
+  /// 请求关闭：原生只投递 [WindowCloseRequest]（**恒为 [WindowCloseReason.close]**），
+  /// 不自行关窗 / 退出。
+  ///
+  /// 契约刻意不带 reason 参数：`apl_window_request_close` 没有 reason 入参，多一个
+  /// Dart 参数只会「看起来能区分关闭/退出、实际被丢弃」。需要「明确退出」语义时
+  /// 直接走 `quitApplication`（落盘后 `exit(0)`），不要寄望经此接口表达意图。
+  bool requestClose();
 
   /// 释放底层资源；幂等。
   Future<void> dispose();
@@ -254,8 +259,7 @@ class NoopSystemWindow implements SystemWindow {
   bool startResize(WindowResizeEdge edge) => false;
 
   @override
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close}) =>
-      false;
+  bool requestClose() => false;
 
   @override
   Future<void> dispose() async {}

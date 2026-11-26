@@ -741,7 +741,7 @@ int32_t apl_system_accent_set_events(int32_t on);
   | 标题栏拖拽 | v10 `start_drag` | `ReleaseCapture` + `WM_NCLBUTTONDOWN(HTCAPTION)` | `begin_move_drag`（Wayland 用按下 serial） | `performWindowDragWithEvent` | 交叉编译 |
   | 边缘缩放 | v10 `start_resize` | 8 个 `HT*` 命中码 | `begin_resize_drag` | 原生不支持 → **Dart 回退**（`get_size`/`set_position` 手势缩放） | 交叉编译 |
   | 关闭 / 退出请求 | v10 事件 14 | `WM_CLOSE` 只上报 | `delete-event` 返回 `TRUE` | delegate `windowShouldClose:` + `terminate:` swizzle | **仅交叉编译，需真机 ×20 验收** |
-  | `request_close` / `stop_events` | v10 | 全部 | 全部 | 全部 | 交叉编译 |
+  | `request_close` / `stop_events` | v10 | 全部 | 全部 | 全部 | 交叉编译；Dart `requestClose()` **不带 reason**（原生无该入参，恒投递 `close`） |
   | 版本 / 能力位 | `apl_abi_version = 11` / `APL_CAP_WINDOW_CONTROL(1<<16)` | 置位 | `display + libgtk-3` 均可用才置位 | 置位 | `native_platform_abi_test` 常量守卫 |
 
 - **Dart 侧接入**：`PlatformBindings.tryLoad()` 要求 `apl_abi_version == 11`（不等直接
