@@ -1422,8 +1422,11 @@ internal static class EndToEnd
         {
             [EraStore.FieldId.Title] = new[] { "维护词" + n },
         };
+        // S6：手工构造的 AnalyzedDoc 必须带与 DB 原始列一致的元数据哈希，
+        // 否则引擎会把它判成脏曲，走不到「无脏曲维护」分支。
+        var metaHash = EraStore.MetaHash.Compute("维护歌" + n, "[]", "");
         return new EraStore.AnalyzedDoc(
-            track, new byte[16], 0, 0, tokens, title, "", "", mtime);
+            track, new byte[16], 0, 0, tokens, title, "", "", mtime, MetaHash: metaHash);
     }
 
     /* ------------------------------------------------------------------ */

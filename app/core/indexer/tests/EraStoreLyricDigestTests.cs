@@ -94,11 +94,11 @@ internal static class EraStoreLyricDigestTests
             !reader.ContainsLyricLine(0, LyricDigest.HashLine("夜空中最亮的星 请指引我")!.Value)
             && !reader.ContainsLyricLine(0, LyricDigest.HashLine("夜空中")!.Value));
 
-        // 旧 v4 / v3 段体拒绝并提示重建（写入侧版本 5）。
-        Program.Check("Q1 版本: 当前 DocStore v5 / 六列",
-            DocStoreWriter.Version == 5 && DocStoreWriter.TextColumns == 6,
+        // 旧 v5 / v4 / v3 段体拒绝并提示重建（写入侧版本 6）。
+        Program.Check("Q1 版本: 当前 DocStore v6 / 六列",
+            DocStoreWriter.Version == 6 && DocStoreWriter.TextColumns == 6,
             $"{DocStoreWriter.Version}/{DocStoreWriter.TextColumns}");
-        foreach (var old in new ushort[] { 3, 4 })
+        foreach (var old in new ushort[] { 3, 4, 5 })
         {
             var patched = body.ToArray();
             System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(patched.AsSpan(4), old);

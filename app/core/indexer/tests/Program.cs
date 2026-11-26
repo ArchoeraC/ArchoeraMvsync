@@ -61,6 +61,7 @@ public static class Program
         TermCodecTests.Run();
         EraStoreDocNormTests.Run();
         EraStoreLyricDigestTests.Run();
+        EraStoreMetaHashTests.Run();
         EraStorePostingsTests.Run();
         EraStorePackedPositionsTests.Run();
         EraStoreIteratorsTests.Run();

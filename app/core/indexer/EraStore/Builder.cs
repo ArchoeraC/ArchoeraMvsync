@@ -25,7 +25,8 @@ internal readonly record struct AnalyzedDoc(
     long LrcMtime = 0,
     long LrcSize = 0,
     byte LayerConf = 0,
-    IReadOnlyList<string>? LyricLines = null);
+    IReadOnlyList<string>? LyricLines = null,
+    ulong MetaHash = 0);
 
 /// <summary>
 /// 全量构建参数。<see cref="FileUuid"/> / <see cref="CreatedMs"/> / <see cref="Gen"/> 固定时，
@@ -449,6 +450,9 @@ internal static class IndexBuilder
             // v5 歌词行摘要（Q1）：与归一列同一生成点（全量 / 增量共用），
             // 合并路径从旧段原样拷贝，不再调用 Analyzer.NormalizeMetadata。
             LyricDigests = LyricDigest.Build(doc.LyricLines),
+            // v6 元数据内容哈希（S6）：由分析期上游按 DB 原始列算定；这里只搬运。
+            // 合并路径从旧段原样拷贝，不重新计算。
+            MetaHash = doc.MetaHash,
             Mtime = doc.Mtime,
             LrcMtime = doc.LrcMtime,
             LrcSize = doc.LrcSize,

@@ -118,17 +118,17 @@ internal static class EraStoreDocNormTests
         }
     }
 
-    /// <summary>3. 旧 v1–v4 段体被拒绝，且元数据版本锚已递增（触发全量重建）。</summary>
+    /// <summary>3. 旧 v1–v5 段体被拒绝，且元数据版本锚已递增（触发全量重建）。</summary>
     private static void VersionGate()
     {
         var body = DocStoreWriter.Write(new[] { MakeRecord(1, "晴天", "周杰伦", "叶惠美") });
-        Program.Check("版本: 当前 DocStore v5 / 六列",
-            DocStoreWriter.Version == 5 && DocStoreWriter.TextColumns == 6,
+        Program.Check("版本: 当前 DocStore v6 / 六列",
+            DocStoreWriter.Version == 6 && DocStoreWriter.TextColumns == 6,
             $"{DocStoreWriter.Version}/{DocStoreWriter.TextColumns}");
-        Program.Check("版本: 元数据锚 ≥ 4（旧索引走重建）",
-            Manifest.CurrentMetaVersion >= 4, Manifest.CurrentMetaVersion.ToString());
+        Program.Check("版本: 元数据锚 ≥ 5（旧索引走重建）",
+            Manifest.CurrentMetaVersion >= 5, Manifest.CurrentMetaVersion.ToString());
 
-        foreach (var old in new ushort[] { 1, 2, 3, 4 })
+        foreach (var old in new ushort[] { 1, 2, 3, 4, 5 })
         {
             var patched = body.ToArray();
             System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(patched.AsSpan(4), old);
