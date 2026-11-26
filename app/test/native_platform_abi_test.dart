@@ -90,8 +90,8 @@ final RegExp _declarationRe = RegExp(
 );
 
 Set<String> _contractDeclarations(String header) => {
-      for (final m in _declarationRe.allMatches(header)) m.group(2)!,
-    };
+  for (final m in _declarationRe.allMatches(header)) m.group(2)!,
+};
 
 /// 定义行允许的返回类型（含限定符）；用于把「定义」与「调用/引用」区分开。
 final RegExp _returnTypeRe = RegExp(
@@ -138,7 +138,8 @@ List<String> _namespacePathAt(String source, int end) {
       i++;
       continue;
     }
-    final atNs = source.startsWith('namespace', i) &&
+    final atNs =
+        source.startsWith('namespace', i) &&
         (i == 0 || !_isWordChar(source[i - 1])) &&
         (i + 9 >= source.length || !_isWordChar(source[i + 9]));
     if (!atNs) {
@@ -224,11 +225,13 @@ List<_Definition> _findDefinitions(String source, String name) {
     }
     if (j >= source.length || source[j] != '{') continue;
     final line = '\n'.allMatches(source.substring(0, m.start)).length + 1;
-    found.add(_Definition(
-      line,
-      _preprocessorDepthAt(source, m.start),
-      _namespacePathAt(source, m.start),
-    ));
+    found.add(
+      _Definition(
+        line,
+        _preprocessorDepthAt(source, m.start),
+        _namespacePathAt(source, m.start),
+      ),
+    );
   }
   return found;
 }
@@ -303,22 +306,54 @@ void main() {
         final where = definitions.isEmpty
             ? '未找到任何定义'
             : definitions
-                .map((d) =>
-                    'L${d.line} depth=${d.preprocessorDepth} '
-                    'ns=${d.namespaces.join("::")}')
-                .join('; ');
-        problems.add('$backend: $name —— 缺「深度 0 且位于 namespace archoera」'
-            '的定义（$where）');
+                  .map(
+                    (d) =>
+                        'L${d.line} depth=${d.preprocessorDepth} '
+                        'ns=${d.namespaces.join("::")}',
+                  )
+                  .join('; ');
+        problems.add(
+          '$backend: $name —— 缺「深度 0 且位于 namespace archoera」'
+          '的定义（$where）',
+        );
       }
     }
 
     expect(
       problems,
       isEmpty,
-      reason: '后端契约实现必须无条件提供（apl.cpp 无条件引用它）：\n'
+      reason:
+          '后端契约实现必须无条件提供（apl.cpp 无条件引用它）：\n'
           '${problems.join("\n")}\n'
           '提示：把定义移到 `namespace archoera {` 之后、任何 #if 之外；'
           '详见 docs/platform-native-bridge.md。',
     );
+  });
+
+  test('ABI v10 版本 / 能力位 / 关闭事件常量与 Dart 绑定一致', () {
+    if (srcDir == null) {
+      markTestSkipped('未找到 app/native/platform/src（非仓库内运行？）');
+      return;
+    }
+    final header = File('${srcDir.path}/../include/archoera_platform.h')
+        .readAsStringSync();
+    final apl = File('${srcDir.path}/apl.cpp').readAsStringSync();
+    final appRoot = srcDir.parent.parent.parent;
+    final bindings = File(
+      '${appRoot.path}/lib/services/platform/platform_bindings.dart',
+    ).readAsStringSync();
+
+    expect(apl, contains('constexpr int32_t kAbiVersion = 10;'));
+    expect(bindings, contains('const int aplAbiVersion = 10;'));
+    expect(
+      header,
+      contains(RegExp(r'#define\s+APL_CAP_WINDOW_CONTROL\s+\(1u\s*<<\s*16\)')),
+    );
+    expect(bindings, contains('const int aplCapWindowControl = 1 << 16;'));
+    expect(
+      header,
+      contains(RegExp(r'APL_EVENT_WINDOW_CLOSE_REQUEST\s*=\s*14')),
+    );
+    expect(bindings, contains('const int aplEventWindowCloseRequest = 14;'));
   });
 }

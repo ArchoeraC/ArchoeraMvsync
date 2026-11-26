@@ -532,7 +532,7 @@ WAL + busy_timeout 并发访问（scanner 直写媒体库、subsonic FFI 直读�
 - `MainLayout`（SideBar + NavHeader + 内容区）→ Flutter `Scaffold` + 自定义导航（侧栏/抽屉可切换）
 - 底部 `PlayerBar` 常驻 → 全局持久底部栏，跨路由保持
 - `FullPlayer` 全屏覆盖 → Navigator 全屏路由（保留转场动画）
-- 标题栏窗口控件（`WindowControls.vue`）→ `window_manager`（最小化/最大化/关闭）
+- 标题栏窗口控件（`WindowControls.vue`）→ 自研平台桥接 `apl_window_*`（原第三方窗口插件已移除）
 
 **布局骨架落地（2026-08-06，已实现）**
 - 壳：`ui/app_shell.dart` = Row[`SideBar` ｜ Column[NavHeader, 页面区]] + 底部 `PlayerBar`

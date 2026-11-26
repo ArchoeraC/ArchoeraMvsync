@@ -29,6 +29,27 @@ int32_t powerSetScreenEvents(int32_t on);
 
 int32_t windowSetEvents(int32_t on);
 
+// 窗口控制（ABI v10；尺寸/坐标均为逻辑像素 DIP）。未 init 由 apl.cpp 拦截；
+// 无窗口 / 参数非法返回负值。requestClose 只投递事件，绝不自行关窗。
+int32_t windowSetSize(int32_t w, int32_t h);
+int32_t windowSetMinSize(int32_t w, int32_t h);
+int32_t windowCenter();
+int32_t windowShow();
+int32_t windowHide();
+int32_t windowMinimize();
+int32_t windowRestore();
+int32_t windowSetMaximized(int32_t on);
+int32_t windowSetFullscreen(int32_t on);
+int32_t windowSetAlwaysOnTop(int32_t on);
+int32_t windowSetResizable(int32_t on);
+int32_t windowSetDecor(int32_t mode);
+int32_t windowGetPosition(int32_t* x, int32_t* y);
+int32_t windowSetPosition(int32_t x, int32_t y);
+int32_t windowStartDrag();
+int32_t windowStartResize(int32_t edge);
+int32_t windowRequestClose();
+int32_t windowStopEvents();
+
 int32_t mediaSetTrack(const AplTrackMeta* track);
 int32_t mediaSetPlayback(int32_t state, int64_t position_ms, double speed,
                          double volume, int32_t loop, int32_t shuffle);

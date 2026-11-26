@@ -16,7 +16,7 @@
 /// [kEasterEggEffects] 追加一条 `EasterEggEffect` 即可。
 library;
 
-import 'dart:async' show Timer;
+import 'dart:async' show StreamSubscription, Timer;
 import 'dart:io' show Platform, sleep;
 import 'dart:math' as math;
 
@@ -33,12 +33,13 @@ import 'package:flutter/rendering.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart'
     show StateNotifier, StateNotifierProvider;
-import 'package:window_manager/window_manager.dart';
 
 import '../app/app_quit.dart';
 import '../app/theme_provider.dart';
 import '../l10n/l10n.dart';
 import '../services/log/log.dart';
+import '../services/platform/platform_capabilities.dart';
+import '../services/platform/system_window.dart';
 import '../services/playback/playback_notifier.dart';
 import '../services/playback/playback_state.dart';
 import '../stores/app_prefs.dart';

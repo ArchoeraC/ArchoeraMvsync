@@ -49,6 +49,9 @@ const int aplCapSecureFile = 1 << 12;
 const int aplCapElevation = 1 << 14;
 const int aplCapSessionEnd = 1 << 15;
 
+/// 窗口控制 API（尺寸/显隐/最大化/全屏/装饰/拖拽/关闭请求）。
+const int aplCapWindowControl = 1 << 16;
+
 /// 提权探测结果（对齐 `APL_ELEVATION_*`）。
 const int aplElevationNone = 0;
 const int aplElevationRoot = 1;
@@ -67,12 +70,16 @@ const int aplEventTrayDoubleClick = 10;
 const int aplEventTrayRightClick = 11;
 const int aplEventTrayMenuCommand = 12;
 const int aplEventSessionEnd = 13;
+const int aplEventWindowCloseRequest = 14;
 
-/// 契约版本 9：窗口状态 `u.window` 增加 `flags`（最小化/前台/最大化/全屏/隐藏），
-/// 三端改为原生事件驱动，Dart 不再用 window_manager 监听窗口状态。
+/// 契约版本 10：新增窗口控制 API（`apl_window_*`，能力位
+/// `APL_CAP_WINDOW_CONTROL`）与 `APL_EVENT_WINDOW_CLOSE_REQUEST` 关闭请求事件；
+/// Dart 侧窗口控制不再经第三方窗口插件。
+/// 版本 9：窗口状态 `u.window` 增加 `flags`（最小化/前台/最大化/全屏/隐藏），
+/// 三端改为原生事件驱动，Dart 不再用第三方插件监听窗口状态。
 /// 版本 8：新增 `APL_EVENT_SESSION_END` / `APL_CAP_SESSION_END`（系统关机/注销事件）。
 /// 版本 7：移除 `apl_open_url` / `APL_CAP_OPEN_URL`（破坏性 ABI 变更）。
-const int aplAbiVersion = 9;
+const int aplAbiVersion = 10;
 
 /// 窗口状态 flags（对齐 `APL_WINDOW_FLAG_*`）。
 const int aplWindowFlagMinimized = 1 << 0;
@@ -80,6 +87,25 @@ const int aplWindowFlagFocused = 1 << 1;
 const int aplWindowFlagMaximized = 1 << 2;
 const int aplWindowFlagFullscreen = 1 << 3;
 const int aplWindowFlagHidden = 1 << 4;
+
+/// 关闭请求原因（对齐 `APL_WINDOW_CLOSE` / `APL_WINDOW_QUIT`）。
+const int aplWindowClose = 0;
+const int aplWindowQuit = 1;
+
+/// 装饰模式（对齐 `APL_WINDOW_DECOR_*`）。
+const int aplWindowDecorSystem = 0;
+const int aplWindowDecorCaption = 1;
+const int aplWindowDecorBorderless = 2;
+
+/// 缩放热区（对齐 `APL_WINDOW_EDGE_*`，顺序与 Dart `WindowResizeEdge` 一致）。
+const int aplWindowEdgeTopLeft = 0;
+const int aplWindowEdgeTop = 1;
+const int aplWindowEdgeTopRight = 2;
+const int aplWindowEdgeLeft = 3;
+const int aplWindowEdgeRight = 4;
+const int aplWindowEdgeBottomLeft = 5;
+const int aplWindowEdgeBottom = 6;
+const int aplWindowEdgeBottomRight = 7;
 
 /// 托盘菜单项（对齐 `AplTrayMenuItem`）：id==0 为分隔符；checked==-1 非复选。
 class AplTrayMenuItem {
@@ -157,6 +183,12 @@ final class AplThemePayload extends Struct {
   external int dark;
 }
 
+/// 关闭请求原因（`APL_WINDOW_CLOSE` / `APL_WINDOW_QUIT`）。
+final class AplWindowClosePayload extends Struct {
+  @Int32()
+  external int reason;
+}
+
 final class AplTrayCommandPayload extends Struct {
   @Int32()
   external int id;
@@ -201,6 +233,8 @@ final class AplEventPayload extends Union {
   external int tray;
 
   external AplTrayCommandPayload trayCommand;
+
+  external AplWindowClosePayload windowClose;
 }
 
 final class AplEventFfi extends Struct {
@@ -249,6 +283,27 @@ typedef _AplProtocolUnregisterC = Int32 Function(Pointer<Utf8> scheme);
 typedef _AplDeepLinkTakeC = Int32 Function(Pointer<AplStringFfi> out);
 typedef _AplDeepLinkForwardC = Int32 Function();
 typedef _AplWindowActivateC = Int32 Function();
+typedef _AplWindowSetSizeC = Int32 Function(Int32 w, Int32 h);
+typedef _AplWindowSetMinSizeC = Int32 Function(Int32 w, Int32 h);
+typedef _AplWindowCenterC = Int32 Function();
+typedef _AplWindowShowC = Int32 Function();
+typedef _AplWindowHideC = Int32 Function();
+typedef _AplWindowMinimizeC = Int32 Function();
+typedef _AplWindowRestoreC = Int32 Function();
+typedef _AplWindowSetMaximizedC = Int32 Function(Int32 on);
+typedef _AplWindowSetFullscreenC = Int32 Function(Int32 on);
+typedef _AplWindowSetAlwaysOnTopC = Int32 Function(Int32 on);
+typedef _AplWindowSetResizableC = Int32 Function(Int32 on);
+typedef _AplWindowSetDecorC = Int32 Function(Int32 mode);
+typedef _AplWindowGetPositionC = Int32 Function(
+  Pointer<Int32> x,
+  Pointer<Int32> y,
+);
+typedef _AplWindowSetPositionC = Int32 Function(Int32 x, Int32 y);
+typedef _AplWindowStartDragC = Int32 Function();
+typedef _AplWindowStartResizeC = Int32 Function(Int32 edge);
+typedef _AplWindowRequestCloseC = Int32 Function();
+typedef _AplWindowStopEventsC = Int32 Function();
 typedef _AplTrayCreateC = Int32 Function(Pointer<Utf8> iconPath);
 typedef _AplTrayDestroyC = Int32 Function();
 typedef _AplTraySetIconC = Int32 Function(Pointer<Utf8> iconPath);
@@ -321,6 +376,27 @@ typedef _AplProtocolUnregisterD = int Function(Pointer<Utf8> scheme);
 typedef _AplDeepLinkTakeD = int Function(Pointer<AplStringFfi> out);
 typedef _AplDeepLinkForwardD = int Function();
 typedef _AplWindowActivateD = int Function();
+typedef _AplWindowSetSizeD = int Function(int w, int h);
+typedef _AplWindowSetMinSizeD = int Function(int w, int h);
+typedef _AplWindowCenterD = int Function();
+typedef _AplWindowShowD = int Function();
+typedef _AplWindowHideD = int Function();
+typedef _AplWindowMinimizeD = int Function();
+typedef _AplWindowRestoreD = int Function();
+typedef _AplWindowSetMaximizedD = int Function(int on);
+typedef _AplWindowSetFullscreenD = int Function(int on);
+typedef _AplWindowSetAlwaysOnTopD = int Function(int on);
+typedef _AplWindowSetResizableD = int Function(int on);
+typedef _AplWindowSetDecorD = int Function(int mode);
+typedef _AplWindowGetPositionD = int Function(
+  Pointer<Int32> x,
+  Pointer<Int32> y,
+);
+typedef _AplWindowSetPositionD = int Function(int x, int y);
+typedef _AplWindowStartDragD = int Function();
+typedef _AplWindowStartResizeD = int Function(int edge);
+typedef _AplWindowRequestCloseD = int Function();
+typedef _AplWindowStopEventsD = int Function();
 typedef _AplTrayCreateD = int Function(Pointer<Utf8> iconPath);
 typedef _AplTrayDestroyD = int Function();
 typedef _AplTraySetIconD = int Function(Pointer<Utf8> iconPath);
@@ -441,6 +517,13 @@ final class AplSessionEndEvent extends AplNativeEvent {
   const AplSessionEndEvent();
 }
 
+/// 关闭请求（`APL_EVENT_WINDOW_CLOSE_REQUEST`）：桥接只上报，Dart 决定
+/// 隐藏到托盘还是退出。[reason] 为 `APL_WINDOW_CLOSE` / `APL_WINDOW_QUIT`。
+final class AplWindowCloseEvent extends AplNativeEvent {
+  const AplWindowCloseEvent(this.reason);
+  final int reason;
+}
+
 /// libarchoera_platform 绑定（进程级单例，[tryLoad] 失败返回 null → Noop）。
 class PlatformBindings {
   PlatformBindings._(DynamicLibrary lib)
@@ -518,6 +601,76 @@ class PlatformBindings {
           .lookupFunction<_AplWindowActivateC, _AplWindowActivateD>(
             'apl_window_activate',
           ),
+      _windowSetSizeFn = lib
+          .lookupFunction<_AplWindowSetSizeC, _AplWindowSetSizeD>(
+            'apl_window_set_size',
+          ),
+      _windowSetMinSizeFn = lib
+          .lookupFunction<_AplWindowSetMinSizeC, _AplWindowSetMinSizeD>(
+            'apl_window_set_min_size',
+          ),
+      _windowCenterFn = lib
+          .lookupFunction<_AplWindowCenterC, _AplWindowCenterD>(
+            'apl_window_center',
+          ),
+      _windowShowFn = lib.lookupFunction<_AplWindowShowC, _AplWindowShowD>(
+        'apl_window_show',
+      ),
+      _windowHideFn = lib.lookupFunction<_AplWindowHideC, _AplWindowHideD>(
+        'apl_window_hide',
+      ),
+      _windowMinimizeFn = lib
+          .lookupFunction<_AplWindowMinimizeC, _AplWindowMinimizeD>(
+            'apl_window_minimize',
+          ),
+      _windowRestoreFn = lib
+          .lookupFunction<_AplWindowRestoreC, _AplWindowRestoreD>(
+            'apl_window_restore',
+          ),
+      _windowSetMaximizedFn = lib
+          .lookupFunction<_AplWindowSetMaximizedC, _AplWindowSetMaximizedD>(
+            'apl_window_set_maximized',
+          ),
+      _windowSetFullscreenFn = lib
+          .lookupFunction<_AplWindowSetFullscreenC, _AplWindowSetFullscreenD>(
+            'apl_window_set_fullscreen',
+          ),
+      _windowSetAlwaysOnTopFn = lib
+          .lookupFunction<_AplWindowSetAlwaysOnTopC, _AplWindowSetAlwaysOnTopD>(
+            'apl_window_set_always_on_top',
+          ),
+      _windowSetResizableFn = lib
+          .lookupFunction<_AplWindowSetResizableC, _AplWindowSetResizableD>(
+            'apl_window_set_resizable',
+          ),
+      _windowSetDecorFn = lib
+          .lookupFunction<_AplWindowSetDecorC, _AplWindowSetDecorD>(
+            'apl_window_set_decor',
+          ),
+      _windowGetPositionFn = lib
+          .lookupFunction<_AplWindowGetPositionC, _AplWindowGetPositionD>(
+            'apl_window_get_position',
+          ),
+      _windowSetPositionFn = lib
+          .lookupFunction<_AplWindowSetPositionC, _AplWindowSetPositionD>(
+            'apl_window_set_position',
+          ),
+      _windowStartDragFn = lib
+          .lookupFunction<_AplWindowStartDragC, _AplWindowStartDragD>(
+            'apl_window_start_drag',
+          ),
+      _windowStartResizeFn = lib
+          .lookupFunction<_AplWindowStartResizeC, _AplWindowStartResizeD>(
+            'apl_window_start_resize',
+          ),
+      _windowRequestCloseFn = lib
+          .lookupFunction<_AplWindowRequestCloseC, _AplWindowRequestCloseD>(
+            'apl_window_request_close',
+          ),
+      _windowStopEventsFn = lib
+          .lookupFunction<_AplWindowStopEventsC, _AplWindowStopEventsD>(
+            'apl_window_stop_events',
+          ),
       _trayCreateFn = lib.lookupFunction<_AplTrayCreateC, _AplTrayCreateD>(
         'apl_tray_create',
       ),
@@ -589,6 +742,24 @@ class PlatformBindings {
   final _AplDeepLinkTakeD _deepLinkTakeFn;
   final _AplDeepLinkForwardD _deepLinkForwardFn;
   final _AplWindowActivateD _windowActivateFn;
+  final _AplWindowSetSizeD _windowSetSizeFn;
+  final _AplWindowSetMinSizeD _windowSetMinSizeFn;
+  final _AplWindowCenterD _windowCenterFn;
+  final _AplWindowShowD _windowShowFn;
+  final _AplWindowHideD _windowHideFn;
+  final _AplWindowMinimizeD _windowMinimizeFn;
+  final _AplWindowRestoreD _windowRestoreFn;
+  final _AplWindowSetMaximizedD _windowSetMaximizedFn;
+  final _AplWindowSetFullscreenD _windowSetFullscreenFn;
+  final _AplWindowSetAlwaysOnTopD _windowSetAlwaysOnTopFn;
+  final _AplWindowSetResizableD _windowSetResizableFn;
+  final _AplWindowSetDecorD _windowSetDecorFn;
+  final _AplWindowGetPositionD _windowGetPositionFn;
+  final _AplWindowSetPositionD _windowSetPositionFn;
+  final _AplWindowStartDragD _windowStartDragFn;
+  final _AplWindowStartResizeD _windowStartResizeFn;
+  final _AplWindowRequestCloseD _windowRequestCloseFn;
+  final _AplWindowStopEventsD _windowStopEventsFn;
   final _AplTrayCreateD _trayCreateFn;
   final _AplTrayDestroyD _trayDestroyFn;
   final _AplTraySetIconD _traySetIconFn;
@@ -619,6 +790,7 @@ class PlatformBindings {
       StreamController<AplTrayRightClickEvent>.broadcast();
   final _trayMenuCtrl = StreamController<AplTrayMenuCommandEvent>.broadcast();
   final _sessionEndCtrl = StreamController<AplSessionEndEvent>.broadcast();
+  final _windowCloseCtrl = StreamController<AplWindowCloseEvent>.broadcast();
 
   /// 单实例仲裁：1=首实例；0=已有实例；<0=错误。
   /// 进程硬化：**禁 core dump**（防已解密明文随 core 落盘被同用户取走，见 SEC-48）。
@@ -767,6 +939,9 @@ class PlatformBindings {
   /// 系统会话结束（关机/重启/注销；休眠/锁屏不会触发）。
   Stream<AplSessionEndEvent> get sessionEndEvents => _sessionEndCtrl.stream;
 
+  /// 关闭请求（系统关闭按钮 / Alt+F4 / ⌘Q / 菜单退出）。
+  Stream<AplWindowCloseEvent> get windowCloseEvents => _windowCloseCtrl.stream;
+
   /// 注册/注销当前用户的 URI scheme 处理程序（免提权）；[aplOk]=成功。
   int protocolRegister(String scheme) {
     final s = scheme.toNativeUtf8();
@@ -804,6 +979,52 @@ class PlatformBindings {
 
   /// 置前/激活主窗口（<0=失败）。
   int activateWindow() => _windowActivateFn();
+
+  // ── 窗口控制（逻辑像素；未 init / 无窗口返回负值）──
+
+  int windowSetSize(int width, int height) => _windowSetSizeFn(width, height);
+
+  int windowSetMinSize(int width, int height) =>
+      _windowSetMinSizeFn(width, height);
+
+  int windowCenter() => _windowCenterFn();
+
+  int windowShow() => _windowShowFn();
+
+  int windowHide() => _windowHideFn();
+
+  int windowMinimize() => _windowMinimizeFn();
+
+  /// 从最小化还原（不改变最大化状态）。
+  int windowRestore() => _windowRestoreFn();
+
+  int windowSetMaximized(bool on) => _windowSetMaximizedFn(on ? 1 : 0);
+
+  int windowSetFullscreen(bool on) => _windowSetFullscreenFn(on ? 1 : 0);
+
+  int windowSetAlwaysOnTop(bool on) => _windowSetAlwaysOnTopFn(on ? 1 : 0);
+
+  int windowSetResizable(bool on) => _windowSetResizableFn(on ? 1 : 0);
+
+  /// [mode] 取 `aplWindowDecor*`。
+  int windowSetDecor(int mode) => _windowSetDecorFn(mode);
+
+  int windowGetPosition(Pointer<Int32> x, Pointer<Int32> y) =>
+      _windowGetPositionFn(x, y);
+
+  int windowSetPosition(int x, int y) => _windowSetPositionFn(x, y);
+
+  /// 原生标题栏拖拽（鼠标按下时调用）。
+  int windowStartDrag() => _windowStartDragFn();
+
+  /// [edge] 取 `aplWindowEdge*`。
+  int windowStartResize(int edge) => _windowStartResizeFn(edge);
+
+  /// 只投递 `APL_EVENT_WINDOW_CLOSE_REQUEST`，不自行关窗 / 退出。
+  int windowRequestClose() => _windowRequestCloseFn();
+
+  /// 退出前显式摘观察者 / 还原 wndproc / 恢复原生委托（幂等）。
+  int windowStopEvents() => _windowStopEventsFn();
 
   // ── 托盘正向调用 ──
 
@@ -926,6 +1147,8 @@ class PlatformBindings {
         b._trayMenuCtrl.add(AplTrayMenuCommandEvent(ref.u.trayCommand.id));
       case aplEventSessionEnd:
         b._sessionEndCtrl.add(const AplSessionEndEvent());
+      case aplEventWindowCloseRequest:
+        b._windowCloseCtrl.add(AplWindowCloseEvent(ref.u.windowClose.reason));
     }
   }
 
@@ -1045,6 +1268,7 @@ class PlatformBindings {
     _trayRightClickCtrl.close();
     _trayMenuCtrl.close();
     _sessionEndCtrl.close();
+    _windowCloseCtrl.close();
     _instance = null;
   }
 }

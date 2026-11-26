@@ -41,6 +41,7 @@ constexpr uint32_t CAP_SECURE_FILE = 1u << 12;
 // 1u << 13 保留：原 CAP_OPEN_URL（ABI v7 移除，勿复用）。
 constexpr uint32_t CAP_ELEVATION = 1u << 14;
 constexpr uint32_t CAP_SESSION_END = 1u << 15;
+constexpr uint32_t CAP_WINDOW_CONTROL = 1u << 16;
 
 // ── 事件类型 / 命令 ───────────────────────────────────────────────
 constexpr int32_t EVENT_MEDIA_COMMAND = 1;
@@ -56,6 +57,11 @@ constexpr int32_t EVENT_TRAY_DOUBLE_CLICK = 10;
 constexpr int32_t EVENT_TRAY_RIGHT_CLICK = 11;
 constexpr int32_t EVENT_TRAY_MENU_COMMAND = 12;
 constexpr int32_t EVENT_SESSION_END = 13;
+constexpr int32_t EVENT_WINDOW_CLOSE_REQUEST = 14;
+
+// 关闭请求原因（对齐 include/archoera_platform.h APL_WINDOW_CLOSE/_QUIT）。
+constexpr int32_t WINDOW_CLOSE = 0;
+constexpr int32_t WINDOW_QUIT = 1;
 
 // 窗口状态 flags（对齐 include/archoera_platform.h APL_WINDOW_FLAG_*）。
 constexpr int32_t WINDOW_FLAG_MINIMIZED = 1 << 0;
@@ -111,6 +117,10 @@ AplEvent makeTrayMenuCommand(int32_t id);
 
 // 系统会话结束（关机/重启/注销；**不含**休眠/待机/锁屏/熄屏）。
 AplEvent makeSessionEnd();
+
+// 窗口关闭请求（用户点系统关闭按钮 / ⌘Q / Alt+F4）：桥接只上报，不关窗。
+// reason: WINDOW_CLOSE（普通关闭）或 WINDOW_QUIT（明确退出，如 ⌘Q）。
+AplEvent makeWindowCloseRequest(int32_t reason);
 
 }  // namespace archoera
 

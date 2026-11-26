@@ -6,13 +6,6 @@ import 'dart:io' show Platform;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart'
-    show
-        DragToMoveArea,
-        DragToResizeArea,
-        ResizeEdge,
-        WindowCaption,
-        kWindowCaptionHeight;
 
 import '../apis/runtime.dart';
 import '../easter_egg/easter_egg.dart';
@@ -20,6 +13,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../l10n/l10n.dart';
 import '../services/mcp/mcp_host.dart';
 import '../services/platform/media_session.dart';
+import '../services/platform/system_window.dart';
 import '../services/platform/window_decor.dart';
 import '../services/power/power_saver.dart';
 import '../stores/app_prefs.dart';
@@ -33,6 +27,7 @@ import '../widgets/common/toast.dart';
 import '../widgets/common/vault_crash_gate.dart';
 import '../widgets/common/vault_unlock_gate.dart';
 import '../widgets/common/vault_version_gate.dart';
+import '../widgets/layout/window_controls.dart';
 import 'appearance_styles/appearance_style_registry.dart';
 import 'bootstrap.dart';
 import 'router.dart';
@@ -40,12 +35,12 @@ import 'system_session_host.dart';
 import 'theme_provider.dart';
 
 /// 桌面端窗口装饰（配合 main.dart 的 applyWindowDecor）：
-/// - `caption`：WindowCaption 提供 32px 标题条（拖拽 + 双击最大化 + 三个窗口
-///   按钮），保留系统边框；Windows 左右下走原生 thickframe，仅补顶部热区；
+/// - `caption`：`WindowCaptionBar` 提供 32px 标题条（拖拽 + 双击最大化 +
+///   三个窗口按钮），保留系统边框；Windows 左右下走原生 thickframe，仅补顶部热区；
 /// - `borderless`：去掉原生边框与系统按钮，内容铺满，窗口按钮并入主界面
 ///   顶栏 NavHeader（播放页不放窗口按钮），边缘缩放由 `_EdgeResizeArea`
 ///   全边缘接管。
-/// 关闭按钮调用 nativeapi 可取消的关闭请求，仍由 TrayIntegration 接管。
+/// 关闭按钮复用 TrayIntegration 的关闭策略（桥接拦截系统关闭后上报同一请求）。
 final bool _kDesktop =
     Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
@@ -199,10 +194,10 @@ class ArchoeraMvsyncApp extends ConsumerWidget {
                           : Column(
                               children: [
                                 if (Platform.isMacOS)
-                                  // macOS：TitleBarStyle.hidden 保留原生红绿灯按钮
-                                  // （悬浮于内容左上），这里只补一条拖拽/双击最大化区，
-                                  // 避免与原生按钮重复。
-                                  DragToMoveArea(
+                                  // macOS：caption 保留原生红绿灯按钮
+                                  // （悬浮于内容左上），这里只补一条拖拽/双击
+                                  // 最大化区，避免与原生按钮重复。
+                                  WindowMoveArea(
                                     child: SizedBox(
                                       height: 28,
                                       child: ColoredBox(
@@ -213,12 +208,11 @@ class ArchoeraMvsyncApp extends ConsumerWidget {
                                     ),
                                   )
                                 else
-                                  // WindowCaption 内部用 SizedBox(height: double.infinity)
-                                  // 撑满，必须由父级给出确定高度（官方示例放在 AppBar 下）；
-                                  // 直接塞进 Column 会拿到无限高度约束而断言失败。
+                                  // 自绘标题条：左侧拖动/双击最大化，右侧窗口
+                                  // 按钮；高度固定为 kWindowCaptionHeight。
                                   SizedBox(
                                     height: kWindowCaptionHeight,
-                                    child: WindowCaption(
+                                    child: WindowCaptionBar(
                                       brightness: Theme.of(frameContext)
                                           .brightness,
                                       backgroundColor: Theme.of(frameContext)
@@ -265,18 +259,22 @@ class _EdgeResizeArea extends StatelessWidget {
     if (Platform.isWindows) {
       // caption 模式原生 thickframe 仍在，左右与底部可原生缩放，只补顶部三边；
       // borderless 模式边框被移除，四边都由 Flutter 侧热区接管。
-      return DragToResizeArea(
+      return WindowResizeArea(
         enableResizeEdges: frameless
             ? null
-            : const [ResizeEdge.topLeft, ResizeEdge.top, ResizeEdge.topRight],
+            : const {
+                WindowResizeEdge.topLeft,
+                WindowResizeEdge.top,
+                WindowResizeEdge.topRight,
+              },
         child: child,
       );
     }
     if (Platform.isLinux) {
-      // GTK 去掉装饰后由 Flutter 侧接管四条边（Wayland 走 beginResizeDrag）。
-      return DragToResizeArea(child: child);
+      // GTK 去掉装饰后由 Flutter 侧接管四条边（Wayland 走原生缩放请求）。
+      return WindowResizeArea(child: child);
     }
-    // macOS：TitleBarStyle.hidden 保留原生窗口边缘缩放能力，无需额外热区。
+    // macOS：隐藏标题栏后原生窗口边缘缩放能力仍在，无需额外热区。
     return child;
   }
 }

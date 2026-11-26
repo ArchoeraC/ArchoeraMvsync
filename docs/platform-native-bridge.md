@@ -310,10 +310,11 @@ int32_t apl_power_set_screen_events(int32_t on);
 int32_t apl_window_set_events(int32_t on);
 ```
 
-事件语义与 `window_manager` WindowListener 对齐（minimized/focused/hidden 由
-Zig 折算为 `{minimized, focused}` 二元组）。桥接可用时 `power_saver` 的聚焦
-状态**以桥接为准**（Windows 的 `WM_NCACTIVATE` 会在菜单/原生对话框/标题栏
-交互等场景误报 blur，不能覆盖桥接结果）；桥接未置位时回退 nativeapi。
+事件语义与 ABI v9 起的 `flags` 位域对齐（minimized/focused/maximized/fullscreen/hidden；
+`minimized`/`focused` 保留为兼容副本）。桥接可用时 `power_saver` 的聚焦状态**以桥接
+为准**（Windows 的 `WM_NCACTIVATE` 会在菜单/原生对话框/标题栏交互等场景误报 blur，
+不能覆盖桥接结果）；ABI v10 起控制与关闭请求也由桥接承载，桥接未置位（纯 Wayland 等）
+时注入 `NoopSystemWindow`，**不再回退第三方窗口插件**。
 `minimized=false` 用于清除最小化残留（避免还原路径漏发 restore 后永久停在
 0 帧档），托盘隐藏仍由独立 `hidden` 状态兜底。
 
@@ -531,8 +532,8 @@ int32_t apl_system_accent_set_events(int32_t on);
    `commands` 流 → `playbackNotifier.toggle/playNext/playPrevious/stop/seek`；
    与托盘菜单命令同源语义（tray_integration 对齐）；
 5. **依赖清理**（P1/P2 验收后）：`wakelock_plus`、`dbus` 从 pubspec 移除
-   （三桌面全覆盖；`window_manager` 保留——托盘/窗口几何等仍在用，仅事件监听让位桥接）；
-   geolocator 留给天气定位，SystemLocation 不在本期。
+   （三桌面全覆盖；第三方窗口插件已于 2026-11-26 ABI v10 整体移除——控制、关闭请求、
+   拖拽/缩放都改走桥接）；geolocator 留给天气定位，SystemLocation 不在本期。
 
 ## 7. 分阶段实施与验收
 
@@ -922,3 +923,83 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
   `window_manager`/托盘策略；彩蛋「最小化陷阱」仍监听 `WindowRestoredEvent`；
   控制类 `apl_window_*` 与 macOS ⌘Q 终止钩子仍是下一批。验收项 1
   （`rg window_manager` 零命中）本批不适用。
+  > ABI v10 已补齐上述三项（见下节「第二批落地」）；本条保留为 v9 时点的记录。
+
+### 2026-11-26 第二批落地：窗口控制 + 关闭请求（ABI v10）
+
+> 范围：把**控制面**与**关闭请求**迁入桥接，窗口监听（ABI v9）保持不动。
+> 所有尺寸 / 坐标都是逻辑像素（DIP）：Windows 后端按窗口 DPI 换算，macOS 用
+> 逻辑点，Linux GTK 本就是逻辑像素；三者语义一致，Dart 可直接往返。
+> `window_manager` / `nativeapi` / `cnativeapi` 依赖已在本批移除。
+
+- **契约**：`kAbiVersion` 9 → 10。新增能力位 `APL_CAP_WINDOW_CONTROL`（bit16）
+  与事件 `APL_EVENT_WINDOW_CLOSE_REQUEST`（`u.window_close.reason`：
+  0 = `APL_WINDOW_CLOSE` 普通关闭；1 = `APL_WINDOW_QUIT` 明确退出，如 ⌘Q）。
+  新增 API：`apl_window_set_size / set_min_size / center / show / hide /
+  minimize / restore / set_maximized / set_fullscreen / set_always_on_top /
+  set_resizable / set_decor / get_position / set_position / start_drag /
+  start_resize / request_close / stop_events`。`apl_window_activate` 不变。
+- **关闭语义**：系统关闭按钮 / `WM_CLOSE` / `delete-event` / `windowShouldClose:`
+  / ⌘Q / 菜单退出都**只投递事件**，桥接不关窗、不退出；Dart 的
+  `SystemWindow.closeRequests` 按「后台常驻 / 退出 / 询问」策略决定 hide 或
+  `quitApplication`（落盘后 `exit(0)`）。`apl_window_request_close` 同样只投递
+  `reason=close`；`apl_window_stop_events` ≡ `apl_window_set_events(0)`，退出
+  前显式摘代理 / 观察者，幂等。
+- **Windows**：全部作用于 Flutter 顶层窗口（`g_hwnd`，缺省 `findFlutterWindow()`）。
+  尺寸 / 位置 / 最小尺寸经 `GetDpiForWindow`（动态解析，缺省 96）在 DIP ↔ 物理
+  像素间换算，`WM_GETMINMAXINFO` 应用最小尺寸；居中用显示器 `rcWork`。全屏先
+  快照窗口样式 + `WINDOWPLACEMENT`，切换为无标题栏/无边框并覆盖 `rcMonitor`，
+  退出时原样恢复（状态事件仍靠样式 + 显示器矩形判定）。装饰：system 恢复
+  caption / thickframe / sysmenu / min / max，caption 摘掉标题栏但保留可缩放
+  边框（按钮由自绘标题条接管），borderless 去框但保持 `WS_OVERLAPPED` 基类
+  （不改 `WS_POPUP`，避免从任务栏消失）；三档统一 `SWP_FRAMECHANGED` 刷新边框。
+  拖拽/缩放走 `ReleaseCapture()` + `WM_NCLBUTTONDOWN`（`HTCAPTION` / 8 个
+  `HT*` 命中码）。子类化 `wndProc` 在订阅期间拦截 `WM_CLOSE` 并返回 0；未订阅
+  时交还原 WndProc，`unsubclassWindow()` / `shutdown()` 仍会恢复，无递归/双处理。
+- **Linux**：dlopen GTK/GDK 补齐 resize / move / iconify / maximize / fullscreen /
+  keep-above / resizable / decorated / show / hide / 几何提示 / `begin_*_drag` /
+  位置 / seat-pointer / 工作区符号。所有会改 UI 的调用都经 `g_idle_add` 编组到
+  GTK 主循环（与 `activateOnMain` 同因，避免 Dart FFI 线程重入 GTK）；最小尺寸用
+  `gtk_window_set_geometry_hints` + `GDK_HINT_MIN_SIZE`。位置缓存为原子：`poll()`
+  / `configure-event` 从 `gtk_window_get_position` 刷新，`set_position` 先乐观
+  写入再排队 move，任意线程可立即读。关闭在 `connectSignals()` 里挂
+  `delete-event`，处理器投递关闭请求并返回 `TRUE` 阻止默认 destroy，
+  `disconnectSignals()` 一并断开；焦点/状态/show/hide 信号保持不变。拖动/缩放
+  在主循环取 seat/pointer 根坐标，并用 `button-press-event` 捕获的同一 GTK 事件
+  时间（Wayland 需要按下 serial；`gtk_get_current_event_time()` 在 idle 回调里
+  通常已为 0，仅作兜底）调 `gtk_window_begin_move_drag` / `begin_resize_drag`
+  （button 1；GdkWindowEdge 顺序与 `APL_WINDOW_EDGE_*` 一致）。
+- **macOS**：控制在主窗口（`[NSApp mainWindow]` → keyWindow → 首个可见有序窗口）
+  上 `dispatch_async` 到主线程；size 用 `setContentSize`，另有 center /
+  makeKeyAndOrderFront / orderOut / miniaturize / deminiaturize / zoom /
+  toggleFullScreen / `level`（floating ↔ normal）/ `setStyleMask`。装饰：system =
+  titled+resizable+closable+miniaturizable（标题可见）；caption = 同按钮 +
+  `FullSizeContentView` + 透明标题栏 + 隐藏标题；borderless = borderless+
+  resizable，并置 `movable`。位置按 `frame.origin` 与主屏高度换算（AppKit 左下
+  角原点 ↔ Dart 左上角原点），`set_position` 用 `setFrameOrigin`，可稳定往返。
+  `start_drag` 用 `[win performWindowDragWithEvent:[NSApp currentEvent]]`；
+  `start_resize` 返回 `APL_ERR_UNSUPPORTED`（边缘缩放由 AppKit 原生负责）。
+  关闭拦截在订阅期间安装 `NSWindowDelegate` 代理：只覆写 `windowShouldClose:`
+  （投递 `WINDOW_CLOSE` 并返回 NO），其余选择器经 `forwardingTargetForSelector:`
+  转发原 delegate，`respondsToSelector:` 同步声明；原 delegate 允许为 nil。
+  `set_events(false)` / `shutdown()` 还原 delegate 并强引用清零。⌘Q / 菜单退出
+  经 `method_setImplementation` 暂时挂 `-[NSApplication terminate:]`：只投递
+  `WINDOW_QUIT`、不终止；`g_terminating`（shutdown 置位）时回到保存的原 IMP，
+  stop/shutdown 时恢复，重复订阅幂等。
+- **Dart**：`FfiSystemWindow` 已接新 API 与关闭事件；`window_controls` 自绘标题栏
+  / 缩放热区改调 `startDrag` / `startResize`；托盘关闭策略统一消费
+  `WindowCloseRequest`；第三方窗口插件依赖与调用点均已移除，
+  `rg "window_manager|nativeapi|cnativeapi" app/pubspec.* app/lib` 零命中。
+- **本机验证**：Linux `cmake` 编译 + 链接通过（`nm -D` 抽查 18 个新
+  `apl_window_*` 符号齐全，`apl_abi_version = 10`）；macOS arm64/x86_64 用
+  `app/tool/verify_macos.sh` 交叉编译 + 链接通过；Windows 用
+  `app/tool/verify_windows.sh`（msvc-wine + MSVC cl）编译 + 链接通过；
+  `flutter test test/native_platform_abi_test.dart`（backend.h 契约符号
+  无条件性守卫）通过。
+- **尚未迁 / 剩余风险**：macOS 自绘缩放热区仍依赖系统边缘（`start_resize`
+  返回 `APL_ERR_UNSUPPORTED`）；Linux 没有「仅隐藏标题栏、保留系统按钮」的 GTK
+  原生档位，`caption` 降级为无装饰（窗口按钮需自绘）；真正关窗 / 退出仍由 Dart
+  的 `quitApplication` → `exit(0)` 完成（桥接刻意不调用 AppKit `closeForTermination`
+  或 Win32 `DestroyWindow`）。macOS 的 delegate 代理与 terminate swizzle 仅做了
+  交叉编译验证，仍需真机跑「关闭按钮 / ⌘Q / 托盘退出 ×20 无崩溃 + 落盘完整」
+  的运行时验收。

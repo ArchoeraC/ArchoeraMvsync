@@ -377,6 +377,48 @@ WNDPROC g_orig_wndproc = nullptr;
 HWND g_hwnd = nullptr;
 std::atomic<bool> g_window_events{false};
 
+// ── 窗口控制（ABI v10）────────────────────────────────────────────
+// 最小尺寸缓存（DIP）：WM_GETMINMAXINFO 里按窗口 DPI 换算成物理像素。
+std::atomic<int32_t> g_min_width{0};
+std::atomic<int32_t> g_min_height{0};
+// 全屏前快照：样式 + 摆放位置（含最大化/最小化状态）；退出时原样恢复。
+std::atomic<bool> g_fullscreen_active{false};
+LONG_PTR g_fullscreen_style = 0;
+WINDOWPLACEMENT g_fullscreen_placement{};
+RECT g_fullscreen_rect{};
+
+// 目标窗口：优先子类化时缓存的句柄，未 init / 尚未发现时现场查找。
+HWND windowHandle() {
+    if (g_hwnd != nullptr) return g_hwnd;
+    return findFlutterWindow();
+}
+
+// 窗口 DPI：GetDpiForWindow 由 user32 动态解析（兼容老系统 / 不同 SDK 头版本），
+// 取不到时回退 96（100% 缩放）。所有窗口几何输入输出均为逻辑像素（DIP）。
+UINT windowDpi(HWND hwnd) {
+    using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+    static GetDpiForWindowFn fn = reinterpret_cast<GetDpiForWindowFn>(
+        ::GetProcAddress(::GetModuleHandleW(L"user32.dll"),
+                         "GetDpiForWindow"));
+    if (fn != nullptr && hwnd != nullptr) {
+        const UINT v = fn(hwnd);
+        if (v >= 48 && v <= 480) return v;
+    }
+    return 96;
+}
+
+int32_t dipToPx(int32_t dip, UINT dpi) {
+    return ::MulDiv(static_cast<int>(dip), static_cast<int>(dpi), 96);
+}
+
+int32_t pxToDip(int32_t px, UINT dpi) {
+    return ::MulDiv(static_cast<int>(px), 96, static_cast<int>(dpi));
+}
+
+// 系统标题栏相关样式位：装饰模式切换时整体摘掉再按档位加回。
+constexpr LONG_PTR kFrameStyleBits =
+    WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
 // 直接从系统查询前台状态，而不是只依赖 WM_ACTIVATE 累计出的布尔值：
 // - 同进程的其它顶层窗口（原生文件对话框、托盘菜单宿主等）激活时，主窗口
 //   仍算「应用在前台」，不应降频；
@@ -456,6 +498,29 @@ bool dispatchAppCommand(LPARAM lparam) {
 
 LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     switch (msg) {
+        case WM_GETMINMAXINFO: {
+            // 最小尺寸（DIP）按窗口 DPI 换算；DefWindowProc 会使用修改后的值。
+            auto* mmi = reinterpret_cast<MINMAXINFO*>(lparam);
+            if (mmi != nullptr) {
+                const int32_t mw = g_min_width.load(std::memory_order_acquire);
+                const int32_t mh = g_min_height.load(std::memory_order_acquire);
+                if (mw > 0 || mh > 0) {
+                    const UINT dpi = windowDpi(hwnd);
+                    if (mw > 0) mmi->ptMinTrackSize.x = dipToPx(mw, dpi);
+                    if (mh > 0) mmi->ptMinTrackSize.y = dipToPx(mh, dpi);
+                }
+            }
+            break;
+        }
+        case WM_CLOSE:
+            // 用户关窗（关闭按钮 / Alt+F4 / 任务栏关闭）：订阅中只上报，返回 0
+            // 阻止 DestroyWindow；隐藏到托盘还是退出由 Dart 决策。未订阅时交回
+            // 原 WndProc（保持旧行为）。绝不在这里再调用 WM_CLOSE，避免递归。
+            if (g_window_events.load(std::memory_order_acquire)) {
+                dispatch(makeWindowCloseRequest(WINDOW_CLOSE));
+                return 0;
+            }
+            break;
         case WM_SIZE:
             // 消息只作为「状态可能已变化」的触发；真实状态统一由
             // emitWindow() 向系统查询（见上方说明）。
@@ -1606,7 +1671,8 @@ uint32_t caps() {
     return CAP_POWER_INHIBIT | CAP_POWER_SCREEN_STATE | CAP_WINDOW_STATE |
            CAP_MEDIA_SESSION | CAP_APP_INSTANCE | CAP_SYSTEM_ACCENT |
            CAP_SYSTEM_THEME | CAP_DEEP_LINK | CAP_REVEAL_PATH | CAP_TRAY |
-           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END;
+           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END |
+           CAP_WINDOW_CONTROL;
 }
 
 int32_t init() {
@@ -1641,7 +1707,13 @@ int32_t shutdown() {
         g_inhibit_thread = nullptr;
     }
     unregisterScreen();
+    // 先停事件（WM_CLOSE 不再上报），再还原 wndproc；避免收尾期仍向已释放的
+    // Dart listener 投递关闭请求。
+    g_window_events.store(false, std::memory_order_release);
     unsubclassWindow();
+    g_fullscreen_active = false;
+    g_min_width.store(0, std::memory_order_release);
+    g_min_height.store(0, std::memory_order_release);
 #ifdef ARCHOERA_WINRT
     winrt_smtc::deinit();
 #endif
@@ -1764,6 +1836,317 @@ int32_t windowActivate() {
     activateFlutterWindow();
     return OK;
 }
+
+// ── 窗口控制（ABI v10）────────────────────────────────────────────
+// 输入输出全是逻辑像素（DIP）；内部按窗口 DPI 换算后再交给 Win32。
+int32_t windowSetSize(int32_t w, int32_t h) {
+    if (w <= 0 || h <= 0) return ERR_STATE;
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    const UINT dpi = windowDpi(hwnd);
+    if (!::SetWindowPos(hwnd, nullptr, 0, 0, dipToPx(w, dpi), dipToPx(h, dpi),
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        return ERR_BACKEND;
+    }
+    return OK;
+}
+
+int32_t windowSetMinSize(int32_t w, int32_t h) {
+    if (w < 0 || h < 0) return ERR_STATE;
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    g_min_width.store(w, std::memory_order_release);
+    g_min_height.store(h, std::memory_order_release);
+    // 若当前窗口小于新下限，立即放大到下限（最小化/最大化/全屏时不干预，
+    // 系统会在还原时重新查询 WM_GETMINMAXINFO）。
+    if (!::IsIconic(hwnd) && !::IsZoomed(hwnd) && !g_fullscreen_active) {
+        RECT wr{};
+        if (::GetWindowRect(hwnd, &wr) != 0) {
+            const UINT dpi = windowDpi(hwnd);
+            const int cur_w = static_cast<int>(wr.right - wr.left);
+            const int cur_h = static_cast<int>(wr.bottom - wr.top);
+            const int min_w = w > 0 ? dipToPx(w, dpi) : 0;
+            const int min_h = h > 0 ? dipToPx(h, dpi) : 0;
+            const int new_w = min_w > cur_w ? min_w : cur_w;
+            const int new_h = min_h > cur_h ? min_h : cur_h;
+            if (new_w != cur_w || new_h != cur_h) {
+                ::SetWindowPos(hwnd, nullptr, 0, 0, new_w, new_h,
+                               SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+    return OK;
+}
+
+int32_t windowCenter() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    RECT wr{};
+    if (::GetWindowRect(hwnd, &wr) == 0) return ERR_BACKEND;
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    const HMONITOR mon = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (mon == nullptr || ::GetMonitorInfoW(mon, &mi) == 0) return ERR_BACKEND;
+    const RECT& wa = mi.rcWork;
+    const int w = static_cast<int>(wr.right - wr.left);
+    const int h = static_cast<int>(wr.bottom - wr.top);
+    const int x = wa.left + (static_cast<int>(wa.right - wa.left) - w) / 2;
+    const int y = wa.top + (static_cast<int>(wa.bottom - wa.top) - h) / 2;
+    if (!::SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        return ERR_BACKEND;
+    }
+    return OK;
+}
+
+int32_t windowShow() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    ::ShowWindow(hwnd, ::IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+    ::SetForegroundWindow(hwnd);
+    return OK;
+}
+
+int32_t windowHide() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    ::ShowWindow(hwnd, SW_HIDE);
+    return OK;
+}
+
+int32_t windowMinimize() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    ::ShowWindow(hwnd, SW_MINIMIZE);
+    return OK;
+}
+
+int32_t windowRestore() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    if (::IsIconic(hwnd)) {
+        ::ShowWindow(hwnd, SW_RESTORE);
+    } else {
+        ::ShowWindow(hwnd, SW_SHOW);
+    }
+    ::SetForegroundWindow(hwnd);
+    return OK;
+}
+
+int32_t windowSetMaximized(int32_t on) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    if (on != 0) {
+        if (!::IsZoomed(hwnd)) ::ShowWindow(hwnd, SW_MAXIMIZE);
+    } else if (::IsZoomed(hwnd)) {
+        ::ShowWindow(hwnd, SW_RESTORE);
+    }
+    return OK;
+}
+
+int32_t windowSetFullscreen(int32_t on) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    const bool want = on != 0;
+    if (want == g_fullscreen_active) return OK;
+
+    if (want) {
+        // 入全屏：快照原样式 + 摆放位置，再切成无标题栏/无边框并覆盖整块显示器。
+        g_fullscreen_style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        g_fullscreen_placement = {};
+        g_fullscreen_placement.length = sizeof(g_fullscreen_placement);
+        const bool has_placement =
+            ::GetWindowPlacement(hwnd, &g_fullscreen_placement) != 0;
+        if (!has_placement) g_fullscreen_placement.length = 0;
+        ::GetWindowRect(hwnd, &g_fullscreen_rect);
+        const LONG_PTR style = g_fullscreen_style & ~kFrameStyleBits;
+        ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        const HMONITOR mon =
+            ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        RECT target = g_fullscreen_rect;
+        if (mon != nullptr && ::GetMonitorInfoW(mon, &mi) != 0) {
+            target = mi.rcMonitor;
+        }
+        if (!::SetWindowPos(
+                hwnd, HWND_TOP, target.left, target.top,
+                static_cast<int>(target.right - target.left),
+                static_cast<int>(target.bottom - target.top),
+                SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOACTIVATE)) {
+            // 失败：样式已改，回滚并报告后端错误。
+            ::SetWindowLongPtrW(hwnd, GWL_STYLE, g_fullscreen_style);
+            ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                           SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                               SWP_NOZORDER | SWP_NOACTIVATE);
+            return ERR_BACKEND;
+        }
+        g_fullscreen_active = true;
+    } else {
+        // 退全屏：先恢复样式再恢复摆放（含最大化/最小化状态）。
+        if (g_fullscreen_style != 0) {
+            ::SetWindowLongPtrW(hwnd, GWL_STYLE, g_fullscreen_style);
+        }
+        ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                       SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                           SWP_NOZORDER | SWP_NOACTIVATE);
+        if (g_fullscreen_placement.length != 0) {
+            ::SetWindowPlacement(hwnd, &g_fullscreen_placement);
+        } else if (g_fullscreen_rect.right > g_fullscreen_rect.left) {
+            ::SetWindowPos(hwnd, nullptr, g_fullscreen_rect.left,
+                           g_fullscreen_rect.top,
+                           static_cast<int>(g_fullscreen_rect.right -
+                                           g_fullscreen_rect.left),
+                           static_cast<int>(g_fullscreen_rect.bottom -
+                                           g_fullscreen_rect.top),
+                           SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        g_fullscreen_active = false;
+        g_fullscreen_style = 0;
+    }
+    emitWindow();  // 状态事件继续工作（全屏判定看样式 + 显示器矩形）
+    return OK;
+}
+
+int32_t windowSetAlwaysOnTop(int32_t on) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    if (!::SetWindowPos(hwnd, on != 0 ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
+                        0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+        return ERR_BACKEND;
+    }
+    return OK;
+}
+
+int32_t windowSetResizable(int32_t on) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if (on != 0) {
+        style |= (WS_THICKFRAME | WS_MAXIMIZEBOX);
+    } else {
+        style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
+    }
+    ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+    if (on == 0 && ::IsZoomed(hwnd) != 0) ::ShowWindow(hwnd, SW_RESTORE);
+    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                   SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+    emitWindow();
+    return OK;
+}
+
+int32_t windowSetDecor(int32_t mode) {
+    if (mode < APL_WINDOW_DECOR_SYSTEM || mode > APL_WINDOW_DECOR_BORDERLESS) {
+        return ERR_STATE;
+    }
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    // 全屏期间样式由 fullscreen 自己拥有；退出全屏会恢复入全屏前的装饰。
+    if (g_fullscreen_active) return OK;
+    LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+    style &= ~(kFrameStyleBits | WS_POPUP);
+    switch (mode) {
+        case APL_WINDOW_DECOR_SYSTEM:
+            style |= WS_CAPTION | WS_THICKFRAME | WS_SYSMENU |
+                     WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+            break;
+        case APL_WINDOW_DECOR_CAPTION:
+            // 无标题栏（摘掉 WS_CAPTION），保留 WS_THICKFRAME 可缩放边框；
+            // 标题栏按钮由自绘 UI 接管（无 caption 时系统不会绘制它们）。
+            style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX |
+                     WS_MAXIMIZEBOX;
+            break;
+        case APL_WINDOW_DECOR_BORDERLESS:
+        default:
+            // 无边框：只摘掉边框样式，保持 WS_OVERLAPPED 基类（不改 WS_POPUP，
+            // 否则窗口会从任务栏消失）；窗口按钮由自绘 UI 接管。
+            break;
+    }
+    ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                   SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+    emitWindow();
+    return OK;
+}
+
+int32_t windowGetPosition(int32_t* x, int32_t* y) {
+    if (x == nullptr || y == nullptr) return ERR_STATE;
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    RECT wr{};
+    if (::GetWindowRect(hwnd, &wr) == 0) return ERR_BACKEND;
+    const UINT dpi = windowDpi(hwnd);
+    *x = pxToDip(static_cast<int32_t>(wr.left), dpi);
+    *y = pxToDip(static_cast<int32_t>(wr.top), dpi);
+    return OK;
+}
+
+int32_t windowSetPosition(int32_t x, int32_t y) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    const UINT dpi = windowDpi(hwnd);
+    if (!::SetWindowPos(hwnd, nullptr, dipToPx(x, dpi), dipToPx(y, dpi), 0, 0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        return ERR_BACKEND;
+    }
+    return OK;
+}
+
+// 自绘标题栏拖拽：走 Win32 非客户区命中测试，获得系统原生拖拽/吸附行为。
+int32_t windowStartDrag() {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    ::ReleaseCapture();
+    ::SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    return OK;
+}
+
+int32_t windowStartResize(int32_t edge) {
+    HWND hwnd = windowHandle();
+    if (hwnd == nullptr) return ERR_BACKEND;
+    int hit = 0;
+    switch (edge) {
+        case APL_WINDOW_EDGE_TOP_LEFT:
+            hit = HTTOPLEFT;
+            break;
+        case APL_WINDOW_EDGE_TOP:
+            hit = HTTOP;
+            break;
+        case APL_WINDOW_EDGE_TOP_RIGHT:
+            hit = HTTOPRIGHT;
+            break;
+        case APL_WINDOW_EDGE_LEFT:
+            hit = HTLEFT;
+            break;
+        case APL_WINDOW_EDGE_RIGHT:
+            hit = HTRIGHT;
+            break;
+        case APL_WINDOW_EDGE_BOTTOM_LEFT:
+            hit = HTBOTTOMLEFT;
+            break;
+        case APL_WINDOW_EDGE_BOTTOM:
+            hit = HTBOTTOM;
+            break;
+        case APL_WINDOW_EDGE_BOTTOM_RIGHT:
+            hit = HTBOTTOMRIGHT;
+            break;
+        default:
+            return ERR_STATE;
+    }
+    ::ReleaseCapture();
+    ::SendMessageW(hwnd, WM_NCLBUTTONDOWN, hit, 0);
+    return OK;
+}
+
+int32_t windowRequestClose() {
+    // 只投递事件，不关窗。
+    dispatch(makeWindowCloseRequest(WINDOW_CLOSE));
+    return OK;
+}
+
+int32_t windowStopEvents() { return windowSetEvents(0); }
 
 bool systemAccent(int32_t* r, int32_t* g, int32_t* b) {
 #ifdef ARCHOERA_WINRT

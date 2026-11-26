@@ -1,6 +1,12 @@
 part of '../easter_egg.dart';
 
-// ── 窗口类彩蛋（依赖 window_manager；失败静默忽略）────────────────────
+// ── 窗口类彩蛋（经 SystemWindow 原生桥接；失败静默忽略）──────────────
+
+/// 取窗口控制句柄：优先 Riverpod 容器（与主应用共用同一单例），
+/// 无容器场景（纯 UI 彩蛋 / 测试）退回进程级单例。
+SystemWindow _systemWindow(EasterEggContext ctx) =>
+    ctx.ref?.read(platformCapabilitiesProvider).window ??
+    PlatformCapabilities.instance().window;
 
 /// #1 系统「未响应」：永久阻塞 UI isolate（不进事件循环），桌面会把窗口标记
 /// 为「未响应」；唯一出路是强制结束进程（与警告文案一致）。
@@ -24,39 +30,39 @@ Future<void> _notResponding(EasterEggContext ctx) async {
 const Duration kMinimizeTrapDuration = Duration(seconds: 6);
 
 Future<void> _minimizeTrap(EasterEggContext ctx) async {
-  final window = WindowManager.instance.getCurrent();
-  if (window == null) return;
-  final listenerId = window.addListener((event) {
-    if (event is WindowRestoredEvent) window.minimize();
-  });
+  final window = _systemWindow(ctx);
+  StreamSubscription<SystemWindowState>? sub;
+  final eventsOn = await window.setEvents(true);
   try {
+    if (eventsOn) {
+      sub = window.state.listen((state) {
+        // 还原在桥接状态里表现为 minimized=false：限时窗口内立刻再最小化。
+        if (!state.minimized) window.minimize();
+      });
+    }
     window.minimize();
     await Future<void>.delayed(kMinimizeTrapDuration);
   } catch (_) {
     // 无窗口系统：忽略
   } finally {
-    window.removeListener(listenerId);
-    try {
-      window.restore();
-      window.focus();
-    } catch (_) {}
+    await sub?.cancel();
+    if (eventsOn) await window.setEvents(false);
+    window.restore();
+    window.activate();
   }
 }
 
 /// 探测「程序能否移动自身窗口」：Wayland 合成器下客户端不被允许。
-Future<bool> _windowMoveSupported() async {
-  final window = WindowManager.instance.getCurrent();
-  if (window == null) return false;
-  try {
-    final p0 = window.position.toOffset();
-    window.position = Offset(p0.dx + 1, p0.dy + 1).toNative();
-    final p1 = window.position.toOffset();
-    final ok = (p1 - p0).distance > 0.5;
-    if (ok) window.position = p0.toNative();
-    return ok;
-  } catch (_) {
-    return false;
-  }
+Future<bool> _windowMoveSupported(EasterEggContext ctx) async {
+  final window = _systemWindow(ctx);
+  final p0 = window.position;
+  if (p0 == null) return false;
+  if (!window.setPosition(p0.x + 1, p0.y + 1)) return false;
+  final p1 = window.position;
+  if (p1 == null) return false;
+  final ok = p1.x != p0.x || p1.y != p0.y;
+  if (ok) window.setPosition(p0.x, p0.y);
+  return ok;
 }
 
 /// #6 所有组件躲避鼠标：开启全局开关，装了 MouseDodge 的组件（按钮 / 条目 /
@@ -68,29 +74,21 @@ Future<void> _fleeMouse(EasterEggContext ctx) async {
 /// #8 在桌面内滚动：能移窗时窗口沿曲线滚动，Wayland 下退化为界面内容滚动。
 /// 永久生效（持续滚动，不还原）。
 Future<void> _desktopScroll(EasterEggContext ctx) async {
-  final native = await _windowMoveSupported();
+  final native = await _windowMoveSupported(ctx);
   const frame = Duration(milliseconds: 50);
 
   if (native) {
-    final window = WindowManager.instance.getCurrent();
-    if (window == null) return;
-    Offset original;
-    try {
-      original = window.position.toOffset();
-    } catch (_) {
-      return;
-    }
+    final window = _systemWindow(ctx);
+    final original = window.position;
+    if (original == null) return;
     var t = 0.0;
     while (true) {
       t += 0.16;
-      try {
-        window.position = Offset(
-          original.dx + 460 * math.sin(t),
-          original.dy + 300 * math.sin(t * 1.7 + 1.1),
-        ).toNative();
-      } catch (_) {
-        return;
-      }
+      final ok = window.setPosition(
+        (original.x + 460 * math.sin(t)).round(),
+        (original.y + 300 * math.sin(t * 1.7 + 1.1)).round(),
+      );
+      if (!ok) return;
       await Future<void>.delayed(frame);
     }
   }

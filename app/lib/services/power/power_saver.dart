@@ -6,7 +6,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../../l10n/l10n.dart';
 import '../../stores/app_prefs.dart';
@@ -86,7 +85,7 @@ const Map<PowerSaverReason, Duration> _intervalByReason = {
 /// - 「禁用系统休眠」仅**在媒体播放中**通过平台能力外观（原生桥接）保持系统
 ///   唤醒，暂停 / 停止时立即释放，后台播放不中断。
 ///
-/// 全程事件驱动：nativeapi 窗口事件 + D-Bus 信号订阅 + Timer 帧合并，
+/// 全程事件驱动：桥接窗口事件 + D-Bus 信号订阅 + Timer 帧合并，
 /// 不使用轮询。窗口隐藏 / 屏幕关闭时若引擎已内建停帧（GTK 无 vsync、
 /// 显示器关闭等），以引擎内建节能为准，本服务设置的帧率上限只是兜底。
 class PowerSaverService {
@@ -94,16 +93,10 @@ class PowerSaverService {
 
   final Ref _ref;
 
-  /// 应用窗口句柄（nativeapi；无窗口环境为 null）。
-  Window? _appWindow;
-
-  /// 窗口事件监听句柄（dispose 时按 id 注销）。
-  ListenerId? _windowListenerId;
-
   /// 平台能力外观（原生桥接）：熄屏订阅 + 休眠抑制（facade §7.2）。
   final SystemPower _power;
 
-  /// 平台能力外观：窗口最小化/失焦事件（桥接可用时优先，否则 nativeapi 窗口事件）。
+  /// 平台能力外观：窗口最小化/失焦事件（全部经桥接，无第三方回退）。
   final SystemWindow _window;
 
   /// 节能模式总开关（设置持久化，默认开）。
@@ -147,34 +140,21 @@ class PowerSaverService {
 
   /// 开始监听窗口状态（并异步订阅平台熄屏/窗口状态）。
   ///
-  /// ABI v9 起窗口状态主路径是原生桥接（GTK 信号 / WndProc 子类化 /
-  /// NSWindow 通知）；只有桥接不可用（能力缺失 / 无窗口环境）时才回退
-  /// window_manager 监听，避免两套事件互相覆盖。
+  /// 窗口状态主路径是原生桥接（GTK 信号 / WndProc 子类化 / NSWindow 通知）；
+  /// 桥接不可用（能力缺失 / 无窗口环境）时只记录日志，继续保留熄屏与
+  /// 休眠抑制能力——不再回退第三方窗口事件，避免两套事件互相覆盖。
   void attach() {
     unawaited(_attachWindowWatcher());
     unawaited(_attachScreenWatcher());
   }
 
-  /// 桥接不可用时的旧路径：window_manager 窗口事件。
-  void _attachWindowManagerFallback() {
-    if (_windowListenerId != null) return;
-    try {
-      final window = WindowManager.instance.getCurrent();
-      _appWindow = window;
-      _windowListenerId = window?.addListener(_onWindowEvent);
-    } catch (e) {
-      Log.w('power', 'window_manager 窗口事件回退不可用: $e');
-    }
-  }
-
   /// 经平台能力外观订阅窗口最小化/失焦（桥接 WINDOW_STATE 能力位存在时）。
-  /// 失败/缺能力静默回落 nativeapi 窗口监听（后台优化类，不打断用户）。
+  /// 失败/缺能力静默降级（后台优化类，不打断用户）。
   Future<void> _attachWindowWatcher() async {
     if (_windowSub != null) return;
     final ok = await _window.setEvents(true);
     if (!ok) {
-      Log.w('power', '桥接窗口状态不可用（回退 window_manager 窗口事件）');
-      _attachWindowManagerFallback();
+      Log.w('power', '桥接窗口状态不可用（仅保留熄屏与休眠抑制）');
       return;
     }
     void applyState(SystemWindowState s) {
@@ -267,10 +247,10 @@ class PowerSaverService {
     }
   }
 
-  // ── 窗口事件（nativeapi）──────────────────────────────────────
+  // ── 窗口事件（原生桥接）───────────────────────────────────────
 
-  /// 托盘隐藏 / 重新显示（nativeapi 不派发 hide/show 事件，由
-  /// TrayIntegration 显式通知）。隐藏与最小化同属「不可见后台」档。
+  /// 托盘隐藏 / 重新显示（桥接 ABI v9 也会用 hidden flag 推送同一语义，
+  /// 这里保留显式通知以消除事件到达前的时序窗口）。
   void setHidden(bool hidden) {
     _hidden = hidden;
     if (!hidden) {
@@ -280,28 +260,6 @@ class PowerSaverService {
       _screenOff = false;
     }
     _apply();
-  }
-
-  void _onWindowEvent(WindowEvent event) {
-    switch (event) {
-      case WindowMinimizedEvent():
-        _minimized = true;
-        _apply();
-      case WindowRestoredEvent():
-        _minimized = false;
-        _screenOff = false; // 恢复 ⇒ 屏幕点亮
-        _apply();
-      case WindowFocusedEvent():
-        // 仅在桥接不可用时走这条回退路径（桥接可用时不会注册 WM 监听）。
-        _focused = true;
-        _screenOff = false; // 窗口获得焦点 ⇒ 屏幕必然点亮/未锁屏
-        _apply();
-      case WindowBlurredEvent():
-        _focused = false;
-        _apply();
-      default:
-        break;
-    }
   }
 
   PowerSaverReason get _reason {
@@ -375,9 +333,6 @@ class PowerSaverService {
   }
 
   Future<void> dispose() async {
-    final listenerId = _windowListenerId;
-    if (listenerId != null) _appWindow?.removeListener(listenerId);
-    _windowListenerId = null;
     await _screenSub?.cancel();
     await _failSub?.cancel();
     await _windowSub?.cancel();

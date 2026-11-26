@@ -57,6 +57,10 @@ class PlatformCapabilities {
   bool get screenStateAvailable => caps & aplCapPowerScreenState != 0;
   bool get mediaSessionAvailable => caps & aplCapMediaSession != 0;
   bool get windowStateAvailable => caps & aplCapWindowState != 0;
+
+  /// 窗口控制 API（尺寸/显隐/最大化/全屏/装饰/拖拽/关闭请求）是否可用。
+  /// 与 [windowStateAvailable] 独立：控制位不保证状态事件流可用，反之亦然。
+  bool get windowControlAvailable => caps & aplCapWindowControl != 0;
   bool get appInstanceAvailable => caps & aplCapAppInstance != 0;
   bool get systemAccentAvailable => caps & aplCapSystemAccent != 0;
   bool get deepLinkAvailable => caps & aplCapDeepLink != 0;
@@ -179,7 +183,10 @@ class PlatformCapabilities {
       media: (b != null && caps & aplCapMediaSession != 0)
           ? FfiSystemMedia(b)
           : NoopSystemMedia.instance,
-      window: (b != null && caps & aplCapWindowState != 0)
+      // 窗口状态事件 / 控制：任一能力位存在即用 FFI 实现（控制可在无状态事件时
+      // 单独工作）；两位都缺失（纯 Wayland）才整体回落 Noop。
+      window:
+          (b != null && caps & (aplCapWindowState | aplCapWindowControl) != 0)
           ? FfiSystemWindow(b)
           : NoopSystemWindow.instance,
       deepLink: (b != null && caps & aplCapDeepLink != 0)
