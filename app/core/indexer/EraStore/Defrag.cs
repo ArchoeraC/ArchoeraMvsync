@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-using System.Buffers.Binary;
 using System.Diagnostics;
 
 namespace Archoera.Indexer.EraStore;
@@ -104,9 +103,9 @@ internal static class Defragmenter
                 $"defrag 只能作用于当前世代：CURRENT={current}，给定={fileName}");
 
         var fileBytesBefore = new FileInfo(full).Length;
-        var (fileUuid, createdMs) = ReadHeader(full);
+        var (fileUuid, createdMs) = IndexFile.ReadIdentity(full);
 
-        var newName = NextGenerationName(dir);
+        var newName = CurrentPointer.NextGenerationName(dir);
         var newPath = Path.Combine(dir, newName);
         var sections = new List<SectionRef>();
         var liveBytes = 0L;
@@ -244,45 +243,9 @@ internal static class Defragmenter
 
     /* ------------------------------------------------------------------ */
 
-    private static (byte[] FileUuid, ulong CreatedMs) ReadHeader(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var header = new byte[EraFormat.HeaderSize];
-        stream.ReadExactly(header);
-        IndexFile.ValidateHeader(header);
-        var uuid = header.AsSpan(16, EraFormat.FileUuidBytes).ToArray();
-        var createdMs = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(32));
-        return (uuid, createdMs);
-    }
-
-    /// <summary>生成不与现有文件冲突的 <c>search-&lt;N&gt;.eraindex</c>（段名约定见 CurrentPointer）。</summary>
-    private static string NextGenerationName(string directory)
-    {
-        var ticks = DateTime.UtcNow.Ticks;
-        while (true)
-        {
-            var name = $"search-{ticks}.eraindex";
-            if (!File.Exists(Path.Combine(directory, name))) return name;
-            ticks++;
-        }
-    }
-
     /// <summary>与 <c>IndexerEngine.CleanupEraFiles</c> 相同的清理约定：只保留新世代。</summary>
-    private static void CleanupGenerations(string directory, string keep)
-    {
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(directory, "search-*.eraindex"))
-            {
-                if (string.Equals(Path.GetFileName(file), keep, StringComparison.Ordinal)) continue;
-                TryDelete(file);
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // 清理是尽力而为：失败只留下垃圾文件，不影响当前世代可读。
-        }
-    }
+    private static void CleanupGenerations(string directory, string keep) =>
+        CurrentPointer.CleanupGenerations(directory, keep);
 
     private static void TryDelete(string path)
     {

@@ -48,6 +48,22 @@ internal sealed class IndexFile : IDisposable
     /// <summary>当前文件字节数（含未提交的追尾段）；合并用它计算 <c>file_bytes</c>。</summary>
     public long Length { get { lock (_gate) return _stream.Length; } }
 
+    /// <summary>
+    /// 读取文件头里的 <c>file_uuid</c> / <c>created_ms</c>（世代重写时沿用同一文件身份）。
+    /// Header 损坏抛 <see cref="InvalidDataException"/>。
+    /// </summary>
+    internal static (byte[] FileUuid, ulong CreatedMs) ReadIdentity(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var header = new byte[EraFormat.HeaderSize];
+        stream.ReadExactly(header);
+        ValidateHeader(header);
+        return (
+            header.AsSpan(16, EraFormat.FileUuidBytes).ToArray(),
+            BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(32)));
+    }
+
     /// <summary>新建（或覆盖）文件，写入 Header 与两个全零槽。</summary>
     public static IndexFile CreateNew(string path, ReadOnlySpan<byte> fileUuid, ulong createdMs)
     {
@@ -410,5 +426,49 @@ internal static class CurrentPointer
             if (c < '0' || c > '9') return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// 生成不与目录内现有文件冲突的 <c>search-&lt;N&gt;.eraindex</c>。
+    /// 只分配名字，不创建文件；调用方负责写入与提交。
+    /// </summary>
+    internal static string NextGenerationName(string directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        var ticks = DateTime.UtcNow.Ticks;
+        while (true)
+        {
+            var name = $"{Prefix}{ticks}{Suffix}";
+            if (!File.Exists(Path.Combine(directory, name))) return name;
+            ticks++;
+        }
+    }
+
+    /// <summary>
+    /// 删除目录内**未被引用**的世代文件（保留 <paramref name="keep"/>）。
+    /// 失败只忽略：Windows 上被查询句柄占用的旧文件留给下一次运行重试。
+    /// </summary>
+    internal static void CleanupGenerations(string directory, string keep)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(keep);
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "search-*.eraindex"))
+            {
+                if (string.Equals(Path.GetFileName(file), keep, StringComparison.Ordinal)) continue;
+                try { File.Delete(file); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // 旧世代被查询句柄占用（Windows）时只推迟回收，不影响 CURRENT。
+                    Log.LogWarn("indexer", $"旧世代暂未删除（下次重试）: {Path.GetFileName(file)}（{e.Message}）");
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // 清理是尽力而为：失败只留下垃圾文件，不影响当前世代可读。
+            Log.LogWarn("indexer", $"旧世代清理失败（下次重试）: {e.Message}");
+        }
     }
 }

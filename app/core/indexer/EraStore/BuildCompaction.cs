@@ -62,6 +62,18 @@ internal sealed class BuildCompactionResult
     /// <summary>压缩耗时（毫秒）。</summary>
     public long ElapsedMs;
 
+    /// <summary>
+    /// 是否通过「写新世代 + 切换 CURRENT」完成（S1）。为 true 时产出文件只含活段体，
+    /// 调用方不需要再执行 <see cref="Defragmenter"/>。
+    /// </summary>
+    public bool RewroteGeneration;
+
+    /// <summary>最终世代文件名（<c>search-&lt;N&gt;.eraindex</c>）；未压缩为空。</summary>
+    public string GenerationName = string.Empty;
+
+    /// <summary>最终世代文件字节数（<c>fileBytes</c>）；未压缩为 0。</summary>
+    public long FileBytes;
+
     /// <summary>是否发生过合并。</summary>
     public bool Compacted => Rounds > 0;
 }
@@ -75,18 +87,16 @@ internal sealed class BuildCompactionResult
 /// 能解决，但不该让用户自己跑。</para>
 ///
 /// <para>边界：段数 &lt; <see cref="BuildCompactionOptions.MinSegments"/> 直接跳过；
-/// 每轮一次 <see cref="Merger.Merge"/>（独立提交），轮数 ≤
-/// <see cref="BuildCompactionOptions.MaxRounds"/>，总耗时以
+/// 每轮一次 <see cref="Merger.MergeToNewGeneration"/>（写只含活段体的新世代并切换
+/// <c>CURRENT</c>），轮数 ≤ <see cref="BuildCompactionOptions.MaxRounds"/>，总耗时以
 /// <see cref="BuildCompactionOptions.BudgetSeconds"/> 为目标（按预估吞吐折算单轮 doc 数，
 /// 实测偏差只落在单轮内，不会无界延长）；单轮另有
 /// <see cref="BuildCompactionOptions.MaxDocsPerRound"/> 的规模上限。
 /// 已在目标段数以下立即停止，不追求「合成一段」。</para>
 ///
-/// <para>崩溃安全：本类只调用 <see cref="Merger.Merge"/>，后者在
-/// <see cref="IndexFile.Commit"/> 前不改变任何已提交 Manifest / 提交槽。调用时机是
-/// 全量构建**已经提交**（<c>CURRENT</c> 已指向新世代）之后、清理旧世代之前：
-/// 压缩中断 / 抛异常时，新世代里「全量构建」那一版 Manifest 仍然有效，旧世代文件也还在，
-/// 查询不受影响。压缩不做 CURRENT 切换（同一文件内追加段），因此不引入新的切换点。</para>
+/// <para>崩溃安全：每一轮都是一个完整的新世代（双槽 fsync 后才切换 <c>CURRENT</c>）。
+/// 任一轮提交前失败只会留下一个未被引用的新文件（并被尽力删除），上一版世代继续服务；
+/// 切换后失败时新世代已生效，旧文件留给下一次维护回收。因此压缩成功后无需再去碎片。</para>
 /// </summary>
 internal static class BuildCompactor
 {
@@ -105,6 +115,8 @@ internal static class BuildCompactor
         if (opt.InitialDocsPerSecond < 100) opt.InitialDocsPerSecond = 100;
 
         var path = IndexPaths.Resolve(indexPath);
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path))
+            ?? throw new InvalidDataException($"无法确定索引目录: {indexPath}");
         var result = new BuildCompactionResult();
         var before = StoreReader.TryReadManifest(path);
         if (before is null) return result; // 无有效提交：交给调用方按构建失败处理
@@ -117,6 +129,9 @@ internal static class BuildCompactor
 
         while (result.Rounds < opt.MaxRounds)
         {
+            // 每轮都从 CURRENT 重新解析：新世代合并完成后文件名会变。
+            if (CurrentPointer.Read(dir) is { } currentName)
+                path = Path.Combine(dir, currentName);
             var manifest = StoreReader.TryReadManifest(path);
             if (manifest is null) break;
             var segmentCount = CountSegments(manifest);
@@ -145,15 +160,19 @@ internal static class BuildCompactor
 
             opt.Progress?.Invoke(new BuildCompactionProgress("round", segmentCount, 0));
             var roundWatch = Stopwatch.StartNew();
-            Merger.Merge(path, set, new MergeOptions
+            var merge = Merger.MergeToNewGeneration(path, set, new MergeOptions
             {
                 Gen = 0, // 当前 gen + 1
                 Progress = p => opt.Progress?.Invoke(
                     new BuildCompactionProgress("merge-" + p.Phase, segmentCount, p.LiveDocs)),
             });
             roundWatch.Stop();
+            path = Path.Combine(dir, merge.NewFileName);
             result.Rounds++;
             result.MergedSegments += set.Count;
+            result.RewroteGeneration = true;
+            result.GenerationName = merge.NewFileName;
+            result.FileBytes = merge.FileBytes;
 
             // 实测吞吐校正（带平滑），让下一轮在不慢于预算的前提下尽量多吃。
             if (sourceDocs > 0 && roundWatch.Elapsed.TotalSeconds > 0.01)

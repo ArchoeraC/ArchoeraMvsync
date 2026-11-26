@@ -39,6 +39,7 @@ internal static class EndToEnd
             InitialsBigramSearch(root);
             RepeatedFullBuild(root);
             EraIncremental(root);
+            FullBuildCompactionWritesFreshGeneration(root);
         }
         finally
         {
@@ -357,6 +358,99 @@ internal static class EndToEnd
         Program.Check("Era 增量: 合并后 dead_ratio <20%",
             eraStats.DeadRatio < 0.2, eraStats.DeadRatio.ToString("F4"));
         Program.Check("Era 增量: 活 doc 仍为 3", eraStats.Docs == 3, eraStats.Docs.ToString());
+    }
+
+    /// <summary>
+    /// S1：全量构建收尾压缩直接写**新世代文件**并切换 CURRENT——
+    /// <c>EraCompacted=true</c> / <c>EraDefragged=false</c>，目录只剩 CURRENT 指向的一个文件，
+    /// <c>fileBytes = liveBytes + Manifest</c>，查询结果与构建内容一致。
+    ///
+    /// <para>用 <see cref="IndexerOptions.FullBuildMaxSegmentBytesOverride"/> 把单段估算上限
+    /// 调到 256 KiB，30 首「每首 3000 个唯一拉丁词」的夹具即可稳定留下 30 个段，触发
+    /// ≥24 段的自动压缩。</para>
+    /// </summary>
+    private static void FullBuildCompactionWritesFreshGeneration(string root)
+    {
+        var work = Path.Combine(root, "compact");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var music = Path.Combine(work, "m");
+        Directory.CreateDirectory(music);
+
+        const int tracks = 30;
+        const int wordsPerTrack = 3000;
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            for (var i = 0; i < tracks; i++)
+            {
+                var lyrics = string.Join(' ', Enumerable.Range(0, wordsPerTrack)
+                    .Select(j => Word(1000 + i * wordsPerTrack + j)));
+                InsertTrack(conn, "c" + i, Path.Combine(music, $"c{i}.mp3"), Word(i),
+                    "[]", null, lyrics, 1000 + i);
+            }
+        }
+
+        var result = RunEngine(db, index, full: true, new IndexerOptions
+        {
+            IndexLrc = false,
+            Pinyin = false,
+            FullBuildMaxSegmentBytesOverride = 256L * 1024,
+        });
+
+        Program.Check("S1 全量压缩: 触发自动压缩", result.EraCompacted,
+            $"compacted={result.EraCompacted} seg={result.EraSegments}");
+        Program.Check("S1 全量压缩: 夹具至少 24 段",
+            result.EraSegmentsBeforeCompact >= EraStore.Merger.MergeTriggerSegments,
+            result.EraSegmentsBeforeCompact.ToString());
+        Program.Check("S1 全量压缩: 压回触发线以下",
+            result.EraSegments < EraStore.Merger.MergeTriggerSegments,
+            $"{result.EraSegmentsBeforeCompact}->{result.EraSegments}");
+        Program.Check("S1 全量压缩: 不再需要 defrag（EraDefragged=false）",
+            !result.EraDefragged, result.EraDefragged.ToString());
+
+        var eraDir = EraDir(index);
+        var current = EraStore.CurrentPointer.Read(eraDir);
+        Program.Check("S1 全量压缩: CURRENT 指向新世代", current is not null, current ?? "(null)");
+        Program.Check("S1 全量压缩: 目录只剩 CURRENT 指向的一个文件",
+            EraGenerationFiles(eraDir).Length == 1, string.Join(',', EraGenerationFiles(eraDir)));
+
+        var stats = EraStore.IndexStats.Collect(eraDir);
+        var manifest = ReadManifest(index);
+        var manifestBytes = manifest.ToJsonBytes().Length;
+        Program.Check("S1 全量压缩: fileBytes = 活数据 + Manifest",
+            stats.FileBytes == stats.LiveBytes + EraStore.EraFormat.DataStart + manifestBytes,
+            $"file={stats.FileBytes} live={stats.LiveBytes} manifest={manifestBytes}");
+        Program.Check("S1 全量压缩: overhead 只剩 Manifest",
+            stats.OverheadBytes == manifestBytes, stats.OverheadBytes.ToString());
+        Program.Check("S1 全量压缩: EraFileBytesAfter 与当前文件一致",
+            result.EraFileBytesAfter == stats.FileBytes,
+            $"{result.EraFileBytesAfter}/{stats.FileBytes}");
+        Program.Check("S1 全量压缩: 活 doc 数不变", stats.Docs == tracks, stats.Docs.ToString());
+
+        Program.Check("S1 全量压缩: 标题仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(0)), "c0"));
+        Program.Check("S1 全量压缩: 歌词唯一词仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(1000)), "c0"));
+        Program.Check("S1 全量压缩: 末曲仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(tracks - 1)), $"c{tracks - 1}"));
+        Program.Check("S1 全量压缩: verify 通过",
+            EraStore.IndexVerifier.Verify(eraDir).Ok,
+            string.Join(" | ", EraStore.IndexVerifier.Verify(eraDir).Errors));
+    }
+
+    /// <summary>生成稳定唯一的纯小写拉丁词（5 字母，base-26）。</summary>
+    private static string Word(int index)
+    {
+        var buffer = new char[5];
+        var value = index;
+        for (var i = buffer.Length - 1; i >= 0; i--)
+        {
+            buffer[i] = (char)('a' + value % 26);
+            value /= 26;
+        }
+        return new string(buffer);
     }
 
     /// <summary>走生产查询路径（SearchSession → EraStore）判断某曲是否命中。</summary>
@@ -1238,6 +1332,15 @@ internal static class EndToEnd
             ?? throw new InvalidOperationException($"EraStore CURRENT 缺失: {dir}");
         return Path.Combine(dir, name);
     }
+
+    /// <summary>索引目录里的世代文件名（升序），用于断言「只剩 CURRENT 一个文件」。</summary>
+    private static string[] EraGenerationFiles(string dir) =>
+        Directory.GetFiles(dir, "search-*.eraindex")
+            .Select(Path.GetFileName)
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>读取当前快照的 Manifest（CURRENT + 提交槽恢复）。</summary>
     internal static EraStore.Manifest ReadManifest(string index)

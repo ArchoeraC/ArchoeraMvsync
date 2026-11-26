@@ -36,6 +36,7 @@ internal static class EraStoreBuildCompactionTests
         SkipsSmallIndex();
         RespectsRoundAndDocBudget();
         AbortKeepsPreviousGeneration();
+        AbortBeforeCurrentSwitch();
     }
 
     /// <summary>
@@ -54,7 +55,7 @@ internal static class EraStoreBuildCompactionTests
             Program.Check("构建压缩: 夹具为 90 个小段",
                 beforeSegments == DocCount / DocsPerSegment, beforeSegments.ToString());
 
-            var beforeQueries = CaptureQueries(path);
+            var beforeQueries = CaptureQueries(dir);
 
             var result = BuildCompactor.Compact(path, new BuildCompactionOptions
             {
@@ -77,9 +78,9 @@ internal static class EraStoreBuildCompactionTests
                 result.Rounds == 1 && result.MergedSegments == beforeSegments,
                 $"{result.Rounds}/{result.MergedSegments}");
 
-            CheckQueriesIdentical("构建压缩", beforeQueries, CaptureQueries(path));
+            CheckQueriesIdentical("构建压缩", beforeQueries, CaptureQueries(dir));
 
-            var afterManifest = ReadManifest(path, out var afterGen);
+            var afterManifest = ReadManifest(dir, out var afterGen);
             Program.Check("构建压缩: 段数与结果一致",
                 Segments(afterManifest) == result.SegmentsAfter,
                 Segments(afterManifest).ToString());
@@ -88,7 +89,24 @@ internal static class EraStoreBuildCompactionTests
             Program.Check("构建压缩: DocCount 不变",
                 afterManifest.DocCount == DocCount, afterManifest.DocCount.ToString());
 
-            var report = IndexVerifier.Verify(path);
+            Program.Check("构建压缩: 产出新世代并切换 CURRENT",
+                result.RewroteGeneration && result.GenerationName == CurrentName(dir)
+                    && result.GenerationName != Path.GetFileName(path),
+                $"{Path.GetFileName(path)}->{result.GenerationName}/{CurrentName(dir)}");
+            Program.Check("构建压缩: 目录只剩 CURRENT 指向的一个文件",
+                GenerationFiles(dir).Length == 1, string.Join(',', GenerationFiles(dir)));
+
+            var stats = IndexStats.Collect(dir);
+            var manifestBytes = afterManifest.ToJsonBytes().Length;
+            Program.Check("构建压缩: fileBytes = 活数据 + Manifest",
+                stats.FileBytes == stats.LiveBytes + EraFormat.DataStart + manifestBytes,
+                $"file={stats.FileBytes} live={stats.LiveBytes} manifest={manifestBytes}");
+            Program.Check("构建压缩: overhead 只剩 Manifest",
+                stats.OverheadBytes == manifestBytes, stats.OverheadBytes.ToString());
+            Program.Check("构建压缩: 返回的文件字节与 stats 一致",
+                result.FileBytes == stats.FileBytes, $"{result.FileBytes}/{stats.FileBytes}");
+
+            var report = IndexVerifier.Verify(dir);
             Program.Check("构建压缩: verify 通过", report.Ok,
                 string.Join(" | ", report.Errors));
         }
@@ -112,7 +130,7 @@ internal static class EraStoreBuildCompactionTests
             IndexBuilder.Build(path, Corpus(docs), Options(70));
             var before = ReadManifest(path, out _);
             var beforeSegments = Segments(before);
-            var beforeQueries = CaptureQueries(path);
+            var beforeQueries = CaptureQueries(dir);
             Program.Check("构建压缩(均匀段): 夹具 30 段 / 每段 70 doc",
                 beforeSegments == 30, beforeSegments.ToString());
 
@@ -127,9 +145,9 @@ internal static class EraStoreBuildCompactionTests
                 result.Compacted && result.SegmentsAfter < Merger.MergeTriggerSegments
                     && result.SegmentsAfter < result.SegmentsBefore,
                 $"{result.SegmentsBefore} -> {result.SegmentsAfter}");
-            CheckQueriesIdentical("构建压缩(均匀段)", beforeQueries, CaptureQueries(path));
+            CheckQueriesIdentical("构建压缩(均匀段)", beforeQueries, CaptureQueries(dir));
 
-            var report = IndexVerifier.Verify(path);
+            var report = IndexVerifier.Verify(dir);
             Program.Check("构建压缩(均匀段): verify 通过", report.Ok,
                 string.Join(" | ", report.Errors));
         }
@@ -181,7 +199,7 @@ internal static class EraStoreBuildCompactionTests
         {
             var path = Path.Combine(dir, "search-1.eraindex");
             IndexBuilder.Build(path, Corpus(), Options(DocsPerSegment));
-            var beforeQueries = CaptureQueries(path);
+            var beforeQueries = CaptureQueries(dir);
 
             var result = BuildCompactor.Compact(path, new BuildCompactionOptions
             {
@@ -198,9 +216,9 @@ internal static class EraStoreBuildCompactionTests
                 result.SegmentsAfter > Merger.MergeTriggerSegments
                     && result.SegmentsAfter < result.SegmentsBefore,
                 $"{result.SegmentsBefore} -> {result.SegmentsAfter}");
-            CheckQueriesIdentical("构建压缩(有界)", beforeQueries, CaptureQueries(path));
+            CheckQueriesIdentical("构建压缩(有界)", beforeQueries, CaptureQueries(dir));
 
-            var report = IndexVerifier.Verify(path);
+            var report = IndexVerifier.Verify(dir);
             Program.Check("构建压缩(有界): verify 通过", report.Ok,
                 string.Join(" | ", report.Errors));
         }
@@ -220,7 +238,7 @@ internal static class EraStoreBuildCompactionTests
         {
             var path = Path.Combine(dir, "search-1.eraindex");
             IndexBuilder.Build(path, Corpus(), Options(DocsPerSegment));
-            var beforeQueries = CaptureQueries(path);
+            var beforeQueries = CaptureQueries(dir);
             var before = ReadManifest(path, out var beforeGen);
             var beforeSegments = Segments(before);
 
@@ -245,12 +263,82 @@ internal static class EraStoreBuildCompactionTests
             }
 
             Program.Check("构建压缩: 中断向上抛", threw, threw.ToString());
-            var after = ReadManifest(path, out var afterGen);
+            var after = ReadManifest(dir, out var afterGen);
             Program.Check("构建压缩: 中断后 Gen 不变", afterGen == beforeGen,
                 $"{beforeGen}->{afterGen}");
             Program.Check("构建压缩: 中断后段数不变",
                 Segments(after) == beforeSegments, Segments(after).ToString());
-            CheckQueriesIdentical("构建压缩(中断)", beforeQueries, CaptureQueries(path));
+            CheckQueriesIdentical("构建压缩(中断)", beforeQueries, CaptureQueries(dir));
+        }
+        finally
+        {
+            Cleanup(dir);
+        }
+    }
+
+    /// <summary>
+    /// 5. 新世代文件已写完（Commit 已 fsync）但 CURRENT 尚未切换时中断：旧世代 / 旧
+    /// CURRENT / 旧文件字节都不变，新文件作为未引用垃圾被清理；查询结果不变。
+    /// </summary>
+    private static void AbortBeforeCurrentSwitch()
+    {
+        var dir = NewDir();
+        try
+        {
+            var path = Path.Combine(dir, "search-1.eraindex");
+            IndexBuilder.Build(path, Corpus(), Options(DocsPerSegment));
+            var beforeQueries = CaptureQueries(dir);
+            var beforeManifest = ReadManifest(dir, out var beforeGen);
+            var beforeSegments = Segments(beforeManifest);
+            var beforeName = CurrentName(dir);
+            var beforeBytes = new FileInfo(IndexPaths.Resolve(dir)).Length;
+            var beforeFiles = GenerationFiles(dir);
+
+            var phases = new List<string>();
+            var threw = false;
+            try
+            {
+                BuildCompactor.Compact(path, new BuildCompactionOptions
+                {
+                    BudgetSeconds = 60,
+                    MaxDocsPerRound = DocCount * 2,
+                    InitialDocsPerSecond = 1_000_000,
+                    Progress = p =>
+                    {
+                        phases.Add(p.Phase);
+                        // Commit 已 fsync、CURRENT 尚未替换：模拟进程在此刻崩溃。
+                        if (p.Phase == "merge-switch") throw new OperationCanceledException("模拟中断");
+                    },
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                threw = true;
+            }
+
+            Program.Check("构建压缩(切换前中断): 向上抛", threw, threw.ToString());
+            Program.Check("构建压缩(切换前中断): 已写完新文件才中断",
+                phases.Contains("merge-commit") && phases.Contains("merge-switch"),
+                string.Join(',', phases));
+            Program.Check("构建压缩(切换前中断): CURRENT 未切换",
+                CurrentName(dir) == beforeName, $"{beforeName}->{CurrentName(dir)}");
+            Program.Check("构建压缩(切换前中断): 旧文件字节不变",
+                new FileInfo(IndexPaths.Resolve(dir)).Length == beforeBytes,
+                $"{beforeBytes}->{new FileInfo(IndexPaths.Resolve(dir)).Length}");
+
+            var after = ReadManifest(dir, out var afterGen);
+            Program.Check("构建压缩(切换前中断): Gen 不变", afterGen == beforeGen,
+                $"{beforeGen}->{afterGen}");
+            Program.Check("构建压缩(切换前中断): 段数不变",
+                Segments(after) == beforeSegments, Segments(after).ToString());
+            Program.Check("构建压缩(切换前中断): 未留下新世代",
+                GenerationFiles(dir).SequenceEqual(beforeFiles, StringComparer.Ordinal),
+                string.Join(',', GenerationFiles(dir)));
+
+            CheckQueriesIdentical("构建压缩(切换前中断)", beforeQueries, CaptureQueries(dir));
+            var report = IndexVerifier.Verify(dir);
+            Program.Check("构建压缩(切换前中断): verify 通过", report.Ok,
+                string.Join(" | ", report.Errors));
         }
         finally
         {
@@ -284,9 +372,9 @@ internal static class EraStoreBuildCompactionTests
     }
 
     /// <summary>同一表达式在压缩前后返回的 track 集合与 bm25 分数必须一致。</summary>
-    private static Dictionary<string, Dictionary<string, double>> CaptureQueries(string path)
+    private static Dictionary<string, Dictionary<string, double>> CaptureQueries(string indexPath)
     {
-        using var reader = new StoreReader(path);
+        using var reader = new StoreReader(IndexPaths.Resolve(indexPath));
         var captured = new Dictionary<string, Dictionary<string, double>>(StringComparer.Ordinal);
         foreach (var (name, expr) in Expressions)
         {
@@ -339,10 +427,20 @@ internal static class EraStoreBuildCompactionTests
 
     private static Manifest ReadManifest(string path, out ulong gen)
     {
-        using var file = IndexFile.Open(path);
+        using var file = IndexFile.Open(IndexPaths.Resolve(path));
         gen = file.Gen;
         return file.Current ?? throw new InvalidDataException("夹具没有有效提交");
     }
+
+    private static string CurrentName(string dir) => CurrentPointer.Read(dir) ?? "(null)";
+
+    private static string[] GenerationFiles(string dir) =>
+        Directory.GetFiles(dir, "search-*.eraindex")
+            .Select(Path.GetFileName)
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
 
     private static int Segments(Manifest manifest)
     {

@@ -38,6 +38,12 @@ public sealed class IndexerOptions
 
     /// <summary>内部批量事务条数（0 = 使用存储默认）。</summary>
     public int Batch { get; set; }
+
+    /// <summary>
+    /// 测试用：覆盖全量构建的单段估算内存上限（0 = 生产默认 4 MB）。
+    /// 只影响段切分，不改变格式 / 查询语义；用于在小型夹具上触发「多段 → 自动压缩」。
+    /// </summary>
+    internal long FullBuildMaxSegmentBytesOverride { get; set; }
 }
 
 /// <summary>索引进度（stdout JSON / FFI 回调共用）。</summary>

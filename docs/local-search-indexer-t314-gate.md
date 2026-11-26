@@ -5,7 +5,7 @@
 > 关联：`docs/local-search-indexer-rewrite-plan.md` §5.4 / §8
 >
 > **最终状态（2026-11-25）**：S0–S4 已全部实施；本文件记录 T3.10 / T3.13 / T3.14 / T3.15
-> 的门禁过程与后续各轮实测。最新数字见文末「第六轮」，剩余项见「下一步」。
+> 的门禁过程与后续各轮实测。最新数字见文末「第七轮」，剩余项见「下一步」。
 >
 > **结论先行**：T3.10 的功能已落地（增量 + 墓碑 + 分层合并），T3.13 的生产查询路径已
 > 零 v7/FTS5，T3.15 的切换逻辑已可复现；**T3.14 七项门禁 7/7 通过**（30k，空闲
@@ -364,6 +364,27 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
   延迟 p50 **7.78 / 8.61 ms**、p95 **31.9 / 30.1 ms**、`rss_query` **56–58 MB**；
   回归 **C# PASS 3978 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**、Flutter **1243 通过**。
 
+- **第七轮（2026-11-26，S1）**：全量构建收尾压缩改为**直接写新世代**，省掉 defrag 复制。
+  - `EraStore/Merger.cs` 新增 `MergeToNewGeneration`：未参与合并的段原样复制（不重新编码，
+    CRC 比对），合并段仍用「旧最大段号 + 1」，活 doc 重新编号；新文件提交（双槽 fsync）
+    后才原子替换 `search.era/CURRENT`。提交前失败 / 中止删除未引用的新文件，旧世代与旧
+    `CURRENT` 不动；切换后清理失败只留下垃圾文件，下次运行重试。`Merge`（增量合并）
+    保持「同文件追加」不变。
+  - `EraStore/BuildCompaction.cs`：每轮改用 `MergeToNewGeneration`，结果新增
+    `RewroteGeneration / GenerationName / FileBytes`；轮间按 `CURRENT` 重新解析文件。
+  - `IndexerEngine`：压缩走新世代路径时**跳过** `DefragEraAfterFullBuild`，
+    `EraFileBytesAfter` 直接取压缩结果；仅当某轮退回就地追加时才走 defrag 兜底。
+  - 共享工具：`IndexFile.ReadIdentity`、`CurrentPointer.NextGenerationName /
+    CleanupGenerations`（`Defragmenter` 同步复用，行为不变）。
+  - 测试：`EraStoreBuildCompactionTests` 断言压缩后只剩 `CURRENT` 一个文件、
+    `fileBytes = liveBytes + Manifest`、`overheadBytes` 只剩 Manifest；新增
+    「新文件已 Commit、`CURRENT` 未切换时中断」用例（旧世代 / 字节 / 查询不变，孤儿文件被清理）。
+    `EndToEnd` 新增可调段上限的全量构建夹具（30 段 → 1 段），断言
+    `EraCompacted=true`、`EraDefragged=false`、`EraFileBytesAfter` 与当前文件一致、查询仍命中。
+  - 格式锚 / Manifest 元数据 / 段号语义不变，既有索引仍可读，**不需要重建**。
+  - 回归 **C# PASS 4011 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**。本轮未重跑 30k 长基准
+    （`ALLOW_LONG_BENCH` 禁止），因此不记录新的构建耗时 / 峰值磁盘数字。
+
 - **第五轮（2026-11-25）**：T3.11 DocStore v3 归一列 + 字面精确度 / 邻近度进入桶序；
   步骤 kind 全档可达、`positioned` 由 `PhraseIter` 透传、散落多 term 真实邻近度启用。
   回归 **C# PASS 3978 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**、Flutter **1243 通过**、
@@ -406,7 +427,7 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 
 | # | 现状 | 可改进方向 | 代价 |
 |---|---|---|---|
-| S1 | `compact` 把归并结果 append 到同一 generation，随后 `defrag` 再整文件复制一遍（构建期峰值 2× 磁盘、耗 0.2–0.3 s） | 让 `Merger` 直接写新 generation 文件并原子切换，省掉 defrag 的复制 | Merger 写路径改造；需保持崩溃安全与段号语义 |
+| S1 | ~~`compact` 把归并结果 append 到同一 generation，随后 `defrag` 再整文件复制一遍（构建期峰值 2× 磁盘、耗 0.2–0.3 s）~~ **已实现（2026-11-26）**：全量构建收尾压缩走 `Merger.MergeToNewGeneration`，直接写只含活段体的新世代并原子切换 `CURRENT`，成功后跳过 defrag；增量合并仍保持同文件追加 | 后续只需观察真实曲库的峰值磁盘 / 收尾耗时（长基准未重跑） | 已完成；格式锚与既有索引不变，无需重建 |
 | S2 | positions 仍占索引 ~46%（30k：positions 123.8 MB / live 136.6 MB） | O8 位打包；或让 `initialsLyrics` / `pinyinMeta` 也免位置（短语降级为 AND） | 查询语义小幅放宽；位打包需格式版本 + 全量重建 |
 | S3 | 超过 255 B 的词条被丢弃（`oversizeTokens`），该词不可检索 | 对超长词做分段 / 哈希词条 + 原文旁路，保留可检索性 | 词典格式与查询 IR 改动；真实库中极罕见 |
 | S4 | 段大小固定 4 MB 估算（RSS ↔ 查询延迟的核心矛盾） | 按平台 / 曲库规模 / 内存自适应段大小，或构建后按段数二次合并 | 需要多档实测（5k/30k/48.7k 已有基线） |
@@ -424,5 +445,5 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | E4 | `SearchApi.Busy` 是协议预留，当前不会返回 | 保留（写任务 API 尚未需要）；若做后台压缩任务可启用 |
 | E5 | health `schemaVersion` / `gen` 的 Dart 消费方为空 | 设置页可展示 `dataPack`/confidence 分布，便于用户自查 |
 
-> 建议顺序：**Q1（歌词精确度）→ S1（compact 直接写新文件）→ S2（体积）→ Q3/Q4（门禁词与短路）**；
-> Q6/Q7/Q8 属产品决策，单独评审；其余按真机/工具改进排期。
+> 建议顺序：**Q1（歌词精确度）→ S2（体积）→ Q3/Q4（门禁词与短路）**；
+> S1 已于 2026-11-26 完成；Q6/Q7/Q8 属产品决策，单独评审；其余按真机/工具改进排期。

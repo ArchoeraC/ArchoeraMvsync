@@ -14,6 +14,13 @@ internal sealed class MergeOptions
 
     /// <summary>阶段回调（read / write / commit）；异常向上抛，调用方据此中止。</summary>
     public Action<MergeProgress>? Progress = null;
+
+    /// <summary>
+    /// 写新世代（<see cref="Merger.MergeToNewGeneration"/>）并切换 <c>CURRENT</c> 后，
+    /// 是否删除未引用的旧世代文件。默认 true，与 <see cref="DefragOptions.Cleanup"/> 同约定；
+    /// 关闭只用于测试「切换后、清理前」的中间状态。就地追加（<see cref="Merger.Merge"/>）忽略本项。
+    /// </summary>
+    public bool Cleanup = true;
 }
 
 /// <summary>合并进度：阶段名、已处理的源段数、当前活 doc 数。</summary>
@@ -36,6 +43,15 @@ internal sealed class MergeResult
 
     /// <summary>因重复 track_id 丢弃的旧副本数。</summary>
     public int DroppedDuplicateTracks;
+
+    /// <summary>
+    /// 新世代文件名（<c>search-&lt;N&gt;.eraindex</c>）；就地追加（<see cref="Merger.Merge"/>）为空。
+    /// 非空表示 **只含活段体** 的新文件已提交并切换为 <c>CURRENT</c>，无需再去碎片。
+    /// </summary>
+    public string NewFileName = string.Empty;
+
+    /// <summary>提交后的文件字节数（新世代路径 = 活段体 + Manifest；就地追加 = 追加后的总长度）。</summary>
+    public long FileBytes;
 }
 
 /// <summary>
@@ -46,8 +62,11 @@ internal sealed class MergeResult
 ///   <item><b>只搬活 doc</b>：丢弃墓碑行，计入 <see cref="MergeResult.DroppedDead"/>；</item>
 ///   <item>按 term 归并已有倒排 / 位置，不重新分词，重算 df / max_tf；</item>
 ///   <item>活 doc 按 track_id 字节序从 0 编号；同一 track 保留 (源段号, 源 doc) 最大的副本；</item>
-///   <item>向同一世代文件追加新段，新 Manifest 不再引用旧段（旧段字节成为垃圾）；</item>
-///   <item><b>原子性</b>：<see cref="IndexFile.Commit"/> 之前任何异常都不改动旧 Manifest / 槽。</item>
+///   <item><b>两条写路径</b>：增量合并向同一世代文件追加新段（旧段字节成为垃圾）；
+///         <see cref="MergeToNewGeneration"/> 把全部活段体写进新世代并原子切换 <c>CURRENT</c>
+///         （只留活数据，供全量构建收尾压缩使用）；</item>
+///   <item><b>原子性</b>：就地追加在 <see cref="IndexFile.Commit"/> 之前任何异常都不改动旧
+///         Manifest / 槽；新世代路径在新文件提交前不动旧 <c>CURRENT</c>。</item>
 /// </list>
 /// </summary>
 internal static class Merger
@@ -102,17 +121,6 @@ internal static class Merger
     {
         ArgumentNullException.ThrowIfNull(indexPath);
         ArgumentNullException.ThrowIfNull(segmentIds);
-        if (segmentIds.Count == 0)
-            throw new ArgumentException("至少需要合并一个段", nameof(segmentIds));
-
-        var requested = new HashSet<int>();
-        foreach (var id in segmentIds)
-        {
-            if (id < 0 || id > ushort.MaxValue)
-                throw new ArgumentException($"段号 {id} 超出 0..65535", nameof(segmentIds));
-            if (!requested.Add(id))
-                throw new ArgumentException($"段号 {id} 重复", nameof(segmentIds));
-        }
 
         var opt = options ?? new MergeOptions();
         var path = IndexPaths.Resolve(indexPath);
@@ -124,11 +132,8 @@ internal static class Merger
             throw new InvalidDataException("索引没有有效提交");
         if (file.Gen != old.Gen)
             throw new InvalidDataException("索引在打开期间被并发提交");
-        var existing = old.Sections.Select(s => (int)s.SegmentId).Distinct().ToArray();
-        foreach (var id in requested)
-            if (Array.IndexOf(existing, id) < 0)
-                throw new ArgumentException($"段号 {id} 不存在", nameof(segmentIds));
 
+        var requested = ValidateSegments(old, segmentIds, out var existing);
         var newSegmentCount = existing.Length - requested.Count + 1;
         if (newSegmentCount > MaxSegments)
             throw new InvalidOperationException($"合并后段数 {newSegmentCount} 超过 {MaxSegments}");
@@ -136,36 +141,13 @@ internal static class Merger
         if (maxSegment >= ushort.MaxValue)
             throw new InvalidOperationException("段号超过 ushort 上限");
 
-        var newGen = opt.Gen != 0 ? opt.Gen : checked(file.Gen + 1);
-        if (newGen <= file.Gen)
-            throw new ArgumentException($"新 gen {newGen} 必须大于当前 {file.Gen}", nameof(options));
+        var newGen = ResolveGen(opt, file.Gen);
 
         Progress(opt, "read", 0, 0);
 
-        var sources = new List<Source>(requested.Count);
-        var droppedDead = 0;
-        foreach (var id in requested.Order())
-        {
-            var source = ReadSource(reader, old, (ushort)id);
-            droppedDead += source.Dead.Count;
-            sources.Add(source);
-            var liveSoFar = 0;
-            foreach (var s in sources) liveSoFar += s.Store.Count - s.Dead.Count;
-            Progress(opt, "read", sources.Count, liveSoFar);
-        }
-
+        var (sources, droppedDead) = ReadSources(reader, old, requested, opt);
         var (kept, duplicates) = Deduplicate(sources);
-
-        var newDoc = new Dictionary<(int Segment, int Doc), int>(kept.Count);
-        var records = new List<DocRecord>(kept.Count);
-        var storeBySegment = new Dictionary<int, DocStoreReader>(sources.Count);
-        foreach (var source in sources) storeBySegment[source.SegmentId] = source.Store;
-        for (var i = 0; i < kept.Count; i++)
-        {
-            var candidate = kept[i];
-            newDoc[(candidate.Segment, candidate.Doc)] = i;
-            records.Add(MakeRecord(storeBySegment[candidate.Segment], candidate.Doc, candidate.Track));
-        }
+        var (records, newDoc) = BuildRecords(sources, kept);
 
         Progress(opt, "write", sources.Count, kept.Count);
 
@@ -184,7 +166,8 @@ internal static class Merger
             },
             newSections);
 
-        var manifest = BuildManifest(old, requested, newGen, newSections);
+        var manifest = BuildManifest(
+            old, old.Sections.Where(s => !requested.Contains((int)s.SegmentId)), newSections, newGen);
         IndexBuilder.FillFileBytes(manifest, file.Length);
 
         Progress(opt, "commit", sources.Count, kept.Count);
@@ -197,10 +180,231 @@ internal static class Merger
             LiveDocs = kept.Count,
             DroppedDead = droppedDead,
             DroppedDuplicateTracks = duplicates,
+            FileBytes = file.Length,
         };
     }
 
+    /// <summary>
+    /// 合并 <paramref name="segmentIds"/> 指定的段，并把**全部活段体**写进一个**新世代文件**，
+    /// 提交后原子切换 <c>CURRENT</c>。产出文件只含被引用段体 + Manifest，因而不会留下
+    /// 「旧段 + 旧 Manifest」垃圾，调用方无需再执行 <see cref="Defragmenter"/>。
+    ///
+    /// <para>语义与 <see cref="Merge"/> 一致：活 doc 按 track 字节序重新编号、墓碑丢弃、
+    /// 重复 track 保留最新副本、未参与合并的段原样复制（段号 / 段类型 / docs 不变），
+    /// 合并段使用 <c>旧最大段号 + 1</c>；Manifest 的查询元数据（metaVersion / anchors /
+    /// optionsBits / capabilities / docCount）原样保留。</para>
+    ///
+    /// <para>崩溃安全：新文件完全提交（双槽 fsync）之后才写 <c>CURRENT</c>；此前任何失败 /
+    /// 中止都会删除新文件并保留旧世代与旧 <c>CURRENT</c>。切换成功后清理旧世代失败只留下
+    /// 垃圾文件（Windows 查询句柄占用），下次运行按同一约定重试。</para>
+    /// </summary>
+    public static MergeResult MergeToNewGeneration(
+        string indexPath, IReadOnlyList<int> segmentIds, MergeOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(indexPath);
+        ArgumentNullException.ThrowIfNull(segmentIds);
+
+        var opt = options ?? new MergeOptions();
+        var currentPath = IndexPaths.Resolve(indexPath);
+        var full = Path.GetFullPath(currentPath);
+        var dir = Path.GetDirectoryName(full)
+            ?? throw new InvalidDataException($"无法确定索引目录: {indexPath}");
+        var currentName = Path.GetFileName(full);
+
+        var pointer = CurrentPointer.Read(dir);
+        if (pointer is not null && !string.Equals(pointer, currentName, StringComparison.Ordinal))
+            throw new InvalidDataException(
+                $"新世代合并只能作用于当前世代：CURRENT={pointer}，给定={currentName}");
+
+        var (fileUuid, createdMs) = IndexFile.ReadIdentity(full);
+        var newName = CurrentPointer.NextGenerationName(dir);
+        var newPath = Path.Combine(dir, newName);
+
+        MergeResult result;
+        IndexFile? target = null;
+        var switched = false;
+
+        try
+        {
+            using (var reader = new StoreReader(full))
+            {
+                var old = reader.Manifest;
+
+                var requested = ValidateSegments(old, segmentIds, out var existing);
+                var newSegmentCount = existing.Length - requested.Count + 1;
+                if (newSegmentCount > MaxSegments)
+                    throw new InvalidOperationException($"合并后段数 {newSegmentCount} 超过 {MaxSegments}");
+                var maxSegment = existing.Length == 0 ? -1 : existing.Max();
+                if (maxSegment >= ushort.MaxValue)
+                    throw new InvalidOperationException("段号超过 ushort 上限");
+
+                var newGen = ResolveGen(opt, reader.Gen);
+
+                Progress(opt, "read", 0, 0);
+
+                var (sources, droppedDead) = ReadSources(reader, old, requested, opt);
+                var (kept, duplicates) = Deduplicate(sources);
+                var (records, newDoc) = BuildRecords(sources, kept);
+
+                var newSegmentId = (ushort)(maxSegment + 1);
+                result = new MergeResult
+                {
+                    NewGen = newGen,
+                    NewSegment = newSegmentId,
+                    LiveDocs = kept.Count,
+                    DroppedDead = droppedDead,
+                    DroppedDuplicateTracks = duplicates,
+                    NewFileName = newName,
+                };
+
+                target = IndexFile.CreateNew(newPath, fileUuid, createdMs);
+
+                // 未参与合并的段原样复制（不重新编码 / 不重新分析），只重算并校验 CRC。
+                var sections = new List<SectionRef>();
+                foreach (var section in old.Sections)
+                {
+                    if (requested.Contains((int)section.SegmentId)) continue;
+                    var body = reader.GetSectionBody(section);
+                    var appended = target.AppendSection(section.Kind, body.Span, section.Docs);
+                    if (appended.Crc != section.Crc)
+                        throw new InvalidDataException(
+                            $"seg={section.SegmentId} {section.Kind} 段体 CRC 不符"
+                            + $"（0x{appended.Crc:X8} != 0x{section.Crc:X8}），拒绝复制损坏数据");
+                    sections.Add(new SectionRef
+                    {
+                        Kind = section.Kind,
+                        SegmentId = section.SegmentId,
+                        Offset = appended.Offset,
+                        Length = appended.Length,
+                        Crc = appended.Crc,
+                        Docs = section.Docs,
+                    });
+                }
+
+                Progress(opt, "write", sources.Count, kept.Count);
+
+                var mergedSections = new List<SectionRef>();
+                IndexBuilder.WriteSegmentStreaming(
+                    target, records, newSegmentId,
+                    (dict, postings, positions, writer) =>
+                    {
+                        foreach (var (key, entries) in MergeTerms(sources, newDoc))
+                        {
+                            var offset = writer.Write(postings, positions, entries);
+                            dict.AddKey((FieldId)key[0], key.AsSpan(1), (uint)entries.Count, offset,
+                                entries[0].Positions is not null ? (byte)0x01 : (byte)0);
+                        }
+                    },
+                    mergedSections);
+                sections.AddRange(mergedSections);
+
+                var manifest = BuildManifest(old, sections, Array.Empty<SectionRef>(), newGen);
+                IndexBuilder.FillFileBytes(manifest, target.Length);
+
+                Progress(opt, "commit", sources.Count, kept.Count);
+                target.Commit(manifest);
+                result.FileBytes = target.Length;
+            }
+
+            // 复制 / 合并阶段已结束：先释放旧文件 mmap / 句柄，Windows 上才能删除旧世代。
+            target.Dispose();
+            target = null;
+
+            // 唯一外部可见的切换点；此前 CURRENT 始终指向旧世代。
+            Progress(opt, "switch", 0, result.LiveDocs);
+            CurrentPointer.Write(dir, newName);
+            switched = true;
+
+            if (opt.Cleanup) CurrentPointer.CleanupGenerations(dir, newName);
+        }
+        catch
+        {
+            // 切换前失败：新文件未被引用，尽力删除；旧 CURRENT / 旧世代未动。
+            // 切换后失败：新文件已是当前世代，绝不能删除；旧文件留给下一次维护回收。
+            target?.Dispose();
+            if (!switched) TryDelete(newPath);
+            throw;
+        }
+
+        return result;
+    }
+
     /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// 校验段号列表：非空 / 不重复 / 0..65535 / 都在 Manifest 中。返回请求集合。
+    /// </summary>
+    private static HashSet<int> ValidateSegments(
+        Manifest manifest, IReadOnlyList<int> segmentIds, out int[] existing)
+    {
+        if (segmentIds.Count == 0)
+            throw new ArgumentException("至少需要合并一个段", nameof(segmentIds));
+
+        var requested = new HashSet<int>();
+        foreach (var id in segmentIds)
+        {
+            if (id < 0 || id > ushort.MaxValue)
+                throw new ArgumentException($"段号 {id} 超出 0..65535", nameof(segmentIds));
+            if (!requested.Add(id))
+                throw new ArgumentException($"段号 {id} 重复", nameof(segmentIds));
+        }
+
+        existing = manifest.Sections.Select(s => (int)s.SegmentId).Distinct().ToArray();
+        foreach (var id in requested)
+            if (Array.IndexOf(existing, id) < 0)
+                throw new ArgumentException($"段号 {id} 不存在", nameof(segmentIds));
+        return requested;
+    }
+
+    /// <summary>新世代号：0 = 当前 gen + 1；必须严格大于当前 gen。</summary>
+    private static ulong ResolveGen(MergeOptions options, ulong currentGen)
+    {
+        var newGen = options.Gen != 0 ? options.Gen : checked(currentGen + 1);
+        if (newGen <= currentGen)
+            throw new ArgumentException($"新 gen {newGen} 必须大于当前 {currentGen}", nameof(options));
+        return newGen;
+    }
+
+    /// <summary>按段号升序读取各源段的 DocStore / 倒排 / 位置 / 墓碑，并上报读取进度。</summary>
+    private static (List<Source> Sources, int DroppedDead) ReadSources(
+        StoreReader reader, Manifest manifest, HashSet<int> requested, MergeOptions options)
+    {
+        var sources = new List<Source>(requested.Count);
+        var droppedDead = 0;
+        foreach (var id in requested.Order())
+        {
+            var source = ReadSource(reader, manifest, (ushort)id);
+            droppedDead += source.Dead.Count;
+            sources.Add(source);
+            var liveSoFar = 0;
+            foreach (var s in sources) liveSoFar += s.Store.Count - s.Dead.Count;
+            Progress(options, "read", sources.Count, liveSoFar);
+        }
+        return (sources, droppedDead);
+    }
+
+    /// <summary>把去重后的活 doc 映射到新段内的连续 doc_id，并生成 DocStore 记录。</summary>
+    private static (List<DocRecord> Records, Dictionary<(int Segment, int Doc), int> NewDoc)
+        BuildRecords(List<Source> sources, List<Candidate> kept)
+    {
+        var newDoc = new Dictionary<(int Segment, int Doc), int>(kept.Count);
+        var records = new List<DocRecord>(kept.Count);
+        var storeBySegment = new Dictionary<int, DocStoreReader>(sources.Count);
+        foreach (var source in sources) storeBySegment[source.SegmentId] = source.Store;
+        for (var i = 0; i < kept.Count; i++)
+        {
+            var candidate = kept[i];
+            newDoc[(candidate.Segment, candidate.Doc)] = i;
+            records.Add(MakeRecord(storeBySegment[candidate.Segment], candidate.Doc, candidate.Track));
+        }
+        return (records, newDoc);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
 
     private static void Progress(MergeOptions options, string phase, int segmentsDone, int liveDocs) =>
         options.Progress?.Invoke(new MergeProgress(phase, segmentsDone, liveDocs));
@@ -382,7 +586,7 @@ internal static class Merger
     }
 
     private static Manifest BuildManifest(
-        Manifest old, HashSet<int> merged, ulong gen, List<SectionRef> newSections)
+        Manifest old, IEnumerable<SectionRef> keptSections, IEnumerable<SectionRef> newSections, ulong gen)
     {
         var manifest = new Manifest
         {
@@ -398,21 +602,17 @@ internal static class Merger
 
         long liveBytes = 0;
         long liveDocs = 0;
-        foreach (var section in old.Sections)
+
+        void Add(SectionRef section)
         {
-            if (merged.Contains(section.SegmentId)) continue;
             manifest.Sections.Add(section);
             liveBytes += section.Length;
             if (section.Kind == SectionKind.DocStore) liveDocs += section.Docs;
             else if (section.Kind == SectionKind.Tombs) liveDocs -= section.Docs;
         }
 
-        foreach (var section in newSections)
-        {
-            manifest.Sections.Add(section);
-            liveBytes += section.Length;
-            if (section.Kind == SectionKind.DocStore) liveDocs += section.Docs;
-        }
+        foreach (var section in keptSections) Add(section);
+        foreach (var section in newSections) Add(section);
 
         manifest.LiveBytes = liveBytes;
         manifest.DocCount = liveDocs < 0 ? 0 : (uint)liveDocs;

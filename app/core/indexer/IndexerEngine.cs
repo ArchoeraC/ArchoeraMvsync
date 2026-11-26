@@ -114,10 +114,10 @@ public sealed class IndexerEngine
     private const int FullBuildCompactMaxRounds = 2;
 
     /// <summary>
-    /// 全量构建后自动去碎片的触发线：自动压缩留下的 garbage &gt;
-    /// <c>0.20 × liveBytes</c>（且不少于 <see cref="EraStore.Defragmenter.MinAutoGarbageBytes"/>）。
-    /// 追加式合并的垃圾通常 ≈ 一个被合并段的大小，2× 文件是常态，因此这个条件在真实
-    /// 全量构建上几乎总会成立；纯净 / 小索引（overhead 只是 Manifest）不会被整理。
+    /// 全量构建后自动去碎片的触发线（仅当自动压缩**未走新世代路径**、退化为同文件追加时
+    /// 兜底）：garbage &gt; <c>0.20 × liveBytes</c>（且不少于
+    /// <see cref="EraStore.Defragmenter.MinAutoGarbageBytes"/>）。S1 起正常压缩直接产出
+    /// 只含活段体的新世代，不再进入本分支。
     /// </summary>
     private const double FullBuildDefragOverheadRatio = 0.20;
 
@@ -348,15 +348,22 @@ public sealed class IndexerEngine
                 eraMerged = true;
                 Fire("compact", $"{compaction.SegmentsBefore}->{compaction.SegmentsAfter}");
 
-                // 合并是追加写：旧段 + 旧 Manifest 留在同一文件里成为垃圾（≈2× 活数据）。
-                // 这里在**同一个「已提交、尚未清理旧世代」窗口**内整理一次，把 CURRENT 文件
-                // 缩回活数据大小；失败只 warn，构建产物（已提交的世代）仍然可用。
-                var defrag = DefragEraAfterFullBuild(eraPath);
-                if (defrag is { Ran: true })
+                // S1：压缩直接写只含活段体的新世代并切换 CURRENT，产出文件没有旧段 / 旧
+                // Manifest 垃圾，因此不需要再去碎片复制一遍。仅当某些路径退回「就地追加」
+                // （RewroteGeneration=false）时才走原来的 defrag 兜底。
+                if (compaction.RewroteGeneration)
                 {
-                    eraDefragged = true;
-                    eraDefragMs = defrag.ElapsedMs;
-                    eraFileBytesAfter = defrag.FileBytesAfter;
+                    eraFileBytesAfter = compaction.FileBytes;
+                }
+                else
+                {
+                    var defrag = DefragEraAfterFullBuild(eraPath);
+                    if (defrag is { Ran: true })
+                    {
+                        eraDefragged = true;
+                        eraDefragMs = defrag.ElapsedMs;
+                        eraFileBytesAfter = defrag.FileBytesAfter;
+                    }
                 }
             }
 
@@ -656,7 +663,10 @@ public sealed class IndexerEngine
                 // 真实中文歌词（2–8 KB/曲、12 字段族）下单段累加器的实际内存约为估算值的
                 // 6–8 倍；32 MB 估算会把峰值推到 200 MB+。4 MB 估算 ⇒ 约 25–35 MB 实际，
                 // 段数随之增加（2048 条 section 上限可容纳 ~400 段）。
-                MaxSegmentBytes = 4L << 20,
+                // 测试可调小上限，在小型夹具上覆盖「多段 → 全量构建收尾压缩」路径。
+                MaxSegmentBytes = options.FullBuildMaxSegmentBytesOverride > 0
+                    ? options.FullBuildMaxSegmentBytesOverride
+                    : 4L << 20,
             });
         var segments = EraStore.StoreReader.TryReadManifest(eraPath) is { } built
             ? CountEraSegments(built)
