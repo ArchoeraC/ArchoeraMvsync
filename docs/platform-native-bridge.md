@@ -785,5 +785,9 @@ int32_t apl_system_accent_set_events(int32_t on);
 - **Dart**：`SystemWindow.size`（`WindowSize?`）+ `FfiSystemWindow` 绑定；Noop 返回 null。
   用途：① 退出时持久化窗口几何（`setWindowGeometry`），启动恢复；② macOS 原生
   `start_resize` 不支持时的手势缩放回退（`window_resize.dart` 纯几何 + 单测）。
-- **验证**：Linux CMake 构建通过，`nm` 可见 `apl_window_get_size`、`apl_abi_version=11`；
-  `native_platform_abi_test` 常量 / 符号守卫通过；macOS / Windows 仍待交叉编译与真机。
+- **验证**：Linux CMake 构建通过，`nm` 可见 21 个 `apl_window_*` 与 `apl_abi_version=11`；
+  macOS arm64/x86_64 交叉编译 + 链接通过；`native_platform_abi_test` 常量 / 符号守卫
+  通过；`window_resize_test` 覆盖几何回退与偏好往返。
+- **未覆盖**：本机无 `msvc-wine`（`verify_windows.sh` 直接失败），**Windows 本轮未编译**，
+  仅按现有 `GetWindowRect` / `pxToDip` 同源写法落地，需在真机或 CI 的 Windows 构建里补一次；
+  macOS 的 `dispatch_sync` 读尺寸与 Dart 手动缩放回退也仍需真机确认（多显示器 / 无抖动）。
