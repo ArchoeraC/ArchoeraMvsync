@@ -41,6 +41,7 @@ internal static class EndToEnd
             ProductionRomanizationNoPositions(root);
             RepeatedFullBuild(root);
             EraIncremental(root);
+            AutoMaintainWithoutDirty(root);
             FullBuildCompactionWritesFreshGeneration(root);
         }
         finally
@@ -1338,10 +1339,84 @@ internal static class EndToEnd
             !SessionHit(index, db, "nz", "ib4"));
     }
 
+    /// <summary>
+    /// S7：没有脏曲时仍按阈值做有界维护（回收墓碑行 / 小段），达标后重复运行零写入。
+    /// </summary>
+    private static void AutoMaintainWithoutDirty(string root)
+    {
+        var work = Path.Combine(root, "auto-maintain");
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            for (var i = 1; i <= 4; i++)
+            {
+                InsertTrack(conn, HexId(i), Path.Combine(dir, $"m{i}.mp3"), $"维护歌{i}",
+                    "[]", null, $"歌词行{i}", i);
+            }
+        }
+
+        var full = RunEngine(db, index, full: true, lrc: false);
+        Program.Check("维护: 全量构建压缩到 1 段", full.EraSegments == 1, full.EraSegments.ToString());
+
+        var eraDir = EraDir(index);
+        var current = EraStore.CurrentPointer.Read(eraDir);
+        Program.Check("维护: CURRENT 可解析", current is not null, eraDir);
+        var eraPath = Path.Combine(eraDir, current!);
+
+        // 直接改写 2 首（同 track / 同 mtime，引擎不会判脏）并关闭合并：
+        // 制造 2/6 = 33% 死行，超过 Merger.DeadRatioTrigger 的 20%。
+        var upserts = new[]
+        {
+            MaintainDoc(1, "标题1", 1),
+            MaintainDoc(2, "标题2", 2),
+        };
+        var applied = EraStore.IncrementalUpdater.Apply(
+            eraPath, upserts, Array.Empty<byte[]>(), new EraStore.IncrementalOptions
+            {
+                Merge = false,
+                DocsPerSegment = 100,
+            });
+        Program.Check("维护: 构造 2 段 + 2 死行",
+            applied.SegmentCount == 2 && applied.DeadDocs == 2,
+            $"{applied.SegmentCount}/{applied.DeadDocs}");
+
+        // 无脏曲运行：Maintain 看到死行比例过阈值 → 合并回收。
+        var maintained = RunEngine(db, index, full: false, lrc: false);
+        var stats = EraStore.IndexStats.Collect(eraPath);
+        Program.Check("维护: 无脏曲也触发合并", maintained.EraMerged && maintained.EraWritten,
+            $"{maintained.EraMerged}/{maintained.EraWritten}");
+        Program.Check("维护: 合并后回到 1 段 / 0 死行",
+            maintained.EraSegments == 1 && stats.DeadDocs == 0,
+            $"{maintained.EraSegments}/{stats.DeadDocs}");
+        Program.Check("维护: 活 doc 仍为 4", stats.Docs == 4, stats.Docs.ToString());
+
+        // 达标后再次运行：Maintain 只读 Manifest，不写文件。
+        var clean = RunEngine(db, index, full: false, lrc: false);
+        Program.Check("维护: 达标后重复运行零写入", !clean.EraWritten && clean.EraSegments == 1,
+            $"{clean.EraWritten}/{clean.EraSegments}");
+    }
+
+    private static string HexId(int n) => n.ToString("x32");
+
+    private static EraStore.AnalyzedDoc MaintainDoc(int n, string title, long mtime)
+    {
+        var track = Convert.FromHexString(HexId(n));
+        var tokens = new Dictionary<EraStore.FieldId, string[]>
+        {
+            [EraStore.FieldId.Title] = new[] { "维护词" + n },
+        };
+        return new EraStore.AnalyzedDoc(
+            track, new byte[16], 0, 0, tokens, title, "", "", mtime);
+    }
+
     /* ------------------------------------------------------------------ */
     /* 引擎 / fixture 辅助                                                 */
     /* ------------------------------------------------------------------ */
-
     internal static IndexerResult RunEngine(string db, string index, bool full, bool lrc)
         => RunEngineDetailed(db, index, full, lrc).Result;
 

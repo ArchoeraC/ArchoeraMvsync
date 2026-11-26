@@ -407,6 +407,30 @@ public sealed class IndexerEngine
                 eraDead = inc.DeadDocs;
                 wroteEra = true;
             }
+            else if (options.AutoMaintain && eraPath is not null && File.Exists(eraPath))
+            {
+                // S7：没有任何脏曲 / 删除时，仍按阈值做一次有界维护（回收墓碑行与小段）。
+                // Maintain 先读 Manifest；未达阈值时不写文件，因此干净索引的重复运行仍零写入。
+                var meta = MetaFromProfile(profile, options);
+                var maintained = EraStore.IncrementalUpdater.Maintain(
+                    eraPath,
+                    new EraStore.IncrementalOptions
+                    {
+                        OptionsBits = BuildOptionsBits(meta),
+                        Capabilities = EffectiveCapabilities(meta),
+                        NoPositionFields = EraStore.BuildDefaults.CreateNoPositionFields(),
+                    });
+                eraMerged = maintained.Merged;
+                eraSegments = maintained.SegmentCount;
+                wroteEra = maintained.Merged;
+                if (maintained.Merged)
+                {
+                    Fire("maintain", maintained.SegmentCount.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
+                    Log.LogInfo("indexer",
+                        $"EraStore 无脏曲维护: 合并后 {maintained.SegmentCount} 段");
+                }
+            }
 
             var keep = EraStore.CurrentPointer.Read(eraDir);
             if (keep is not null) CleanupEraFiles(eraDir, keep);

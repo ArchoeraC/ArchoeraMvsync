@@ -36,6 +36,16 @@ public sealed class IndexerOptions
     /// </summary>
     public bool InitialsLyrics { get; set; }
 
+    /// <summary>
+    /// 没有脏曲时是否仍做一次有界维护合并（S7，默认 true）。
+    ///
+    /// <para>死行比例 ≥20% 或段数 ≥24 时，即使本次没有任何变更，也调用
+    /// <see cref="EraStore.IncrementalUpdater.Maintain"/> 回收墓碑行 / 小段。这样
+    /// 「上次增量提交后没再改动曲库」不会让死行一直占着磁盘；没有达到阈值时
+    /// <c>Maintain</c> 只读 Manifest 后立即返回，不写文件。</para>
+    /// </summary>
+    public bool AutoMaintain { get; set; } = true;
+
     /// <summary>内部批量事务条数（0 = 使用存储默认）。</summary>
     public int Batch { get; set; }
 
