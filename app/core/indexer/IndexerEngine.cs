@@ -209,8 +209,6 @@ public sealed class IndexerEngine
         int processed = 0, indexed = 0, deleted = 0;
         // V6 护栏触发计数：layers = (曲目, 层) 维度；tracks = 受影响曲目数（去重）。
         int lyricsTruncatedLayers = 0, lyricsTruncatedTracks = 0;
-        // 超过 EraFormat.MaxTermBytes 被跳过的词条数（超长无分隔拉丁词 / 超长首字母串）。
-        int oversizeTokens = 0;
 
         void Fire(string phase, string current) => _progress?.Invoke(new IndexerProgress
         {
@@ -281,9 +279,7 @@ public sealed class IndexerEngine
                         lyricsTruncatedTracks++;
                     }
                     profile.Add(tokens);
-                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
-                    oversizeTokens += oversize;
-                    eraDocs.Add(doc);
+                    eraDocs.Add(BuildEraDoc(track, tokens, lyricLines));
                     indexed++;
                     if (indexed % ProgressEvery == 0) Fire("index", item.Path);
                 }
@@ -324,7 +320,6 @@ public sealed class IndexerEngine
             profile = build.Profile;
             lyricsTruncatedLayers = build.TruncatedLayers;
             lyricsTruncatedTracks = build.TruncatedTracks;
-            oversizeTokens = build.OversizeTokens;
             var fullManifest = EraStore.StoreReader.TryReadManifest(eraPath);
             if (fullManifest is not null)
             {
@@ -430,13 +425,6 @@ public sealed class IndexerEngine
             }
         }
 
-        if (oversizeTokens > 0)
-        {
-            Log.LogWarn("indexer",
-                $"跳过了 {oversizeTokens} 个超过 {EraStore.EraFormat.MaxTermBytes}B 的词条"
-                + "（超长无分隔文本 / 超长首字母串；该词条不可检索，其余字段不受影响）");
-        }
-
         stopwatch.Stop();
         Fire("done", "");
         return new IndexerResult
@@ -462,7 +450,8 @@ public sealed class IndexerEngine
             EraDeadDocs = eraDead,
             LyricsTruncatedLayers = lyricsTruncatedLayers,
             LyricsTruncatedTracks = lyricsTruncatedTracks,
-            OversizeTokens = oversizeTokens,
+            // 超长词条已改为哈希词条（EraStore.TermCodec），不再丢弃；字段保留 ABI 兼容。
+            OversizeTokens = 0,
         };
     }
 
@@ -611,8 +600,7 @@ public sealed class IndexerEngine
     /// <see cref="EraStore.IndexBuilder"/>。不得先把全库 <see cref="EraStore.AnalyzedDoc"/>
     /// 收进 List——48.7k 真实歌词下那会是 GiB 级常驻内存（T3.10 实测 5k 已近 1 GB）。
     /// </summary>
-    private static (int LiveDocs, int Segments, ScriptProfile Profile, int TruncatedLayers, int TruncatedTracks,
-        int OversizeTokens)
+    private static (int LiveDocs, int Segments, ScriptProfile Profile, int TruncatedLayers, int TruncatedTracks)
         BuildFullEra(
             string eraDir, string eraName, string libraryPath, HashSet<string> seen,
             IndexerOptions options, long generation, int optionsBits, IReadOnlyList<string> capabilities,
@@ -623,7 +611,6 @@ public sealed class IndexerEngine
         var profile = seed;
         var truncatedLayers = 0;
         var truncatedTracks = 0;
-        var oversizeTokens = 0;
 
         IEnumerable<EraStore.AnalyzedDoc> Enumerate()
         {
@@ -646,9 +633,7 @@ public sealed class IndexerEngine
                     }
                     profile.Add(tokens);
                     live++;
-                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
-                    oversizeTokens += oversize;
-                    yield return doc;
+                    yield return BuildEraDoc(track, tokens, lyricLines);
                 }
             }
         }
@@ -677,7 +662,7 @@ public sealed class IndexerEngine
         var segments = EraStore.StoreReader.TryReadManifest(eraPath) is { } built
             ? CountEraSegments(built)
             : 0;
-        return (live, segments, profile, truncatedLayers, truncatedTracks, oversizeTokens);
+        return (live, segments, profile, truncatedLayers, truncatedTracks);
     }
 
     private static int CountEraSegments(EraStore.Manifest manifest)
@@ -882,32 +867,22 @@ public sealed class IndexerEngine
     /// <summary>
     /// 把 <see cref="TrackRecord"/> + <see cref="DocTokens"/> 转成 EraStore 的
     /// <see cref="EraStore.AnalyzedDoc"/>。12 字段 token 串与 EraStore 的字段族一一对应。
+    ///
+    /// 词条硬上限（<see cref="EraStore.EraFormat.MaxTermBytes"/> = 255B）由
+    /// <see cref="EraStore.TermCodec"/> 在写入前统一处理：超长单 token（超长无分隔拉丁词 /
+    /// URL / 长串）换成不透明哈希词条（<c>0x01 + MD5 hex</c>，33B），查询侧走同一个 helper，
+    /// 因此仍然可检索。词条不再丢弃，其余字段与整库构建也不受影响。
     /// </summary>
-    private static (EraStore.AnalyzedDoc Doc, int OversizeTokens) BuildEraDoc(
+    private static EraStore.AnalyzedDoc BuildEraDoc(
         TrackRecord track, DocTokens tokens, IReadOnlyList<string> lyricLines)
     {
-        // 词条硬上限（EraFormat.MaxTermBytes = 255B）：超长无分隔拉丁词（URL / 长串）或超长
-        // 首字母串会让 TermDict 抛异常、令整次全量构建失败。这里在写入前剔除并计数：
-        // 该词条不可检索，但其余字段与整库构建不受影响（与 V6 护栏同一「只截异常数据」原则）。
-        var oversize = 0;
         string[] SplitTok(string s)
         {
             if (string.IsNullOrEmpty(s)) return Array.Empty<string>();
             var parts = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var kept = 0;
             for (var i = 0; i < parts.Length; i++)
-            {
-                var term = parts[i];
-                // 4 字节 rune 最多 63 个字符；更短的必然 ≤255B，免逐个算编码长度。
-                if (term.Length > 63 &&
-                    System.Text.Encoding.UTF8.GetByteCount(term) > EraStore.EraFormat.MaxTermBytes)
-                {
-                    oversize++;
-                    continue;
-                }
-                parts[kept++] = term;
-            }
-            return kept == parts.Length ? parts : parts[..kept];
+                parts[i] = EraStore.TermCodec.Canonicalize(parts[i]);
+            return parts;
         }
 
         var fields = new Dictionary<EraStore.FieldId, string[]>
@@ -946,11 +921,11 @@ public sealed class IndexerEngine
         // title / artist / album 保存原文（片段 / explain 依赖）；DocStore v3 的归一列
         // （title_norm / artist_norm / album_norm）由 IndexBuilder.MakeRecord 统一生成（T3.11），
         // v4 的 layer_conf 由 BuildTokens 给出，单曲不再各写一份归一化规则。
-        return (new EraStore.AnalyzedDoc(
+        return new EraStore.AnalyzedDoc(
             trackBytes, rev, 0, flags, fields,
             track.Title, track.ArtistText, track.AlbumText,
             tokens.IndexedMtime, tokens.IndexedLrcMtime, tokens.IndexedLrcSize,
-            tokens.LayerConf, lyricLines), oversize);
+            tokens.LayerConf, lyricLines);
     }
 
     /// <summary>

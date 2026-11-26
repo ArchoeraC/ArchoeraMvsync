@@ -918,6 +918,9 @@ internal sealed class SearchSession : IDisposable
                         if (!wanted.Contains(field)) continue;
                         var term = System.Text.Encoding.UTF8.GetString(
                             info.Key, 1, info.Key.Length - 1);
+                        // 超长词条的不透明哈希（0x01 + MD5 hex）不参与模糊 / typo 枚举：
+                        // 它既不是可拼写的词，也没有编辑距离语义，留在词表只会浪费扫描预算。
+                        if (EraStore.TermCodec.IsCanonical(term)) continue;
                         if (LibraryDb.IsAsciiWord(term)) terms.Add(term);
                     }
                 }
