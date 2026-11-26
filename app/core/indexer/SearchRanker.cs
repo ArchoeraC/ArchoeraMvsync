@@ -137,13 +137,16 @@ internal sealed class Candidate
 /// bm25 → docId。exactness / proximity 在 T3.11 起是真实值（字面步读 DocStore 归一列、
 /// 按步骤形状判邻近度）；<b>field 也由复核决定</b>——命中 title / artist / album 归一列时
 /// 写真实字段，复核为「近似」时保留字段族的保守映射（Mixed → Lyrics，宁可把歌词命中排低）。
-/// 歌词字面步只在整行相等时记 <see cref="SearchExactness.Equal"/>（Q1）；其余歌词 / 读音 /
-/// 拼音 / 首字母 / 转写 / 容错步仍记 <see cref="SearchExactness.None"/> +
-/// <see cref="ProximityUnknown"/>。</para>
+/// 歌词字面步只在整行相等时记 <see cref="SearchExactness.Equal"/>（Q1）；其余读音 /
+/// 拼音 / 首字母 / 转写 / 容错步的精确度仍记 <see cref="SearchExactness.None"/>。
+/// 邻近度只在有字面字段集的族（元数据 / 歌词 / 混合 / 读音 / 模糊）里算，散落多 term
+/// 由引擎读位置块填充；拼音 / 首字母 / 跨语言族保持 <see cref="ProximityUnknown"/>。</para>
 /// </summary>
 internal static class SearchRanker
 {
-    /// <summary>邻近度「算不出」（歌词族 / 散落多 term）。wire 上用 -1 表示（D.3.1）。</summary>
+    /// <summary>
+    /// 邻近度「算不出」（不支持的族 / 引擎未填的散落多 term）。wire 上用 -1 表示（D.3.1）。
+    /// </summary>
     public const int ProximityUnknown = int.MaxValue;
 
     /// <summary>kind 档位：枚举声明顺序即偏序（Exact 最好 … Typo 最差）。</summary>
@@ -161,10 +164,12 @@ internal static class SearchRanker
     /// <see cref="EraStore.EraQueryHits.AnyPhraseDowngraded"/> 覆盖它。只有短语 atom 落到
     /// 无位置字段、被 <see cref="EraStore.Iterators.PhraseIter"/> 降级成纯交集时才为 false。</para>
     ///
-    /// <para><b>邻近度</b>（§4.2 第 5 键）：单 term = 0（不需要位置）；Meta 步且表达式
-    /// 恰好是一个多 token 短语（位置连续性已由 <c>PhraseIter</c> 证明）= 短语 token 数 - 1；
-    /// 其余记 <see cref="ProximityUnknown"/>——散落多 term 的最小跨度由
-    /// <see cref="EraStore.EraProximity"/> 在引擎里按真实位置计算后覆盖；歌词族按 spec 直接记算不出。</para>
+    /// <para><b>邻近度</b>（§4.2 第 5 键）：单 term = 0（不需要位置）；有字面字段集的族
+    /// （元数据 / 歌词 / 混合 / 读音 / 模糊）且表达式恰好是一个多 token 短语（位置连续性
+    /// 已由 <c>PhraseIter</c> 证明）= 短语 token 数 - 1；其余记
+    /// <see cref="ProximityUnknown"/>——散落多 term 的最小跨度由
+    /// <see cref="EraStore.EraProximity"/> 在引擎里按真实位置计算后覆盖；
+    /// 拼音 / 首字母 / 跨语言族的 term 不是其列的字面 token，按 spec 直接记算不出。</para>
     /// </summary>
     public static Evidence FromStep(Step step, int termCount, int exactness = SearchExactness.None)
     {
@@ -179,17 +184,18 @@ internal static class SearchRanker
     }
 
     /// <summary>
-    /// 步骤邻近度的**兜底**值：单 term = 0；Meta 步恰好一个多 token 短语 = token 数 - 1；
-    /// 散落多 term / 歌词族 / 其它族 = <see cref="ProximityUnknown"/>。
+    /// 步骤邻近度的**兜底**值：单 term = 0；有字面字段集的族恰好一个多 token 短语 = token 数 - 1；
+    /// 散落多 term / 不支持的族 = <see cref="ProximityUnknown"/>。
     ///
-    /// <para>散落多 term 的元数据步由 <see cref="EraStore.EraProximity.Fill"/> 在引擎里按真实
-    /// 位置覆盖（SearchSession 只在 Meta 且 term ≥2 时调用），形状层不猜。</para>
+    /// <para>散落多 term 由 <see cref="EraStore.EraProximity.Fill"/> 在引擎里按真实位置覆盖
+    /// （SearchSession 对有映射的族且 term ≥2 时调用），形状层不猜；拼音 / 首字母 / 跨语言族
+    /// 没有映射，永远保持算不出。</para>
     /// </summary>
     public static int ProximityOf(Step step, int termCount, in StepShape shape)
     {
         if (termCount <= 1) return 0;
-        // 歌词 / 混合 / 模糊 / 读音族：原文不在 DocStore，位置语义也不一致 → 算不出。
-        if (step.Family != FieldFamily.Meta) return ProximityUnknown;
+        // 拼音 / 首字母 / 跨语言族：step.Terms 不是这些列的字面 token，位置语义不同源 → 算不出。
+        if (!EraStore.EraProximity.Supports(step.Family)) return ProximityUnknown;
         if (shape.Atoms == 1 && shape.PhraseAtoms == 1 && shape.MaxPhraseTokens > 1)
             return shape.MaxPhraseTokens - 1;
         return ProximityUnknown;

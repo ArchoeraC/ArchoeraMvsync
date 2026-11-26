@@ -43,6 +43,7 @@ public static class Program
         SchemeRegistryTests.Run();
         SearchExplainTests.Run();
         SearchKindProximityTests.Run();
+        EraStoreLyricProximityTests.Run();
         SearchSnippetTests.Run();
         SearchHighlightTests.Run();
         SearchPagingTests.Run();
