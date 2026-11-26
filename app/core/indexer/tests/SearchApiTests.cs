@@ -47,8 +47,9 @@ internal static class SearchApiTests
     private static unsafe void OptionsJson()
     {
         var defaults = ParseOptions("{}");
-        Program.Check("options: 缺省 initialsLyrics=false",
-            defaults is { InitialsLyrics: false, Pinyin: true }, DescribeOptions(defaults));
+        Program.Check("options: 缺省派生列全关",
+            defaults is { InitialsLyrics: false, Pinyin: false, LyricsPinyin: false },
+            DescribeOptions(defaults));
         Program.Check("options: 缺键 → initialsLyrics=false（向后兼容）",
             ParseOptions("""{"index_lrc":true,"pinyin":false}""") is
                 { InitialsLyrics: false, IndexLrc: true, Pinyin: false });
@@ -58,12 +59,21 @@ internal static class SearchApiTests
             ParseOptions("""{"initialsLyrics":false}""") is { InitialsLyrics: false });
         Program.Check("options: initials_lyrics 兼容写法",
             ParseOptions("""{"initials_lyrics":true}""") is { InitialsLyrics: true });
+        Program.Check("options: lyrics_pinyin=true 生效",
+            ParseOptions("""{"lyrics_pinyin":true}""") is { LyricsPinyin: true });
+        Program.Check("options: lyricsPinyin 兼容写法",
+            ParseOptions("""{"lyricsPinyin":true}""") is { LyricsPinyin: true });
+        Program.Check("options: 非布尔 lyrics_pinyin 忽略（保持缺省）",
+            ParseOptions("""{"lyrics_pinyin":"yes"}""") is { LyricsPinyin: false });
         Program.Check("options: 非布尔 initialsLyrics 忽略（保持缺省）",
             ParseOptions("""{"initialsLyrics":"yes"}""") is { InitialsLyrics: false });
         Program.Check("options: 非法 JSON → 解析失败", ParseOptions("{not json") is null);
 
         static string DescribeOptions(IndexerOptions? options)
-            => options is null ? "(null)" : $"initials={options.InitialsLyrics} pinyin={options.Pinyin}";
+            => options is null
+                ? "(null)"
+                : $"initials={options.InitialsLyrics} pinyin={options.Pinyin} "
+                    + $"lyricsPinyin={options.LyricsPinyin}";
     }
 
     private static unsafe IndexerOptions? ParseOptions(string json)

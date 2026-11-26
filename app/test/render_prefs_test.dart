@@ -61,5 +61,51 @@ void main() {
       expect(p.rippleShaderEnabled, isFalse);
       expect(p.lyricsEdgeFade, 'off');
     });
+
+    test('macOS 显卡选择：默认 auto，三档可切，非法值回退默认', () {
+      expect(AppPrefs().macosGPU, defaultMacosGPU);
+      expect(AppPrefs().macosGPU, 'auto');
+
+      for (final mode in ['discrete', 'integrated', 'auto']) {
+        expect(AppPrefs().copyWithMacosGPU(mode).macosGPU, mode);
+      }
+
+      // 旧版本残留 / 手改配置：非法值回退默认，不抛错。
+      expect(
+        AppPrefs(initialData: const {macosGPUKey: 'nope'}).macosGPU,
+        'auto',
+      );
+    });
+
+    test('旧布尔键迁移到三档（true = 强制独显 / false = 集显）', () {
+      expect(
+        AppPrefs(initialData: const {legacyMacosDiscreteGPUKey: true}).macosGPU,
+        'discrete',
+      );
+      expect(
+        AppPrefs(initialData: const {legacyMacosDiscreteGPUKey: false})
+            .macosGPU,
+        'integrated',
+      );
+      // 新键优先于旧键。
+      expect(
+        AppPrefs(
+          initialData: const {
+            macosGPUKey: 'auto',
+            legacyMacosDiscreteGPUKey: true,
+          },
+        ).macosGPU,
+        'auto',
+      );
+    });
+
+    test('显卡选择不影响其它渲染开关', () {
+      final p = AppPrefs()
+          .copyWithRippleRender(shader: false)
+          .copyWithMacosGPU('integrated');
+      expect(p.rippleShaderEnabled, isFalse);
+      expect(p.macosGPU, 'integrated');
+      expect(p.renderFps, kRenderFpsDefault);
+    });
   });
 }

@@ -37,6 +37,11 @@ class _NoSavePrefs extends AppPrefsNotifier {
   void setRenderFps(int fps) {
     state = state.copyWithRenderFps(fps);
   }
+
+  @override
+  void setMacosGPU(String value) {
+    state = state.copyWithMacosGPU(value);
+  }
 }
 
 void main() {
@@ -52,9 +57,7 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: SingleChildScrollView(child: RenderSection()),
-          ),
+          home: Scaffold(body: SingleChildScrollView(child: RenderSection())),
         ),
       ),
     );
@@ -94,9 +97,7 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: SingleChildScrollView(child: RenderSection()),
-          ),
+          home: Scaffold(body: SingleChildScrollView(child: RenderSection())),
         ),
       ),
     );
@@ -144,13 +145,67 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: SingleChildScrollView(child: RenderSection()),
-          ),
+          home: Scaffold(body: SingleChildScrollView(child: RenderSection())),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('独立显卡加速：仅 macOS 显示，默认 auto，可切三档', (tester) async {
+    final container = ProviderContainer(
+      overrides: [appPrefsProvider.overrideWith(_NoSavePrefs.new)],
+    );
+    addTearDown(container.dispose);
+
+    Widget build({required bool showMacOSGPU}) => UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: RenderSection(showMacOSGPU: showMacOSGPU),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(build(showMacOSGPU: false));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Discrete GPU acceleration'),
+      findsNothing,
+      reason: '非 macOS 不展示该开关',
+    );
+
+    await tester.pumpWidget(build(showMacOSGPU: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discrete GPU acceleration'), findsOneWidget);
+    expect(
+      container.read(appPrefsProvider).macosGPU,
+      'auto',
+      reason: '默认 auto：独显 Metal 能力不低于集显时才用独显（避免 Metal 3 → Metal 2 降级）',
+    );
+    expect(find.text('Auto (recommended)'), findsOneWidget);
+
+    Future<void> pick(String current, String next) async {
+      await tester.tap(find.text(current).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(next).last);
+      await tester.pumpAndSettle();
+    }
+
+    await pick('Auto (recommended)', 'Prefer discrete GPU');
+    expect(container.read(appPrefsProvider).macosGPU, 'discrete');
+
+    await pick('Prefer discrete GPU', 'Integrated GPU');
+    expect(container.read(appPrefsProvider).macosGPU, 'integrated');
+
+    await pick('Integrated GPU', 'Auto (recommended)');
+    expect(container.read(appPrefsProvider).macosGPU, 'auto');
     expect(tester.takeException(), isNull);
   });
 }

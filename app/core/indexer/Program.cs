@@ -13,8 +13,8 @@ namespace Archoera.Indexer;
 /// Archoera 本地曲库搜索索引器 CLI。
 ///
 /// 用法：
-///   archoera-indexer build [--full] [--index-lrc] [--no-pinyin] [--romaji-lyrics]
-///                          [--initials-lyrics]
+///   archoera-indexer build [--full] [--index-lrc] [--pinyin] [--lyrics-pinyin]
+///                          [--romaji-lyrics] [--initials-lyrics]
 ///                          [--db &lt;library.db&gt;] [--index &lt;search.db&gt;] [--batch &lt;n&gt;]
 ///   archoera-indexer query &lt;text&gt; [--index &lt;search.db&gt;] [--library &lt;library.db&gt;]
 ///                          [--limit &lt;n&gt;] [--raw] [--session] [--scheme &lt;id&gt;] [--explain]
@@ -85,7 +85,9 @@ public static class Program
             {
                 case "--full": case "-f": full = true; break;
                 case "--index-lrc": options.IndexLrc = true; break;
+                case "--pinyin": options.Pinyin = true; break;
                 case "--no-pinyin": options.Pinyin = false; break;
+                case "--lyrics-pinyin": options.LyricsPinyin = true; break;
                 case "--romaji-lyrics": options.RomajiLyrics = true; break;
                 case "--initials-lyrics": options.InitialsLyrics = true; break;
                 case "--db": if (i + 1 < args.Length) dbPath = args[++i]; break;
@@ -109,7 +111,7 @@ public static class Program
         indexPath ??= Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbPath)) ?? ".", "search.db");
 
         Log.LogInfo("indexer", $"library={dbPath}");
-        Log.LogInfo("indexer", $"index={indexPath} full={full} index_lrc={options.IndexLrc} pinyin={options.Pinyin} romaji_lyrics={options.RomajiLyrics} initials_lyrics={options.InitialsLyrics}");
+        Log.LogInfo("indexer", $"index={indexPath} full={full} index_lrc={options.IndexLrc} pinyin={options.Pinyin} lyrics_pinyin={options.LyricsPinyin} romaji_lyrics={options.RomajiLyrics} initials_lyrics={options.InitialsLyrics}");
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };

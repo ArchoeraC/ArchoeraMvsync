@@ -155,6 +155,12 @@ class SearchService {
   /// `.lrc` 侧车歌词子开关（仅总开关开启时才有意义）。
   bool get indexLrc => appPrefsSnapshot?.indexLrc ?? false;
 
+  /// 元数据拼音子开关（默认关；仅总开关开启时才有意义）。
+  bool get pinyin => appPrefsSnapshot?.pinyin ?? false;
+
+  /// 歌词拼音子开关（默认关；独立于元数据拼音）。
+  bool get lyricsPinyin => appPrefsSnapshot?.lyricsPinyin ?? false;
+
   /// 歌词罗马音生成子开关（仅总开关开启时才有意义；T2-9）。
   bool get romajiLyrics => appPrefsSnapshot?.romajiLyrics ?? false;
 
@@ -167,11 +173,14 @@ class SearchService {
   @visibleForTesting
   static Map<String, dynamic> buildOptionsMap({
     required bool indexLrc,
+    required bool pinyin,
+    required bool lyricsPinyin,
     required bool romajiLyrics,
     required bool initialsLyrics,
   }) => {
     'index_lrc': indexLrc,
-    'pinyin': true,
+    'pinyin': pinyin,
+    'lyrics_pinyin': lyricsPinyin,
     'romaji_lyrics': romajiLyrics,
     'initialsLyrics': initialsLyrics,
   };
@@ -731,6 +740,8 @@ class SearchService {
     final optionsJson = jsonEncode(
       buildOptionsMap(
         indexLrc: indexLrc,
+        pinyin: pinyin,
+        lyricsPinyin: lyricsPinyin,
         romajiLyrics: romajiLyrics,
         initialsLyrics: initialsLyrics,
       ),

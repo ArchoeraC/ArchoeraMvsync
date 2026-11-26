@@ -46,6 +46,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsRippleDamageClipDesc => '활성 물결 띠만 다시 그리기; CPU 대체 경로 전용';
 
   @override
+  String get settingsMacOSGPU => '개별 GPU 가속';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '자동: 개별 GPU의 Metal 기능이 통합 GPU 이상일 때만 사용합니다. 개별 GPU 우선은 강제합니다(Metal 2로 낮아질 수 있고 AMD에서는 커버 색상/유체 배경이 대체 경로로 동작). 적용하려면 앱을 다시 시작하세요';
+
+  @override
+  String get settingsMacOSGPUAuto => '자동(권장)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '개별 GPU 우선';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '통합 GPU';
+
+  @override
   String get settingsLyricsEdgeFade => '가사 가장자리 페이드';
 
   @override
@@ -4515,6 +4531,20 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get settingsSearchIndexInitialsDesc =>
       '가사를 병음 머리글자(예: wanzg)로도 검색합니다. 끄면 색인이 작아집니다(변경 시 재구축 필요)';
+
+  @override
+  String get settingsSearchIndexPinyin => '메타데이터 병음 색인';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '제목 / 아티스트 / 앨범을 병음이나 머리글자로 검색합니다. 기본 꺼짐(색인 재구성 후 적용)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '가사 병음 색인';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '가사를 병음 음절로 검색합니다. 가장 큰 파생 열이라 기본 꺼짐(색인 재구성 후 적용)';
 
   @override
   String get settingsSearchIndexNote =>

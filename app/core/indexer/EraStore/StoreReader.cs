@@ -378,6 +378,10 @@ internal sealed class StoreReader : IDisposable
         ((IDisposable)_manager).Dispose();
         _view.Dispose();
         _mapped.Dispose();
+        // CreateFromFile 用了 leaveOpen: true：FileStream 必须在这里显式关闭。
+        // 否则每次索引更新（打开新世代 / 读增量状态 / 合并 / 去碎片）都会漏一个
+        // 文件句柄，长期运行后表现为句柄数上涨、Windows 上旧世代文件删不掉。
+        _stream.Dispose();
     }
 
     /* ------------------------------------------------------------------ */

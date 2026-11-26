@@ -19,11 +19,17 @@ internal readonly record struct PostingEntry(int Doc, int Tf, int[]? Positions);
 /// 倒排块（每 ≤128 doc 一块，块体顺序固定）：
 /// <code>
 /// 块头 14B : doc_count u16 | last_doc u32 | max_tf u16 | flags u8 | crc32c u32 | tf_exc_count u8
-/// tf 位图 16B : bit i = 1 表示块内第 i 个 doc 的 tf == 1
-/// doc 序列    : doc_delta varint（首条相对 0，之后与前一条的差）
+/// flags    : 0x01 has_positions | 0x02 docs 位打包（O11）| 0x04 tf 位图裁剪（O12）
+/// tf 位图     : 0x04 置位时 ceil(doc_count/8) B，否则固定 16B；bit i = 1 表示块内第 i 个 doc 的 tf == 1
+/// doc 序列    : varint 块体：doc_delta varint（首条相对 0，之后与前一条的差）
+///               packed 块体：width u8 | 打包 doc_delta（width bit, LSB-first）
 /// tf 例外表   : doc_index u8 | tf varint（仅 tf &gt; 1）
 /// pos_off     : u32，该块位置块在 Positions 段内的偏移；无位置写 0
 /// </code>
+/// <para>O11：逐块比较 varint 与位打包的 doc 序列字节数，取较小者（相等保留 varint）。
+/// <c>width</c> 为该块最大 doc_delta 的位宽（0..31；单 doc 且 delta=0 时为 0），
+/// 打包长度 <c>ceil(doc_count*width/8)</c>。位打包是 PForDelta 的退化形式：
+/// 不设例外帧，离群 delta 抬高 width 时整块自然回落到 varint。</para>
 ///
 /// 位置块（仅 has_positions，与倒排块按相同 doc 顺序成对写出）：
 /// <code>
@@ -44,6 +50,8 @@ internal sealed class PostingsWriter
     private const int BitmapSize = 16;
     private const byte FlagHasPositions = 0x01;
     private const byte FlagPositionsPacked = 0x02;
+    private const byte FlagDocsPacked = 0x02;
+    private const byte FlagTrimmedBitmap = 0x04;
 
     /// <summary>
     /// 测试接缝：<c>null</c> = 按块体大小自动选择；<c>false</c> = 强制 varint；
@@ -51,12 +59,24 @@ internal sealed class PostingsWriter
     /// </summary>
     internal static bool? DebugForcePositionsPacked = null;
 
+    /// <summary>测试接缝：doc 序列是否强制位打包（语义同上）。</summary>
+    internal static bool? DebugForceDocsPacked = null;
+
+    /// <summary>测试接缝：tf 位图是否强制写满 16B（旧格式黄金夹具用）。</summary>
+    internal static bool DebugForceFullBitmap = false;
+
     /// <summary>块体复用缓冲：避免每 128 doc 新建两个 ByteWriter（构建期主要分配来源之一）。</summary>
     private readonly ByteWriter _postBody = new(512);
     private readonly ByteWriter _posBody = new(2_048);
 
-    /// <summary>位打包临时缓冲（O8）；按块内最大 doc 的打包字节数增长后复用。</summary>
+    /// <summary>doc 位打包临时缓冲（O11）；按块内最大打包字节数增长后复用。</summary>
+    private byte[] _docBits = new byte[128];
+
+    /// <summary>位置位打包临时缓冲（O8）；按块内最大 doc 的打包字节数增长后复用。</summary>
     private byte[] _posBits = new byte[256];
+
+    /// <summary>位置 Δ 临时缓冲（O8）；按块内最大 tf 增长后复用。</summary>
+    private int[] _posDelta = new int[16];
 
     /// <summary>
     /// 追加一条词条的倒排块序列（对象形式，合并 / 测试用），返回首个倒排块在
@@ -223,16 +243,38 @@ internal sealed class PostingsWriter
             if (tf > maxTf) maxTf = tf;
         }
 
-        var body = _postBody;
-        body.Reset();
-        body.WriteBytes(bitmap);
-
+        // O11：先算两种 doc 序列大小，再按较小者写（相等保留 varint）。
+        // 例外表的 varint tf 与 pos_off 两种编码相同，只比较 doc 序列本体。
+        Span<int> deltas = stackalloc int[EraFormat.PostingsBlockDocs];
+        var maxDelta = 0;
+        var varintBytes = 0;
         var prevDoc = 0;
         for (var i = 0; i < count; i++)
         {
             var doc = docs[start + i];
-            body.WriteVarint((ulong)(doc - prevDoc));
+            var delta = doc - prevDoc;
+            deltas[i] = delta;
             prevDoc = doc;
+            if (delta > maxDelta) maxDelta = delta;
+            varintBytes += Varint.Size((ulong)delta);
+        }
+        var width = DeltaWidth(maxDelta);
+        var packedBytes = 1 + (int)(((long)count * width + 7) / 8);
+        var docsPacked = DebugForceDocsPacked ?? (packedBytes < varintBytes);
+
+        var body = _postBody;
+        body.Reset();
+        var bitmapBytes = DebugForceFullBitmap ? BitmapSize : (count + 7) / 8;
+        body.WriteBytes(bitmap[..bitmapBytes]);
+
+        if (docsPacked)
+        {
+            body.WriteByte((byte)width);
+            WritePackedValues(body, deltas[..count], width, ref _docBits);
+        }
+        else
+        {
+            for (var i = 0; i < count; i++) body.WriteVarint((ulong)deltas[i]);
         }
 
         for (var i = 0; i < count; i++)
@@ -245,10 +287,14 @@ internal sealed class PostingsWriter
 
         body.WriteUInt32(posOff);
 
+        var flags = hasPositions ? FlagHasPositions : (byte)0;
+        if (docsPacked) flags |= FlagDocsPacked;
+        if (!DebugForceFullBitmap) flags |= FlagTrimmedBitmap;
+
         dst.WriteUInt16((ushort)count);
         dst.WriteUInt32((uint)docs[start + count - 1]);
         dst.WriteUInt16((ushort)maxTf);
-        dst.WriteByte(hasPositions ? FlagHasPositions : (byte)0);
+        dst.WriteByte(flags);
         dst.WriteUInt32(Crc32C.Compute(body.Span));
         dst.WriteByte((byte)excCount);
         dst.WriteBytes(body.Span);
@@ -312,7 +358,14 @@ internal sealed class PostingsWriter
             if (packed)
             {
                 body.WriteByte(widths[i]);
-                WritePackedPositions(body, positions, widths[i]);
+                EnsureDeltaCapacity(positions.Length);
+                var prevPos = 0;
+                for (var j = 0; j < positions.Length; j++)
+                {
+                    _posDelta[j] = positions[j] - prevPos;
+                    prevPos = positions[j];
+                }
+                WritePackedValues(body, _posDelta.AsSpan(0, positions.Length), widths[i], ref _posBits);
             }
             else
             {
@@ -337,21 +390,20 @@ internal sealed class PostingsWriter
     private static int DeltaWidth(int maxDelta) =>
         maxDelta == 0 ? 0 : 32 - System.Numerics.BitOperations.LeadingZeroCount((uint)maxDelta);
 
-    /// <summary>把 Δpositions 按 width 位 LSB-first 连续写入块体。</summary>
-    private void WritePackedPositions(ByteWriter body, ReadOnlySpan<int> positions, int width)
+    /// <summary>把一组非负整数按 width 位 LSB-first 连续写入块体（O8 位置 / O11 doc 共用）。</summary>
+    private static void WritePackedValues(
+        ByteWriter body, ReadOnlySpan<int> values, int width, ref byte[] scratch)
     {
-        var byteCount = (int)(((long)positions.Length * width + 7) / 8);
-        EnsureBitCapacity(byteCount);
+        var byteCount = (int)(((long)values.Length * width + 7) / 8);
+        EnsureCapacity(ref scratch, byteCount);
 
-        var bits = _posBits;
+        var bits = scratch;
         var outPos = 0;
         var accBits = 0;
         ulong acc = 0;
-        var prevPos = 0;
-        foreach (var pos in positions)
+        foreach (var value in values)
         {
-            acc |= (ulong)(uint)(pos - prevPos) << accBits;
-            prevPos = pos;
+            acc |= (ulong)(uint)value << accBits;
             accBits += width;
             while (accBits >= 8)
             {
@@ -364,12 +416,20 @@ internal sealed class PostingsWriter
         body.WriteBytes(bits.AsSpan(0, byteCount));
     }
 
-    private void EnsureBitCapacity(int needed)
+    private static void EnsureCapacity(ref byte[] buffer, int needed)
     {
-        if (needed <= _posBits.Length) return;
-        var next = _posBits.Length;
+        if (needed <= buffer.Length) return;
+        var next = buffer.Length;
         while (next < needed) next = next >= int.MaxValue / 2 ? needed : next * 2;
-        Array.Resize(ref _posBits, next);
+        Array.Resize(ref buffer, next);
+    }
+
+    private void EnsureDeltaCapacity(int needed)
+    {
+        if (needed <= _posDelta.Length) return;
+        var next = _posDelta.Length;
+        while (next < needed) next = next >= int.MaxValue / 2 ? needed : next * 2;
+        Array.Resize(ref _posDelta, next);
     }
 }
 
@@ -422,7 +482,10 @@ internal sealed class PostingsCursor
     private const int PositionsHeaderSize = 12;
     private const byte FlagHasPositions = 0x01;
     private const byte FlagPositionsPacked = 0x02;
+    private const byte FlagDocsPacked = 0x02;
+    private const byte FlagTrimmedBitmap = 0x04;
     private const byte PositionsFlagsMask = FlagHasPositions | FlagPositionsPacked;
+    private const byte PostingsFlagsMask = FlagHasPositions | FlagDocsPacked | FlagTrimmedBitmap;
 
     private readonly ReadOnlyMemory<byte> _postings;
     private readonly ReadOnlyMemory<byte> _positions;
@@ -575,26 +638,40 @@ internal sealed class PostingsCursor
 
         if (docCount == 0 || docCount > EraFormat.PostingsBlockDocs)
             throw new InvalidDataException("倒排块 doc 数非法");
-        if ((flags & ~FlagHasPositions) != 0)
+        if ((flags & ~PostingsFlagsMask) != 0)
             throw new InvalidDataException("倒排块 flags 非法");
         if (docCount > _remainingDocs)
             throw new InvalidDataException("倒排块 doc 数超过 df");
         if (maxTf == 0)
             throw new InvalidDataException("倒排块 max_tf 非法");
 
-        var bitmap = reader.ReadBytes(16);
+        var bitmapBytes = (flags & FlagTrimmedBitmap) != 0 ? (docCount + 7) / 8 : 16;
+        var bitmap = reader.ReadBytes(bitmapBytes);
 
+        var docsPacked = (flags & FlagDocsPacked) != 0;
         var prevDoc = 0;
-        for (var i = 0; i < docCount; i++)
+        if (docsPacked)
         {
-            var delta = reader.ReadVarint();
-            if (i > 0 && delta == 0)
-                throw new InvalidDataException("倒排 doc 未严格递增");
-            var doc = i == 0 ? (long)delta : prevDoc + (long)delta;
-            if (doc > int.MaxValue)
-                throw new InvalidDataException("倒排 doc 越界");
-            prevDoc = (int)doc;
-            _docs[i] = prevDoc;
+            var width = reader.ReadByte();
+            if (width > 31)
+                throw new InvalidDataException("倒排块打包位宽非法");
+            var byteCount = (int)(((long)docCount * width + 7) / 8);
+            DecodePackedDocs(reader.ReadBytes(byteCount), width, docCount);
+            prevDoc = _docs[docCount - 1];
+        }
+        else
+        {
+            for (var i = 0; i < docCount; i++)
+            {
+                var delta = reader.ReadVarint();
+                if (i > 0 && delta == 0)
+                    throw new InvalidDataException("倒排 doc 未严格递增");
+                var doc = i == 0 ? (long)delta : prevDoc + (long)delta;
+                if (doc > int.MaxValue)
+                    throw new InvalidDataException("倒排 doc 越界");
+                prevDoc = (int)doc;
+                _docs[i] = prevDoc;
+            }
         }
         if (prevDoc != lastDoc)
             throw new InvalidDataException("倒排块 last_doc 与解码结果不符");
@@ -602,7 +679,7 @@ internal sealed class PostingsCursor
         // 位图：bit=1 → tf=1；doc_count 之后的位必须为 0（规范形式）。
         for (var i = 0; i < docCount; i++)
             _tfs[i] = (bitmap[i >> 3] & (1 << (i & 7))) != 0 ? 1 : 0;
-        for (var i = docCount; i < EraFormat.PostingsBlockDocs; i++)
+        for (var i = docCount; i < bitmapBytes * 8; i++)
         {
             if ((bitmap[i >> 3] & (1 << (i & 7))) != 0)
                 throw new InvalidDataException("倒排块 tf 位图越界位置被置位");
@@ -659,6 +736,36 @@ internal sealed class PostingsCursor
         _positionsLoaded = false;
         _nextBlockOffset = (uint)blockEnd;
         _blockLoaded = true;
+    }
+
+    /// <summary>解码 O11 位打包的 doc 序列（Δ 编码，LSB-first），写入 <c>_docs</c>。</summary>
+    private void DecodePackedDocs(ReadOnlySpan<byte> packed, int width, int count)
+    {
+        var mask = width == 0 ? 0UL : (1UL << width) - 1;
+        var prevDoc = 0;
+        var byteIndex = 0;
+        var accBits = 0;
+        ulong acc = 0;
+        for (var i = 0; i < count; i++)
+        {
+            while (accBits < width)
+            {
+                if (byteIndex >= packed.Length)
+                    throw new InvalidDataException("倒排 doc 打包字节截断");
+                acc |= (ulong)packed[byteIndex++] << accBits;
+                accBits += 8;
+            }
+
+            var delta = (long)(acc & mask);
+            acc >>= width;
+            accBits -= width;
+            if (i > 0 && delta == 0)
+                throw new InvalidDataException("倒排 doc 未严格递增");
+            var doc = i == 0 ? delta : prevDoc + delta;
+            if (doc > int.MaxValue)
+                throw new InvalidDataException("倒排 doc 越界");
+            _docs[i] = prevDoc = (int)doc;
+        }
     }
 
     /// <summary>按需解码当前位置块（含 CRC 校验），结果摊进复用缓冲。</summary>

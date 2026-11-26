@@ -22,10 +22,8 @@ import 'package:archoera_mvsync/eta/icon/eta_icons.dart';
 ///
 /// - 总开关 `启用本地曲库搜索索引`（默认关）：开启后在后台按需构建 `search.db`，
 ///   搜索切换到按相关度（BM25）排序的排行；关闭即回退现有 `LIKE`，索引默认保留。
-/// - 子开关 `索引 .lrc 侧车歌词`（默认关；总开关关闭时禁用）；切换后**增量重建**
-///   索引（仅重算受影响曲目，异步、失败降级），无需手动「重建索引」。
-/// - 子开关 `生成歌词罗马音索引`（默认关；T2-9 可选增强）：无音译层的日语歌词
-///   自动生成罗马音（索引体积约增加一倍），切换后触发全量重建。
+/// - 子开关 `索引 .lrc 侧车歌词` 与派生列开关（元数据拼音 / 歌词拼音 / 歌词首字母 /
+///   歌词罗马音，全部默认关）：只写偏好、**不自动重建**；现有索引保留，下次重建生效。
 /// - 动作：重建索引 / 删除索引（二次确认）；展示构建进度、状态与上次结果。
 ///
 /// 索引是**派生数据**：默认关闭零成本；构建失败不阻断搜索（自动回退 `LIKE`）。
@@ -57,28 +55,28 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
     if (mounted) setState(() {});
   }
 
-  /// `.lrc` 子开关切换：写偏好后触发**增量**重建（仅重算受影响曲目），
-  /// 异步、不阻塞 UI；失败在服务内降级 / 吞异常，不抛到 UI。
-  void _onToggleLrc(bool value) {
-    ref.read(appPrefsProvider.notifier).setSearchIndex(indexLrc: value);
-    unawaited(_reindexThenRefresh());
-  }
-
-  /// 歌词罗马音子开关切换：写偏好后触发重建（选项变化 → 索引器自动升级为全量）。
-  void _onToggleRomajiLyrics(bool value) {
-    ref.read(appPrefsProvider.notifier).setSearchIndex(romajiLyrics: value);
-    unawaited(_reindexThenRefresh());
-  }
-
-  /// 歌词首字母子开关切换（T3.4 V4）：写偏好后触发重建（选项位变化 → 全量）。
-  void _onToggleInitialsLyrics(bool value) {
-    ref.read(appPrefsProvider.notifier).setSearchIndex(initialsLyrics: value);
-    unawaited(_reindexThenRefresh());
-  }
-
-  Future<void> _reindexThenRefresh() async {
-    await SearchService.instance.reindex();
-    if (mounted) setState(() {});
+  /// 派生列子开关：只写偏好，**不自动重建**。
+  ///
+  /// 现有索引仍可继续查询（关闭后旧列只是不再被新构建写入）；新选项在用户下次
+  /// 「重建索引」或索引因其它原因全量重建时生效。这样用户可以在不等待重建的
+  /// 情况下先调整设置。
+  void _setIndexOption({
+    bool? indexLrc,
+    bool? pinyin,
+    bool? lyricsPinyin,
+    bool? romajiLyrics,
+    bool? initialsLyrics,
+  }) {
+    ref
+        .read(appPrefsProvider.notifier)
+        .setSearchIndex(
+          indexLrc: indexLrc,
+          pinyin: pinyin,
+          lyricsPinyin: lyricsPinyin,
+          romajiLyrics: romajiLyrics,
+          initialsLyrics: initialsLyrics,
+        );
+    setState(() {});
   }
 
   @override
@@ -109,15 +107,29 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
               subtitle: l10n.settingsSearchIndexLrcDesc,
               value: prefs.indexLrc,
               enabled: enabled,
-              onChanged: enabled ? _onToggleLrc : null,
+              onChanged: enabled
+                  ? (value) => _setIndexOption(indexLrc: value)
+                  : null,
             ),
             SettingSwitchTile(
-              icon: EtaIcons.translateOutline,
-              title: l10n.settingsSearchIndexRomaji,
-              subtitle: l10n.settingsSearchIndexRomajiDesc,
-              value: prefs.romajiLyrics,
+              icon: EtaIcons.search3,
+              title: l10n.settingsSearchIndexPinyin,
+              subtitle: l10n.settingsSearchIndexPinyinDesc,
+              value: prefs.pinyin,
               enabled: enabled,
-              onChanged: enabled ? _onToggleRomajiLyrics : null,
+              onChanged: enabled
+                  ? (value) => _setIndexOption(pinyin: value)
+                  : null,
+            ),
+            SettingSwitchTile(
+              icon: EtaIcons.music2Outline,
+              title: l10n.settingsSearchIndexLyricsPinyin,
+              subtitle: l10n.settingsSearchIndexLyricsPinyinDesc,
+              value: prefs.lyricsPinyin,
+              enabled: enabled,
+              onChanged: enabled
+                  ? (value) => _setIndexOption(lyricsPinyin: value)
+                  : null,
             ),
             SettingSwitchTile(
               icon: EtaIcons.abcOutline,
@@ -125,7 +137,19 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
               subtitle: l10n.settingsSearchIndexInitialsDesc,
               value: prefs.initialsLyrics,
               enabled: enabled,
-              onChanged: enabled ? _onToggleInitialsLyrics : null,
+              onChanged: enabled
+                  ? (value) => _setIndexOption(initialsLyrics: value)
+                  : null,
+            ),
+            SettingSwitchTile(
+              icon: EtaIcons.translateOutline,
+              title: l10n.settingsSearchIndexRomaji,
+              subtitle: l10n.settingsSearchIndexRomajiDesc,
+              value: prefs.romajiLyrics,
+              enabled: enabled,
+              onChanged: enabled
+                  ? (value) => _setIndexOption(romajiLyrics: value)
+                  : null,
             ),
           ],
         ),

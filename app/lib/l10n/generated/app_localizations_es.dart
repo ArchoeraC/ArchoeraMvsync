@@ -50,6 +50,22 @@ class AppLocalizationsEs extends AppLocalizations {
       'Redibujar solo las bandas de ondas activas; solo ruta CPU';
 
   @override
+  String get settingsMacOSGPU => 'Aceleración por GPU dedicada';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Automático usa la GPU dedicada solo si admite todas las funciones Metal de la integrada; Preferir dedicada la fuerza (puede bajar a Metal 2 y en AMD el color de portada y el fondo fluido usan respaldo). Requiere reiniciar';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Automático (recomendado)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Preferir GPU dedicada';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'GPU integrada';
+
+  @override
   String get settingsLyricsEdgeFade => 'Desvanecido de bordes de la letra';
 
   @override
@@ -4750,6 +4766,20 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsSearchIndexInitialsDesc =>
       'Permite buscar letras por iniciales pinyin (p. ej. wanzg); desactívalo para reducir el índice (el cambio requiere reconstruirlo)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Indexar pinyin de metadatos';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Buscar títulos / artistas / álbumes por pinyin o iniciales; desactivado por defecto (se aplica al reconstruir el índice)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Indexar pinyin de la letra';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Buscar letras por sílabas pinyin; la columna derivada más grande, desactivada por defecto (se aplica al reconstruir el índice)';
 
   @override
   String get settingsSearchIndexNote =>

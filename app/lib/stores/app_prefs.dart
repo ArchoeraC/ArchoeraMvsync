@@ -567,6 +567,13 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
     state.save();
   }
 
+  /// 设置 macOS 显卡选择（`auto` / `discrete` / `integrated`；**重启后生效**：
+  /// 引擎启动时就要选设备）。
+  void setMacosGPU(String value) {
+    state = state.copyWithMacosGPU(value);
+    state.save();
+  }
+
   /// 设置自定义主色（null = 恢复默认亮蓝）。
   void setAccent(int? accent) {
     state = state.copyWithAccent(accent);
@@ -961,12 +968,16 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
   void setSearchIndex({
     bool? enabled,
     bool? indexLrc,
+    bool? pinyin,
+    bool? lyricsPinyin,
     bool? romajiLyrics,
     bool? initialsLyrics,
   }) {
     state = state.copyWithSearchIndex(
       enabled: enabled,
       indexLrc: indexLrc,
+      pinyin: pinyin,
+      lyricsPinyin: lyricsPinyin,
       romajiLyrics: romajiLyrics,
       initialsLyrics: initialsLyrics,
     );

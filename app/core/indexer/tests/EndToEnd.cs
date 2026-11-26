@@ -193,15 +193,19 @@ internal static class EndToEnd
         Program.Check(".lrc 开: 匹配 侧车文本 '蓝蓝的天' 命中 t3",
             MatchContainsTrack(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"", "t3"));
 
-        // ---- .lrc 子开关：关（选项变化触发全量重建，侧车清理）----
+        // ---- .lrc 子开关：关（只写偏好，允许保留现有索引，不强制重建）----
         var lrcOff = RunEngine(db, index, full: false, lrc: false);
-        Program.Check(".lrc 关: 构建选项变化触发全量重建", lrcOff.Full, lrcOff.Full.ToString());
-        Program.Check(".lrc 关: 全量重算清空侧车", lrcOff.Indexed == 3, lrcOff.Indexed.ToString());
-        Program.Check(".lrc 关: meta.index_lrc==0",
-            !ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
-        Program.Check(".lrc 关: indexed_lrc_size==0", DocState(index, "t3").LrcSize == 0,
-            DocState(index, "t3").LrcSize.ToString());
-        Program.Check(".lrc 关: 侧车文本不再命中",
+        Program.Check(".lrc 关: 不因关闭而重建（保留现有索引）", !lrcOff.Full, lrcOff.Full.ToString());
+        Program.Check(".lrc 关: 旧索引仍声明侧车能力（重建后收敛）",
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
+
+        // 用户显式全量重建才按新选项收敛：侧车清理。
+        var lrcDrop = RunEngine(db, index, full: true, lrc: false);
+        Program.Check(".lrc 关: 手动全量重建后 meta.index_lrc==0", lrcDrop.Full
+            && !ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
+        Program.Check(".lrc 关: 手动全量重建后 indexed_lrc_size==0",
+            DocState(index, "t3").LrcSize == 0, DocState(index, "t3").LrcSize.ToString());
+        Program.Check(".lrc 关: 手动全量重建后侧车文本不再命中",
             MatchCount(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"") == 0,
             MatchCount(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"").ToString());
 
@@ -1009,7 +1013,13 @@ internal static class EndToEnd
 
         // ---- 开启（增量请求也会因选项变化升级为全量）----
         var on = RunEngine(db, index, full: false,
-            options: new IndexerOptions { IndexLrc = true, RomajiLyrics = true });
+            options: new IndexerOptions
+            {
+                IndexLrc = true,
+                Pinyin = true,
+                LyricsPinyin = true,
+                RomajiLyrics = true,
+            });
         Program.Check("歌词罗马音: 开关变化触发全量", on.Full);
         Program.Check("歌词罗马音: 开启 meta.romaji_lyrics==1",
             ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
@@ -1020,11 +1030,16 @@ internal static class EndToEnd
         Program.Check("歌词罗马音: 查询侧读音趟命中生成列",
             readingExpr is not null && MatchContainsTrack(index, readingExpr, "tJ"), readingExpr ?? "(null)");
 
-        // ---- 再关闭：清理生成内容 ----
+        // ---- 再关闭：只写偏好，保留现有索引 ----
         var back = RunEngine(db, index, full: false, options: new IndexerOptions { IndexLrc = true });
-        Program.Check("歌词罗马音: 关闭触发全量", back.Full);
-        Program.Check("歌词罗马音: 关闭后 tJ 读音 bigram 归零", MatchCount(index, SoraPhrase) == 0,
-            MatchCount(index, SoraPhrase).ToString());
+        Program.Check("歌词罗马音: 关闭不强制重建", !back.Full, back.Full.ToString());
+        Program.Check("歌词罗马音: 旧索引仍可命中生成列（重建后才会清）",
+            MatchContainsTrack(index, SoraPhrase, "tJ"));
+
+        // 用户显式全量重建才清理生成内容。
+        var drop = RunEngine(db, index, full: true, options: new IndexerOptions { IndexLrc = true });
+        Program.Check("歌词罗马音: 手动全量重建后 bigram 归零", drop.Full
+            && MatchCount(index, SoraPhrase) == 0, MatchCount(index, SoraPhrase).ToString());
     }
 
     /* ------------------------------------------------------------------ */
@@ -1061,7 +1076,13 @@ internal static class EndToEnd
         }
 
         var result = RunEngine(db, index, full: true,
-            options: new IndexerOptions { IndexLrc = true, Pinyin = true, RomajiLyrics = true });
+            options: new IndexerOptions
+            {
+                IndexLrc = true,
+                Pinyin = true,
+                LyricsPinyin = true,
+                RomajiLyrics = true,
+            });
         Program.Check("生产免位置: indexed==2", result.Indexed == 2, result.Indexed.ToString());
         Program.Check("生产免位置: romaji 选项已开",
             ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
@@ -1189,7 +1210,8 @@ internal static class EndToEnd
         const string LyricsPinyin = "{pinyin_lyrics_tok} : \"wo ai ni\"";
 
         // ---- 默认关 ----
-        var off = RunEngine(db, index, full: true, options: new IndexerOptions { Pinyin = true });
+        var off = RunEngine(db, index, full: true,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
         Program.Check("歌词首字母: 默认关 indexed==1", off.Indexed == 1, off.Indexed.ToString());
         var offManifest = ReadManifest(index);
         Program.Check("歌词首字母: 默认关 meta.initials_lyrics==0",
@@ -1211,7 +1233,12 @@ internal static class EndToEnd
 
         // ---- 开启（增量请求也会因选项变化升级为全量）----
         var on = RunEngine(db, index, full: false,
-            options: new IndexerOptions { Pinyin = true, InitialsLyrics = true });
+            options: new IndexerOptions
+            {
+                Pinyin = true,
+                LyricsPinyin = true,
+                InitialsLyrics = true,
+            });
         Program.Check("歌词首字母: 开关翻转触发全量重建", on.Full, $"full={on.Full}");
         var onManifest = ReadManifest(index);
         Program.Check("歌词首字母: 开启 meta.initials_lyrics==1",
@@ -1227,11 +1254,18 @@ internal static class EndToEnd
         Program.Check("歌词首字母: 开启健康元数据报 true",
             onHealth.Contains("\"initialsLyrics\":true", StringComparison.Ordinal), onHealth);
 
-        // ---- 再关闭：反向翻转同样触发全量并清空 ----
-        var back = RunEngine(db, index, full: false, options: new IndexerOptions { Pinyin = true });
-        Program.Check("歌词首字母: 关闭触发全量重建", back.Full, $"full={back.Full}");
-        Program.Check("歌词首字母: 关闭后列词条归零",
-            MatchCount(index, LyricsInitials) == 0, MatchCount(index, LyricsInitials).ToString());
+        // ---- 再关闭：只写偏好，保留现有索引 ----
+        var back = RunEngine(db, index, full: false,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
+        Program.Check("歌词首字母: 关闭不强制重建", !back.Full, $"full={back.Full}");
+        Program.Check("歌词首字母: 旧索引仍保留词条（重建后才会清）",
+            MatchCount(index, LyricsInitials) > 0, MatchCount(index, LyricsInitials).ToString());
+
+        // 用户显式全量重建才清空。
+        var drop = RunEngine(db, index, full: true,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
+        Program.Check("歌词首字母: 手动全量重建后列词条归零", drop.Full
+            && MatchCount(index, LyricsInitials) == 0, MatchCount(index, LyricsInitials).ToString());
     }
 
     /// <summary>
@@ -1363,7 +1397,13 @@ internal static class EndToEnd
     {
         // 主流程夹具沿用 v4 口径：歌词首字母开启，覆盖首字母分列断言；
         // 默认关闭（T3.4 V4）由 InitialsLyricsOption 单独覆盖。
-        var options = new IndexerOptions { IndexLrc = lrc, Pinyin = true, InitialsLyrics = true };
+        var options = new IndexerOptions
+        {
+            IndexLrc = lrc,
+            Pinyin = true,
+            LyricsPinyin = true,
+            InitialsLyrics = true,
+        };
         return RunEngineDetailed(db, index, full, options);
     }
 

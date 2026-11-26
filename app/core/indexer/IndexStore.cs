@@ -103,7 +103,12 @@ public sealed class StoreMeta
 
     public int AnalyzerVersion { get; set; }
     public bool IndexLrc { get; set; }
+
+    /// <summary>是否写入元数据拼音 / 首字母 / 读音列（设置页「元数据拼音检索」）。</summary>
     public bool Pinyin { get; set; }
+
+    /// <summary>是否写入歌词拼音列（设置页「歌词拼音检索」，默认关）。</summary>
+    public bool PinyinLyrics { get; set; }
 
     /// <summary>是否开启了「歌词罗马音生成」（T2-9）；开关变化触发全量重建。</summary>
     public bool RomajiLyrics { get; set; }

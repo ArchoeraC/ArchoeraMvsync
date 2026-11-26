@@ -87,6 +87,7 @@ void main() {
       dbPath: libraryDb,
       indexPath: searchDb,
       full: true,
+      optionsJson: jsonEncode({'pinyin': true}),
       onProgress: nullptr.cast<Void>(),
     );
     expect(code, 0, reason: 'era_index_run 应返回 0，实际: $resultText');
@@ -526,6 +527,7 @@ Future<SearchIndex> _buildIndex(
     dbPath: libraryDb,
     indexPath: searchDb,
     full: true,
+    optionsJson: jsonEncode({'pinyin': true}),
     onProgress: nullptr.cast<Void>(),
   );
   expect(code, 0, reason: 'era_index_run 应返回 0，实际: $text');

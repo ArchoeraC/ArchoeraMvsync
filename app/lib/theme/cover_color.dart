@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../services/playback/playback_notifier.dart';
+import '../services/render/gpu_readback.dart';
 import '../stores/app_prefs.dart';
 import '../utils/safe_file.dart';
 import 'theme_sources/theme_source_registry.dart';
@@ -93,6 +94,13 @@ Future<Color?> extractDominantColor(String cover) async {
     image.dispose();
     codec.dispose();
     if (data == null) return null;
+    // 独显（AMD）上 toByteData 可能全 0（flutter#196265）：读回失败 →
+    // 回退默认主色，而不是把主题染成纯黑。
+    if (isBlankReadback(
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+    )) {
+      return null;
+    }
     final picked = await _pickRepresentative(data, width, height);
     if (picked == null) return null;
     return _toCoverBaseColor(picked);

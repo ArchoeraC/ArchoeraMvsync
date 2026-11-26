@@ -20,12 +20,49 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 只测存储层：链接 EraStore 源码（不含 CLI 的 Program.cs 与 tests/），
+    <!-- 只测 EraStore / 查询层：链接索引器源码（不含 CLI 的 Program.cs 与 tests/），
          与索引器共用同一份实现，避免基准与生产分叉。 -->
     <Compile Include="../../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
-    <!-- QueryEngine 的依赖（读音分档 / 日志）。 -->
-    <Compile Include="../../ReadingRanker.cs" Link="ReadingRanker.cs" />
-    <Compile Include="../../Log.cs" Link="Log.cs" />
+    <Compile Include="../../*.cs" Exclude="../../Program.cs" Link="%(Filename)%(Extension)" />
+    <!-- 共享源码（与 indexer.csproj 保持同源）。 -->
+    <Compile Include="../../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
+    <Compile Include="../../../shared/text/ScriptRanges.cs" Link="shared/text/ScriptRanges.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <PackageReference Include="ToolGood.Words" Version="3.1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/kana_romaji.tsv" Link="data/kana_romaji.tsv">
+      <LogicalName>Archoera.Indexer.data.kana_romaji.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/ja_readings.tsv" Link="data/ja_readings.tsv">
+      <LogicalName>Archoera.Indexer.data.ja_readings.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/nfkc.tsv">
+      <LogicalName>Archoera.Indexer.data.nfkc.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/accent_fold.tsv">
+      <LogicalName>Archoera.Indexer.data.accent_fold.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/variant_fold.tsv">
+      <LogicalName>Archoera.Indexer.data.variant_fold.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/def_en2hanzi.tsv">
+      <LogicalName>Archoera.Indexer.data.def_en2hanzi.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/lexicon_cross.tsv">
+      <LogicalName>Archoera.Indexer.data.lexicon_cross.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/def_hanzi2en.tsv">
+      <LogicalName>Archoera.Indexer.data.def_hanzi2en.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/manifest.json">
+      <LogicalName>Archoera.Indexer.data.manifest.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

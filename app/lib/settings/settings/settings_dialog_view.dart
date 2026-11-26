@@ -330,7 +330,7 @@ extension _SettingsDialogView on _SettingsDialogState {
                 SettingsCategory.shortcuts => const ShortcutsSection(),
                 SettingsCategory.lyrics => const LyricsSection(),
                 SettingsCategory.preset => const PresetSection(),
-                SettingsCategory.render => const RenderSection(),
+                SettingsCategory.render => RenderSection(),
                 SettingsCategory.download => const DownloadSection(),
                 SettingsCategory.storage => const Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

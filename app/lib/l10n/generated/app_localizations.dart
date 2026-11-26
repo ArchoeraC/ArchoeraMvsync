@@ -176,6 +176,36 @@ abstract class AppLocalizations {
   /// **'只重绘活动涟漪波带；仅 CPU 回退路径生效'**
   String get settingsRippleDamageClipDesc;
 
+  /// No description provided for @settingsMacOSGPU.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'独立显卡加速'**
+  String get settingsMacOSGPU;
+
+  /// No description provided for @settingsMacOSGPUDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'自动：独显的 Metal 能力不低于集显时才用独显；「优先独立显卡」强制使用（可能降到 Metal 2，AMD 独显上封面取色 / 流体背景会走兜底）。修改后需重启应用'**
+  String get settingsMacOSGPUDesc;
+
+  /// No description provided for @settingsMacOSGPUAuto.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'自动（推荐）'**
+  String get settingsMacOSGPUAuto;
+
+  /// No description provided for @settingsMacOSGPUDiscrete.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'优先独立显卡'**
+  String get settingsMacOSGPUDiscrete;
+
+  /// No description provided for @settingsMacOSGPUIntegrated.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'集成显卡'**
+  String get settingsMacOSGPUIntegrated;
+
   /// No description provided for @settingsLyricsEdgeFade.
   ///
   /// In zh_CN, this message translates to:
@@ -8243,8 +8273,32 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSearchIndexInitialsDesc.
   ///
   /// In zh_CN, this message translates to:
-  /// **'歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）'**
+  /// **'歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）'**
   String get settingsSearchIndexInitialsDesc;
+
+  /// No description provided for @settingsSearchIndexPinyin.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'元数据拼音检索'**
+  String get settingsSearchIndexPinyin;
+
+  /// No description provided for @settingsSearchIndexPinyinDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效'**
+  String get settingsSearchIndexPinyinDesc;
+
+  /// No description provided for @settingsSearchIndexLyricsPinyin.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词拼音检索'**
+  String get settingsSearchIndexLyricsPinyin;
+
+  /// No description provided for @settingsSearchIndexLyricsPinyinDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效'**
+  String get settingsSearchIndexLyricsPinyinDesc;
 
   /// No description provided for @settingsSearchIndexNote.
   ///

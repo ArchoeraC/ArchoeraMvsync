@@ -77,6 +77,7 @@ public static class Program
         EraStoreQueryEngineTests.Run();
         EraStoreBitsetEquivalenceTests.Run();
         EraStoreNoPositionTests.Run();
+        ResourceTests.Run();
         EraStoreFuzzTests.Run();
 
         var vectorFiles = Directory.GetFiles(vectorsDir, "*.tsv");

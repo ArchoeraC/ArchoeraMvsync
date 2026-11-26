@@ -21,7 +21,6 @@ namespace Archoera.Indexer;
 internal static class MemoryTrim
 {
     private static int _pending;
-    private static int _done;
     private static int _sinceTrim;
 
     /// <summary>轻查询每 16 条回收一次：摊薄 ≈0.5 ms/查，把堆高水位钉在基线附近。</summary>
@@ -46,18 +45,23 @@ internal static class MemoryTrim
         }
     }
 
-    /// <summary>构建收尾的一次性回收；每进程至多一次。</summary>
-    public static void TrimOnce()
-    {
-        if (Interlocked.Exchange(ref _done, 1) != 0) return;
-        TrimCore();
-    }
+    /// <summary>
+    /// 构建收尾回收：**每次**构建 / 增量后都执行（不再是每进程一次）。
+    ///
+    /// 索引更新会在进程内产生大量临时对象（脏集 / 文档 / 词典累加器 / 旧世代 mmap 视图）。
+    /// NativeAOT 的 GC 即使回收对象也不一定立刻把堆段归还 OS；如果只在第一次构建后
+    /// trim，后续更新的高水位会一层层叠加，表现为「每次更新索引 RSS 上涨」。
+    /// 这里每次构建结束都做一次 compacting GC（≈10–20 ms），把构建期峰值还回去。
+    /// </summary>
+    public static void TrimAfterBuild() => TrimCore();
+
+    /// <summary>兼容旧调用名：构建收尾回收。</summary>
+    public static void TrimOnce() => TrimAfterBuild();
 
     /// <summary>测试接缝：允许下一次调用重新触发。</summary>
     internal static void ResetForTests()
     {
         Volatile.Write(ref _pending, 0);
-        Volatile.Write(ref _done, 0);
         Volatile.Write(ref _sinceTrim, 0);
     }
 

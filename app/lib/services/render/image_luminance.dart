@@ -7,6 +7,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'gpu_readback.dart';
+
 /// 图片背景遮罩（`backgroundDim`）滑块的上下限。
 const double kBackgroundDimMin = 0.3;
 const double kBackgroundDimMax = 0.9;
@@ -58,7 +60,11 @@ Future<double?> sampleImageLuminance(String path) async {
     image = frame.image;
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (data == null) return null;
-    return _percentileLuminance(data.buffer.asUint8List(), 0.9);
+    final rgba = data.buffer.asUint8List();
+    // 独显（AMD）上 toByteData 可能全 0（flutter#196265）：视为未测到，
+    // 调用方保留用户自己的遮罩设置。
+    if (isBlankReadback(rgba)) return null;
+    return _percentileLuminance(rgba, 0.9);
   } catch (_) {
     return null;
   } finally {

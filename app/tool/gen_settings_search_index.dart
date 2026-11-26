@@ -17,6 +17,8 @@
 ///   关于页长按 10 秒等彩蛋逻辑完全不受影响；
 /// - 跳过动态标题（如 `l10n.settingsPeqBand(index: …)`）与非常量表达式，
 ///   避免生成编译不过的代码；
+/// - 平台专属 / 不适合检索的设置项，在 Widget 调用前 1~3 行写
+///   `// gen-settings-index: skip` 即可不入索引（避免「搜到跳不过」）；
 /// - 幂等：内容未变时不写文件（便于 CI 判断是否有未提交的生成结果）。
 ///
 /// 用法（由各平台构建脚本在 `flutter build` 前调用；本地也可手动执行）：
@@ -184,9 +186,30 @@ List<int> _widgetCalls(String source, List<String> widgets) {
   final pattern = RegExp('\\b(${widgets.join('|')})\\(');
   for (final m in pattern.allMatches(source)) {
     if (!_isCodePosition(source, m.start)) continue;
+    if (_hasSkipMarker(source, m.start)) continue;
     offsets.add(m.end);
   }
   return offsets;
+}
+
+/// 不入索引的标记（平台专属设置项用，避免在其它平台「搜到跳不过」）。
+const String _skipMarker = 'gen-settings-index: skip';
+
+/// `WidgetName(` 所在行之前 1~3 行（或同一行前缀）有 [_skipMarker] → 跳过。
+bool _hasSkipMarker(String source, int index) {
+  final lineStart = index == 0 ? 0 : source.lastIndexOf('\n', index - 1) + 1;
+  if (source.substring(lineStart, index).contains(_skipMarker)) return true;
+  var cursor = lineStart;
+  for (var i = 0; i < 3 && cursor > 0; i++) {
+    final prevLineEnd = cursor - 1;
+    if (prevLineEnd <= 0) break;
+    final prevLineStart = source.lastIndexOf('\n', prevLineEnd - 1) + 1;
+    if (source.substring(prevLineStart, prevLineEnd).contains(_skipMarker)) {
+      return true;
+    }
+    cursor = prevLineStart;
+  }
+  return false;
 }
 
 /// 标题表达式 → 一个或多个 l10n 键。

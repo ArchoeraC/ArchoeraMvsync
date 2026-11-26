@@ -166,7 +166,10 @@ public sealed class IndexerEngine
 
         EraStore.Manifest? manifest = null;
         var state = new Dictionary<string, EraStore.EraTrackState>(StringComparer.Ordinal);
-        if (eraPath is not null && File.Exists(eraPath))
+        // full=true 时不需要旧世代状态：接下来一定会清空 manifest / state 并全量重写。
+        // 之前无条件 LoadTrackState() 会在每次“选项变化 / 手动重建”时把 48k 曲目的
+        // track 映射完整读进内存，既慢又把构建峰值抬高。
+        if (!full && eraPath is not null && File.Exists(eraPath))
         {
             manifest = EraStore.StoreReader.TryReadManifest(eraPath);
             if (manifest is not null)
@@ -250,7 +253,8 @@ public sealed class IndexerEngine
                 }
             }
 
-            if (isDirty) dirty.Add(new DirtyTrack { Id = probe.Id, Path = probe.Path });
+            // 全量构建由 BuildFullEra 流式读内容，不需要先把所有脏曲收集到列表。
+            if (!eraFull && isDirty) dirty.Add(new DirtyTrack { Id = probe.Id, Path = probe.Path });
             if (processed % ProgressEvery == 0) Fire("collect", probe.Path);
         }
         total = seen.Count;
@@ -390,12 +394,23 @@ public sealed class IndexerEngine
                 if (eraPath is null || !File.Exists(eraPath))
                     throw new InvalidDataException("EraStore CURRENT 缺失，回退全量构建");
                 var meta = MetaFromProfile(profile, options);
+                // 关闭派生列只写偏好、不重建：增量新段的选项位必须与旧 Manifest 取并集，
+                // 否则旧段里仍在的列会被误报为“不存在”，查询会直接跳过它们。
+                // 用户显式全量重建时才按当前选项收敛（BuildFullNow 不受此影响）。
+                var bits = BuildOptionsBits(meta);
+                var caps = new List<string>(EffectiveCapabilities(meta));
+                if (manifest is not null)
+                {
+                    bits |= manifest.OptionsBits;
+                    foreach (var cap in manifest.Capabilities)
+                        if (!caps.Contains(cap, StringComparer.Ordinal)) caps.Add(cap);
+                }
                 var inc = EraStore.IncrementalUpdater.Apply(
                     eraPath, eraDocs, deletes,
                     new EraStore.IncrementalOptions
                     {
-                        OptionsBits = BuildOptionsBits(meta),
-                        Capabilities = EffectiveCapabilities(meta),
+                        OptionsBits = bits,
+                        Capabilities = caps,
                         // 增量新段必须与全量同一套免位置布局，否则同一曲库会按写入时间
                         // 出现两种短语语义；旧段不受影响（既有索引仍可读，无需重建）。
                         NoPositionFields = EraStore.BuildDefaults.CreateNoPositionFields(),
@@ -552,14 +567,24 @@ public sealed class IndexerEngine
         && EraOptionsMatch(manifest, options)
         && string.Equals(manifest.Anchors.DataPackId, dataPack.Id, StringComparison.Ordinal);
 
+    /// <summary>
+    /// 构建选项是否“至少覆盖”用户当前请求：**只要求索引具备需要的列，不要求删除多余列**。
+    ///
+    /// 这样关闭某个派生列开关时**不会**因选项差异触发全量重建，现有索引继续可用
+    /// （用户可保留旧索引，等下次「重建索引」再收敛）；只有开启索引里**没有**的能力
+    /// （请求是 manifest 的超集）才触发重建。`full=true` 的手动重建仍按当前选项重写，
+    /// 从而真正清掉已关闭的列。
+    /// </summary>
     private static bool EraOptionsMatch(EraStore.Manifest manifest, IndexerOptions options)
     {
         var bits = manifest.OptionsBits;
         bool Has(int bit) => (bits & bit) != 0;
-        return Has(EraStore.ManifestOptionsBits.IndexLrc) == options.IndexLrc
-            && Has(EraStore.ManifestOptionsBits.Pinyin) == options.Pinyin
-            && Has(EraStore.ManifestOptionsBits.RomajiLyrics) == options.RomajiLyrics
-            && Has(EraStore.ManifestOptionsBits.InitialsLyrics) == options.InitialsLyrics;
+        if (options.IndexLrc && !Has(EraStore.ManifestOptionsBits.IndexLrc)) return false;
+        if (options.Pinyin && !Has(EraStore.ManifestOptionsBits.Pinyin)) return false;
+        if (options.LyricsPinyin && !Has(EraStore.ManifestOptionsBits.LyricsPinyin)) return false;
+        if (options.RomajiLyrics && !Has(EraStore.ManifestOptionsBits.RomajiLyrics)) return false;
+        if (options.InitialsLyrics && !Has(EraStore.ManifestOptionsBits.InitialsLyrics)) return false;
+        return true;
     }
 
     private static StoreMeta MetaFromProfile(ScriptProfile profile, IndexerOptions options) => new()
@@ -568,6 +593,7 @@ public sealed class IndexerEngine
         AnalyzerVersion = Analyzer.AnalyzerVersion,
         IndexLrc = options.IndexLrc,
         Pinyin = options.Pinyin,
+        PinyinLyrics = options.LyricsPinyin,
         RomajiLyrics = options.RomajiLyrics,
         InitialsLyrics = options.InitialsLyrics,
         HasJapanese = profile.Japanese,
@@ -707,6 +733,7 @@ public sealed class IndexerEngine
         var hasKana = Japanese.ContainsKana(track.Title) || Japanese.ContainsKana(track.ArtistText)
             || Japanese.ContainsKana(track.AlbumText) || Japanese.ContainsKana(track.Lyrics)
             || Japanese.ContainsKana(Path.GetFileNameWithoutExtension(track.Path));
+        // 读音（日 / 韩）属于元数据拼音能力的一部分：关闭元数据拼音时也不生成读音列。
         var japanese = options.Pinyin && hasKana;
 
         var title = Analyzer.Analyze(track.Title, japanese);
@@ -823,13 +850,13 @@ public sealed class IndexerEngine
             PinyinMetaTok = options.Pinyin
                 ? CombinePinyin(title, artist, album)
                 : "",
-            PinyinLyricsTok = options.Pinyin ? CombinePinyin(lyrics) : "",
+            // 歌词拼音与元数据拼音独立：只由 LyricsPinyin 控制。
+            PinyinLyricsTok = options.LyricsPinyin ? CombinePinyin(lyrics) : "",
             InitialsMetaTok = options.Pinyin
                 ? CombineInitials(title, artist, album)
                 : "",
-            InitialsLyricsTok = options.Pinyin && options.InitialsLyrics
-                ? CombineInitials(lyrics)
-                : "",
+            // 歌词首字母独立于拼音列（首字母来自 CJK 段，不需要拼音音节）。
+            InitialsLyricsTok = options.InitialsLyrics ? CombineInitials(lyrics) : "",
             ReadingMetaTok = reading,
             ReadingText = reading,
             FilenameTok = filename.Tokens,
@@ -1274,6 +1301,7 @@ public sealed class IndexerEngine
         var bits = 0;
         if (meta.IndexLrc) bits |= EraStore.ManifestOptionsBits.IndexLrc;
         if (meta.Pinyin) bits |= EraStore.ManifestOptionsBits.Pinyin;
+        if (meta.PinyinLyrics) bits |= EraStore.ManifestOptionsBits.LyricsPinyin;
         if (meta.RomajiLyrics) bits |= EraStore.ManifestOptionsBits.RomajiLyrics;
         if (meta.InitialsLyrics) bits |= EraStore.ManifestOptionsBits.InitialsLyrics;
         if (meta.HasJapanese) bits |= EraStore.ManifestOptionsBits.HasJapanese;

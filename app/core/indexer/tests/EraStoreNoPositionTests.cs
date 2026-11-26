@@ -66,8 +66,8 @@ internal static class EraStoreNoPositionTests
             block.DocCount.ToString());
         Program.Check("免位置: 倒排块头 flags bit0 = 0",
             (block.Flags & FlagHasPositions) == 0, $"flags=0x{block.Flags:X2}");
-        Program.Check("免位置: 块头 flags 位于块偏移 +8",
-            noPosPostingsBody[(int)pyInfo.PostOffset + 8] == 0,
+        Program.Check("免位置: 块头 flags 位于块偏移 +8（bit0 = 0）",
+            (noPosPostingsBody[(int)pyInfo.PostOffset + 8] & FlagHasPositions) == 0,
             noPosPostingsBody[(int)pyInfo.PostOffset + 8].ToString());
         Program.Check("免位置: 块尾 pos_off = 0（逐字节读块最后 4B）",
             block.PosOff == 0
@@ -255,8 +255,18 @@ internal static class EraStoreNoPositionTests
         var flags = reader.ReadByte();
         reader.ReadUInt32(); // crc32c
         var excCount = reader.ReadByte();
-        reader.ReadBytes(16); // tf 位图
-        for (var i = 0; i < docCount; i++) reader.ReadVarint(); // doc_delta 序列
+        // O10：tf 位图可裁剪；O9：doc 序列可位打包。
+        var bitmapBytes = (flags & 0x04) != 0 ? (docCount + 7) / 8 : 16;
+        reader.ReadBytes(bitmapBytes);
+        if ((flags & 0x02) != 0)
+        {
+            var width = reader.ReadByte();
+            reader.Skip((int)(((long)docCount * width + 7) / 8));
+        }
+        else
+        {
+            for (var i = 0; i < docCount; i++) reader.ReadVarint(); // doc_delta 序列
+        }
         for (var i = 0; i < excCount; i++)
         {
             reader.ReadByte(); // doc_index

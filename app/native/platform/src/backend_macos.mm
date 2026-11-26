@@ -402,6 +402,12 @@ static void archoeraTerminateHook(id self, SEL command) {
 }
 
 namespace archoera {
+
+// 自绘缩放热区的本地事件监视器（ABI v10 补齐；定义在文件后部的 windowStartResize）。
+// 退出 / 停事件时显式摘除，避免监视器在引擎销毁后仍被 AppKit 回调。
+id g_resize_monitor = nil;
+void stopResizeMonitor();
+
 namespace {
 
 ArchoeraPlatformObserver* g_observer = nil;
@@ -691,8 +697,9 @@ int32_t windowSetEvents(int32_t on) {
         emitWindow();  // 初值（原子快照；AppKit 属性只在通知回调里读）
     } else {
         g_window_events.store(false, std::memory_order_release);
-        // 先撤关闭拦截（delegate 代理 + terminate 钩子），再摘通知观察者：
+        // 先撤关闭拦截（delegate 代理 + terminate 钩子）与缩放监视器，再摘通知观察者：
         // 观察者指向已释放对象正是第三方插件退出崩溃的根因。
+        stopResizeMonitor();
         removeCloseInterception();
         removeTerminateHook();
         unobserve(nc, NSWindowDidMiniaturizeNotification);
@@ -1054,8 +1061,99 @@ int32_t windowStartDrag() {
     return OK;
 }
 
-// macOS 边缘缩放由系统标题栏/边框直接处理，自绘热区无需接管。
-int32_t windowStartResize(int32_t) { return ERR_UNSUPPORTED; }
+// 自绘缩放热区（ABI v10 补齐）：AppKit 没有「开始边缘缩放」的公开 API，
+// 这里用本地事件监视器跟踪左键拖动，按起始 frame + 鼠标位移直接 setFrame。
+// 与 Windows（WM_NCLBUTTONDOWN）/ Linux（gtk_window_begin_resize_drag）语义对齐：
+// edge 顺序同 APL_WINDOW_EDGE_*，坐标均为屏幕逻辑点（左下角原点）。
+// 监视器只在拖动期间存在；mouseUp / stop_events / shutdown 都会摘除。
+void stopResizeMonitor() {
+    // NSEvent 监视器的增删都必须在主线程；Dart FFI 可能在任意线程调用
+    // set_events(0) / shutdown()，这里统一编组回主循环。
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ stopResizeMonitor(); });
+        return;
+    }
+    if (g_resize_monitor == nil) return;
+    [NSEvent removeMonitor:g_resize_monitor];
+    g_resize_monitor = nil;
+}
+
+int32_t windowStartResize(int32_t edge) {
+    if (edge < APL_WINDOW_EDGE_TOP_LEFT || edge > APL_WINDOW_EDGE_BOTTOM_RIGHT)
+        return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      // 全屏 / 原生全屏过渡期间不接管几何（退出全屏后系统自行恢复）。
+      if ((win.styleMask & NSWindowStyleMaskFullScreen) != 0) return;
+
+      stopResizeMonitor();
+      const NSPoint startMouse = [NSEvent mouseLocation];
+      const NSRect startFrame = win.frame;
+      const NSSize minContent = win.contentMinSize;
+      const NSSize minFrame =
+          [win frameRectForContentRect:NSMakeRect(0, 0, minContent.width, minContent.height)].size;
+      const bool hasMin = minContent.width > 0 || minContent.height > 0;
+      const bool left = edge == APL_WINDOW_EDGE_TOP_LEFT ||
+                        edge == APL_WINDOW_EDGE_LEFT ||
+                        edge == APL_WINDOW_EDGE_BOTTOM_LEFT;
+      const bool right = edge == APL_WINDOW_EDGE_TOP_RIGHT ||
+                         edge == APL_WINDOW_EDGE_RIGHT ||
+                         edge == APL_WINDOW_EDGE_BOTTOM_RIGHT;
+      const bool top = edge == APL_WINDOW_EDGE_TOP_LEFT ||
+                       edge == APL_WINDOW_EDGE_TOP ||
+                       edge == APL_WINDOW_EDGE_TOP_RIGHT;
+      const bool bottom = edge == APL_WINDOW_EDGE_BOTTOM_LEFT ||
+                          edge == APL_WINDOW_EDGE_BOTTOM ||
+                          edge == APL_WINDOW_EDGE_BOTTOM_RIGHT;
+
+      g_resize_monitor = [NSEvent
+          addLocalMonitorForEventsMatchingMask:(NSEventMaskLeftMouseDragged |
+                                                 NSEventMaskLeftMouseUp)
+                                       handler:^NSEvent*(NSEvent* event) {
+            if (event.type == NSEventTypeLeftMouseUp) {
+                // 不能在本 handler 内 removeMonitor 自身：交给下一轮主循环。
+                dispatch_async(dispatch_get_main_queue(), ^{ stopResizeMonitor(); });
+                return event;
+            }
+
+            const NSPoint p = [NSEvent mouseLocation];
+            const CGFloat dx = p.x - startMouse.x;
+            const CGFloat dy = p.y - startMouse.y;
+            NSRect frame = startFrame;
+            if (left) {
+                frame.origin.x += dx;
+                frame.size.width -= dx;
+            } else if (right) {
+                frame.size.width += dx;
+            }
+            if (top) {
+                // AppKit 原点在左下：上边缘移动只改高度，底边固定。
+                frame.size.height += dy;
+            } else if (bottom) {
+                frame.origin.y += dy;
+                frame.size.height -= dy;
+            }
+
+            if (hasMin && frame.size.width < minFrame.width) {
+                if (left)
+                    frame.origin.x = startFrame.origin.x + startFrame.size.width - minFrame.width;
+                frame.size.width = minFrame.width;
+            }
+            if (hasMin && frame.size.height < minFrame.height) {
+                if (bottom)
+                    frame.origin.y =
+                        startFrame.origin.y + startFrame.size.height - minFrame.height;
+                frame.size.height = minFrame.height;
+            }
+
+            [win setFrame:frame display:YES];
+            return event;
+        }];
+    });
+    return OK;
+}
 
 int32_t windowRequestClose() {
     // 只投递事件，绝不自动关窗/退出；Dart 决策后走 hide 或 exit(0)。

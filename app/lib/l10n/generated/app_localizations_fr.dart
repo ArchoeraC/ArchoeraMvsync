@@ -50,6 +50,22 @@ class AppLocalizationsFr extends AppLocalizations {
       'Ne redessiner que les bandes d\'ondulations actives ; chemin CPU uniquement';
 
   @override
+  String get settingsMacOSGPU => 'Accélération GPU dédiée';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Auto n’utilise le GPU dédié que s’il prend en charge toutes les fonctions Metal du GPU intégré ; Préférer le dédié le force (peut rétrograder en Metal 2, et sur AMD la couleur de pochette et le fond fluide passent en secours). Redémarrez pour appliquer';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Auto (recommandé)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Préférer le GPU dédié';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'GPU intégré';
+
+  @override
   String get settingsLyricsEdgeFade => 'Fondu des bords des paroles';
 
   @override
@@ -4754,7 +4770,21 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      'Permet aussi de rechercher les paroles par initiales pinyin (ex. wanzg) ; désactivez pour réduire l\'index (la modification impose une reconstruction)';
+      'Permet aussi de rechercher les paroles par initiales pinyin (ex. wanzg) ; désactivez pour réduire l\'index (effectif après reconstruction)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Indexer le pinyin des métadonnées';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Rechercher titres / artistes / albums par pinyin ou initiales ; désactivé par défaut (effectif après reconstruction de l\'index)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Indexer le pinyin des paroles';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Rechercher les paroles par syllabes pinyin ; la plus grosse colonne dérivée, désactivée par défaut (effectif après reconstruction)';
 
   @override
   String get settingsSearchIndexNote =>

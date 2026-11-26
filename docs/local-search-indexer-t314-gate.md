@@ -548,6 +548,45 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
     positions 体积改由 O8 无损压缩承担。进一步收益（PForDelta 例外帧 / 跨 doc 共享
     width）需要更复杂编码，本轮不做。
 
+- **第十一轮（2026-11-27，O11/O12：倒排块紧凑化）**：收口 gate 文档「O8 位打包 /
+  postings 紧凑化」的剩余项。只改 **Postings 段的块体 / 位图**，词典、位置、DocStore、
+  查询语义都不变。
+  - **O11 doc 序列位打包**：倒排块 flags 新增 `0x02 = docs_packed`。写侧逐块比较
+    `doc_delta` 的 varint 块体与位打包块体（`width u8 + ceil(doc_count*width/8)`，
+    Δ 为 LSB-first），**取较小者；相等保留 varint**。`width` 为该块最大 Δ 的位宽
+    （0..31；单 doc 且 delta=0 时为 0），是 PForDelta 的退化形式：不设例外帧，
+    离群 Δ 抬高 width 时整块自然回落 varint。
+  - **O12 tf 位图裁剪**：flags 新增 `0x04 = trimmed_bitmap`。`tf_exc_count` 已给出
+    docs>1 的个数，位图只需 `ceil(doc_count/8)` 字节（旧格式固定 16B）；读侧按
+    flags 选长度，尾部未用位仍要求为 0（规范形式）。
+  - **5k 体积与构建**（同一 `library.db`，`build --full`，基线二进制与 O11/O12 二进制
+    各跑一次）：
+
+    | 变体 | fileBytes | Postings | Positions | B/曲 | 构建 |
+    |---|---:|---:|---:|---:|---:|
+    | 基线（varint + 16B 位图） | 25,563,565 | 4,950,439 | 16,207,455 | 5,112.7 | 9.63 s |
+    | O11 doc 位打包（仅） | 25,523,261 | 4,910,135 | 16,207,455 | 5,104.7 | — |
+    | **O11 + O12 位图裁剪** | **25,441,844** | **4,828,719** | 16,207,455 | **5,088.4** | 9.91 s |
+
+    合计 **−121,721 B（file −0.476%）**，全部来自 Postings（**−2.46%**）；
+    Positions / DocStore / 词典字节完全不变。O11 单独让 Postings −0.81%，O12 再让
+    file −0.32%；两者都是逐块无损选择，构建耗时在噪声内。
+  - **质量（qbench eval，37 题，`query_set.hash = 981bcfaa…`）**：同一 `library.db`
+    上对基线索引与新索引各跑一次，`queries[]` 与 `aggregate` **逐字段完全相等
+    （0 差异）**，ALL P@1 0.9730 / P@10 0.9054 / NDCG@10 0.9778 不变。
+  - **兼容 / 重建**：新 reader 同时接受旧 varint / 16B 位图块与 packed / 裁剪块；
+    用新二进制对旧基线索引执行 `verify` 通过（旧索引无需重建即可读）。旧 reader 在
+    倒排块 flags 看到未知位 `0x02` / `0x04` 后拒绝——实测旧二进制对新索引 `verify`
+    返回 `倒排块 flags 非法`，与 O8 的边界一致；`index_format` 仍为 **1**。
+  - **测试**：`EraStorePostingsTests.DocsPacked` 覆盖密集（Δ=1）自动 packed 的
+    逐字节断言、强制 varint 逐字节、稀疏大 Δ 自动回落、单 doc 0（width=0）、未知
+    flags 位拒绝；`TfException` / `GoldenQingTian` 以测试接缝保留旧格式逐字节夹具；
+    `EraStoreNoPositionTests` 的块头解析同步支持裁剪位图 / 位打包 doc。C# 回归
+    **PASS 4131 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**。
+  - **仍未做**：PForDelta 例外帧（把离群 Δ 抽到例外表，让 90% 分位宽覆盖多数 doc）
+    与 tf 例外值的位打包；本轮只做「整块位打包 + 位图裁剪」，收益已落在 Postings
+    段，进一步压缩需按块分布再评估。
+
 
 **下一步（2026-11-25 收尾后的真实剩余）**：
 
@@ -555,8 +594,8 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 2. T4.1 词表的人工复核：§5.5.4 要求 ≥10% 抽样 + 第二名评审签字（当前标 `seed`）。
 3. N10 / N11 / N18 三项 BLOCKED：per-track 语言画像 / 单字歌词召回语义 / 计划期 df 预算，
    均为产品决策。
-4. S2 已于 2026-11-26 收口（音译层免位置 + O8 位置块位打包）；剩余只有
-   `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
+4. S2 已于 2026-11-26 收口（音译层免位置 + O8 位置块位打包）；O11/O12 已于 2026-11-27
+   完成倒排块紧凑化；剩余只有 `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
 
 更细的可改进项（含改法与代价）见 §9。
 
@@ -589,6 +628,7 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | S5 | LRC 分层仍按「同时间戳第 1/2/3 行」猜（D-1）；无时间轴的内嵌歌词靠 +3 基线兜底 | 用语言识别 / 翻译对齐信号替代行位置猜测；分层置信度阈值回放校准 | 需要真实多语 LRC 样本 |
 | S6 | 脏集只认 `file_mtime` + `.lrc` mtime/size（D-3）：直接改 `library.db` 不改文件会漏更新 | DocStore 增加「元数据内容哈希」列，脏集比较 mtime **或** 哈希 | DocStore v6 + 全量重建（v5 已被 Q1 用掉）；增量期多一次哈希计算 |
 | S7 | v7 索引只能整库重建；无「按曲目墓碑回收」的轻量压缩 | 已有 `IncrementalUpdater.Maintain`，可加「死行 >X% 自动后台压缩」策略 | 已有实现，主要是策略调参 |
+| S8 | **已实现（2026-11-27）**：倒排块 O11 doc 位打包 + O12 tf 位图裁剪，逐块无损取较小者；5k Postings 4,950,439 → 4,828,719（−2.46%），file −0.476%，qbench 37 题逐字段一致；旧索引可读、旧二进制拒绝新索引 | 进一步可做 PForDelta 例外帧（离群 Δ 抽例外表，90% 分位宽覆盖多数 doc）与 tf 例外值位打包；当前整块位打包遇离群 Δ 会整块回落 varint | 改 Postings 块体与 flags，需按真实块分布回放校准 |
 
 ### 9.3 工程与验证
 
@@ -599,7 +639,9 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | E3 | `bench/REPORT.md` 是 pre-EraStore 历史报告 | 空闲机跑一次长基准（`ALLOW_LONG_BENCH=1`）重渲染；`run_bench.py` 叙述段仍是 v7 措辞 |
 | E4 | `SearchApi.Busy` 是协议预留，当前不会返回 | 保留（写任务 API 尚未需要）；若做后台压缩任务可启用 |
 | E5 | health `schemaVersion` / `gen` 的 Dart 消费方为空 | 设置页可展示 `dataPack`/confidence 分布，便于用户自查 |
+| E6 | ✅ **已修复（2026-11-27）**：索引更新后 RSS 逐次上涨——`StoreReader` 的 `FileStream`（`MemoryMappedFile` 用 `leaveOpen: true`）未释放，每次打开 / 换世代漏一个句柄；且 `MemoryTrim` 只在进程内第一次构建后回收。现为：`StoreReader.Dispose` 显式关流；每次构建前后都做 compacting GC；会话释放时先断开模糊词表 / 段缓存 / 结果 LRU。新增 `ResourceTests`（Linux `/proc/self/fd` 40 次 open/close 不增长） | 继续观察真实库长时间运行 RSS；NativeAOT 基线（分析表常驻）仍是 ≈55–60 MB |
 
 > 建议顺序：~~Q1（歌词精确度）~~（2026-11-26 已完成，仅整行相等）→ ~~S2（体积）~~
-> （2026-11-26 已收口：音译层免位置 + O8 位打包）→ Q3/Q4（门禁词与短路）；
+> （2026-11-26 已收口：音译层免位置 + O8 位打包）→ ~~S8（倒排块紧凑化）~~
+> （2026-11-27 已完成：O11/O12）→ Q3/Q4（门禁词与短路）；
 > S1 已于 2026-11-26 完成；Q6/Q7/Q8 属产品决策，单独评审；其余按真机/工具改进排期。

@@ -14,8 +14,21 @@ public sealed class IndexerOptions
     /// <summary>是否索引 <c>.lrc</c> 侧车歌词（默认 false，设计文档 §4.4）。</summary>
     public bool IndexLrc { get; set; }
 
-    /// <summary>是否生成拼音列（默认 true；false 时 <c>pinyin_tok</c> 留空，供 §7.4 A/B）。</summary>
-    public bool Pinyin { get; set; } = true;
+    /// <summary>
+    /// 是否生成**元数据**拼音列（歌名 / 歌手 / 专辑的拼音与首字母，默认 false）。
+    ///
+    /// 由设置页「元数据拼音检索」控制；默认关闭时中文歌名只能用字面 / bigram 命中，
+    /// 拼音输入不再召回。切换需重建索引（Manifest 选项位参与版本判定）。
+    /// </summary>
+    public bool Pinyin { get; set; }
+
+    /// <summary>
+    /// 是否生成**歌词**拼音列（<c>pinyin_lyrics_tok</c>，默认 false）。
+    ///
+    /// 与 <see cref="Pinyin"/> 独立：只影响歌词列的拼音召回，不改元数据拼音。
+    /// 歌词拼音是索引体积的主要派生列，故默认关闭、由设置页显式开启。
+    /// </summary>
+    public bool LyricsPinyin { get; set; }
 
     /// <summary>
     /// 是否为日语歌词生成罗马音（T2-9 可选增强，默认 false）。
@@ -30,9 +43,9 @@ public sealed class IndexerOptions
     /// 是否为歌词生成首字母列（T3.4 V4，**默认 false**）。
     ///
     /// 关闭时 <c>initials_lyrics_tok</c> 留空，元数据首字母（<c>initials_meta_tok</c>）
-    /// 不受影响；歌词**拼音**列也照旧写入。歌词首字母是独立能力：开启后可用
-    /// 「wanzg」这类歌词首字母串检索，代价是歌词派生列体积增加，故默认关闭、
-    /// 由用户在设置里显式开启。切换会改变 Manifest 选项位并触发全量重建。
+    /// 不受影响；与歌词拼音列相互独立（不需要同时开 <see cref="LyricsPinyin"/>）。
+    /// 开启后可用「wanzg」这类歌词首字母串检索，代价是歌词派生列体积增加。
+    /// 切换会改变 Manifest 选项位；现有索引可保留，重建后生效。
     /// </summary>
     public bool InitialsLyrics { get; set; }
 

@@ -47,6 +47,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsRippleDamageClipDesc => 'アクティブな波紋帯のみ再描画；CPU フォールバック時のみ有効';
 
   @override
+  String get settingsMacOSGPU => '独立GPUアクセラレーション';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：独立GPUの Metal 能力が内蔵GPU以上の場合のみ独立GPUを使用します。「独立GPUを優先」は強制します（Metal 2 へ降格する場合があり、AMD ではカバー色・流体背景がフォールバックします）。反映には再起動が必要です';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推奨）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '独立GPUを優先';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '内蔵GPU';
+
+  @override
   String get settingsLyricsEdgeFade => '歌詞の上下フェード';
 
   @override
@@ -4510,6 +4526,20 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get settingsSearchIndexInitialsDesc =>
       '歌詞をピンイン頭文字（例: wanzg）でも検索できます。オフにすると索引が小さくなります（変更時は再構築が必要）';
+
+  @override
+  String get settingsSearchIndexPinyin => 'メタデータのピンイン索引';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '曲名・アーティスト・アルバムをピンインや頭文字で検索します。既定はオフ（索引の再構築後に有効）';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌詞のピンイン索引';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '歌詞をピンイン音节で検索します。最も大きい派生列のため既定はオフ（索引の再構築後に有効）';
 
   @override
   String get settingsSearchIndexNote =>

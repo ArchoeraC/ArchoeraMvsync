@@ -978,7 +978,15 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
   resizable，并置 `movable`。位置按 `frame.origin` 与主屏高度换算（AppKit 左下
   角原点 ↔ Dart 左上角原点），`set_position` 用 `setFrameOrigin`，可稳定往返。
   `start_drag` 用 `[win performWindowDragWithEvent:[NSApp currentEvent]]`；
-  `start_resize` 返回 `APL_ERR_UNSUPPORTED`（边缘缩放由 AppKit 原生负责）。
+  `start_resize` 已在 2026-11-27 补齐（同 ABI v10，无契约变化）：AppKit 没有公开的
+  「开始边缘缩放」API，改为 `NSEvent addLocalMonitorForEventsMatchingMask:`
+  （LeftMouseDragged / LeftMouseUp）本地事件监视器——记录起始 `mouseLocation` 与
+  `window.frame`，拖动时按 `APL_WINDOW_EDGE_*`（左/右/上/下四向组合）计算新 frame 并
+  `setFrame:display:`，最小尺寸用 `contentMinSize` + `frameRectForContentRect:` 折算成
+  最小 frame 后夹紧；全屏（`NSWindowStyleMaskFullScreen`）期间不接管；`mouseUp` 后
+  异步摘除监视器，`apl_window_set_events(0)` / `shutdown()` 显式 `stopResizeMonitor()`
+  （避免监视器在引擎销毁后仍被 AppKit 回调）。坐标语义与 Windows/Linux 一致（逻辑点，
+  edge 顺序同 `APL_WINDOW_EDGE_*`）。
   关闭拦截在订阅期间安装 `NSWindowDelegate` 代理：只覆写 `windowShouldClose:`
   （投递 `WINDOW_CLOSE` 并返回 NO），其余选择器经 `forwardingTargetForSelector:`
   转发原 delegate，`respondsToSelector:` 同步声明；原 delegate 允许为 nil。
@@ -996,10 +1004,13 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
   `app/tool/verify_windows.sh`（msvc-wine + MSVC cl）编译 + 链接通过；
   `flutter test test/native_platform_abi_test.dart`（backend.h 契约符号
   无条件性守卫）通过。
-- **尚未迁 / 剩余风险**：macOS 自绘缩放热区仍依赖系统边缘（`start_resize`
-  返回 `APL_ERR_UNSUPPORTED`）；Linux 没有「仅隐藏标题栏、保留系统按钮」的 GTK
+- **已完成（2026-11-27 补齐，同 ABI v10，无契约变化）**：macOS `start_resize` 由本地
+  事件监视器实现自绘缩放热区（见上「macOS」段），不再依赖系统边缘、不再返回
+  `APL_ERR_UNSUPPORTED`；`bash app/tool/verify_macos.sh` arm64 与 x86_64 均编译 + 链接
+  通过（真机热区缩放验收仍待做，见下）。
+- **尚未迁 / 剩余风险**：Linux 没有「仅隐藏标题栏、保留系统按钮」的 GTK
   原生档位，`caption` 降级为无装饰（窗口按钮需自绘）；真正关窗 / 退出仍由 Dart
   的 `quitApplication` → `exit(0)` 完成（桥接刻意不调用 AppKit `closeForTermination`
-  或 Win32 `DestroyWindow`）。macOS 的 delegate 代理与 terminate swizzle 仅做了
-  交叉编译验证，仍需真机跑「关闭按钮 / ⌘Q / 托盘退出 ×20 无崩溃 + 落盘完整」
-  的运行时验收。
+  或 Win32 `DestroyWindow`）。macOS 的 delegate 代理 / terminate swizzle / 新增的
+  `start_resize` 仅做了交叉编译验证，仍需真机跑「关闭按钮 / ⌘Q / 托盘退出 ×20 无崩溃
+  + 落盘完整」以及自绘缩放热区的运行时验收。

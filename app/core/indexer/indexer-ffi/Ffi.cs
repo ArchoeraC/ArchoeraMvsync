@@ -614,8 +614,10 @@ public static unsafe class IndexerFfi
                 return FailJson(outResult, outLen, SearchApiError.Invalid(error, "invalid_options"));
 
             // 重建 / 增量写入前必须释放只读查询会话：Windows 下打开的只读句柄会阻塞
-            // 旧 EraStore 世代文件的清理。
+            // 旧 EraStore 世代文件的清理。随后立刻做一次紧凑回收，把上一个会话的
+            // 倒排缓存 / mmap 视图 / 查询结果从堆里还回去，避免与本次构建的峰值叠加。
             SearchSession.CloseCached();
+            MemoryTrim.TrimAfterBuild();
 
             var engine = new IndexerEngine(onProgress != null
                 ? p => FireProgress(onProgress, p)
@@ -627,8 +629,8 @@ public static unsafe class IndexerFfi
             {
                 var result = engine.Run(dbPathStr, indexPathStr, full != 0, options, cts.Token);
                 SetUtf8(outResult, outLen, IndexerJson.Result(result));
-                // 构建期分析 30k 曲后词库与暂存对象已无用；归还堆段（一次性，≈10 ms）。
-                MemoryTrim.TrimOnce();
+                // 构建期分析 30k 曲后词库与暂存对象已无用；每次构建都归还堆段（≈10–20 ms）。
+                MemoryTrim.TrimAfterBuild();
                 return SearchApiCodes.Ok;
             }
             finally
@@ -816,8 +818,9 @@ public static unsafe class IndexerFfi
 
     /// <summary>
     /// 解析 <c>options_json</c>：未知键忽略；非法 JSON 返回 <c>false</c> 与错误文本。
-    /// 缺省：index_lrc=false、pinyin=true、romaji_lyrics=false、initialsLyrics=false、batch=0。
-    /// 歌词首字母键同时接受 <c>initialsLyrics</c>（Dart 现行）与 <c>initials_lyrics</c>（旧写法）。
+    /// 缺省：index_lrc=false、pinyin=false、lyrics_pinyin=false、romaji_lyrics=false、
+    /// initialsLyrics=false、batch=0。所有派生列默认关闭，由设置页显式开启后重建生效。
+    /// 键名同时接受 <c>lyrics_pinyin</c> / <c>lyricsPinyin</c>、<c>initials_lyrics</c> / <c>initialsLyrics</c>。
     /// </summary>
     internal static bool TryParseOptions(byte* optionsJson, out IndexerOptions options, out string error)
     {
@@ -843,11 +846,18 @@ public static unsafe class IndexerFfi
             if (root.TryGetProperty("pinyin", out var py)
                 && (py.ValueKind == JsonValueKind.True || py.ValueKind == JsonValueKind.False))
                 options.Pinyin = py.GetBoolean();
+            if ((root.TryGetProperty("lyrics_pinyin", out var lyricsPinyin)
+                    || root.TryGetProperty("lyricsPinyin", out lyricsPinyin))
+                && (lyricsPinyin.ValueKind == JsonValueKind.True
+                    || lyricsPinyin.ValueKind == JsonValueKind.False))
+                options.LyricsPinyin = lyricsPinyin.GetBoolean();
             if (root.TryGetProperty("romaji_lyrics", out var romaji)
                 && (romaji.ValueKind == JsonValueKind.True || romaji.ValueKind == JsonValueKind.False))
                 options.RomajiLyrics = romaji.GetBoolean();
             if ((root.TryGetProperty("initialsLyrics", out var initialsLyrics)
-                    || root.TryGetProperty("initials_lyrics", out initialsLyrics))
+                    || root.TryGetProperty("initials_lyrics", out initialsLyrics)
+                    || root.TryGetProperty("lyricsInitials", out initialsLyrics)
+                    || root.TryGetProperty("lyrics_initials", out initialsLyrics))
                 && (initialsLyrics.ValueKind == JsonValueKind.True
                     || initialsLyrics.ValueKind == JsonValueKind.False))
                 options.InitialsLyrics = initialsLyrics.GetBoolean();

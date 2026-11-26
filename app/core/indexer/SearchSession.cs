@@ -377,6 +377,7 @@ internal sealed class SearchSession : IDisposable
             AnalyzerVersion = manifest.Anchors.AnalyzerVersion,
             IndexLrc = Has(EraStore.ManifestOptionsBits.IndexLrc),
             Pinyin = Has(EraStore.ManifestOptionsBits.Pinyin),
+            PinyinLyrics = Has(EraStore.ManifestOptionsBits.LyricsPinyin),
             RomajiLyrics = Has(EraStore.ManifestOptionsBits.RomajiLyrics),
             InitialsLyrics = Has(EraStore.ManifestOptionsBits.InitialsLyrics),
             AppliedGeneration = (long)manifest.Gen,
@@ -1123,6 +1124,13 @@ internal sealed class SearchSession : IDisposable
 
     public void Dispose()
     {
+        // 先把会话内可能较大的缓存引用断开，再释放 mmap：GC 不必等整棵对象图
+        // 自然不可达就能回收（重建 / 增量换世代时立刻生效）。
+        _fuzzyVocabulary = null;
+        _normSegments = null;
+        _cacheIndex.Clear();
+        _cacheOrder.Clear();
         _era?.Dispose();
+        MemoryTrim.Request();
     }
 }

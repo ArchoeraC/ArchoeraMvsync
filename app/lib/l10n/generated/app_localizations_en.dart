@@ -50,6 +50,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'Redraw only active ripple bands; CPU fallback path only';
 
   @override
+  String get settingsMacOSGPU => 'Discrete GPU acceleration';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Auto uses the discrete GPU only when it supports every Metal feature of the integrated GPU; Prefer discrete forces it (may drop to Metal 2, and on AMD the cover color / fluid background fall back). Restart to apply';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Auto (recommended)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Prefer discrete GPU';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'Integrated GPU';
+
+  @override
   String get settingsLyricsEdgeFade => 'Lyrics edge fade';
 
   @override
@@ -4670,7 +4686,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      'Also make lyrics searchable by pinyin initials (e.g. wanzg); turn off to shrink the index (changing this rebuilds the index)';
+      'Also make lyrics searchable by pinyin initials (e.g. wanzg); turn off to shrink the index (takes effect after rebuilding the index)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Index metadata pinyin';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Search titles / artists / albums by pinyin or initials; off by default (takes effect after rebuilding the index)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Index lyrics pinyin';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Search lyrics by pinyin syllables; the largest derived column, off by default (takes effect after rebuilding the index)';
 
   @override
   String get settingsSearchIndexNote =>

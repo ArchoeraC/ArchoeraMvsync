@@ -45,6 +45,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRippleDamageClipDesc => '只重绘活动涟漪波带；仅 CPU 回退路径生效';
 
   @override
+  String get settingsMacOSGPU => '獨立顯卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：獨顯的 Metal 能力不低於集顯時才用獨顯；「優先獨立顯卡」強制使用（可能降到 Metal 2，AMD 獨顯上封面取色 / 流體背景會走兜底）。修改後需重啟應用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推薦）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '優先獨立顯卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '集成顯卡';
+
+  @override
   String get settingsLyricsEdgeFade => '歌词边缘渐隐';
 
   @override
@@ -4451,7 +4467,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）';
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '元数据拼音检索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌词拼音检索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效';
 
   @override
   String get settingsSearchIndexNote =>
@@ -6220,6 +6250,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsRippleDamageClipDesc => '只重绘活动涟漪波带；仅 CPU 回退路径生效';
+
+  @override
+  String get settingsMacOSGPU => '独立显卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自动：独显的 Metal 能力不低于集显时才用独显；「优先独立显卡」强制使用（可能降到 Metal 2，AMD 独显上封面取色 / 流体背景会走兜底）。修改后需重启应用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自动（推荐）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '优先独立显卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '集成显卡';
 
   @override
   String get settingsLyricsEdgeFade => '歌词边缘渐隐';
@@ -10628,7 +10674,21 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（更改后需重建索引）';
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '元数据拼音检索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌词拼音检索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效';
 
   @override
   String get settingsSearchIndexNote =>
@@ -12397,6 +12457,22 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsRippleDamageClipDesc => '只重繪活動漣漪波帶；僅 CPU 回退路徑生效';
+
+  @override
+  String get settingsMacOSGPU => '獨立顯卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：獨顯的 Metal 能力不低於集顯時才用獨顯；「優先獨立顯卡」強制使用（可能降到 Metal 2，AMD 獨顯上封面取色 / 流體背景會走兜底）。修改後需重啟應用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推薦）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '優先獨立顯卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '整合式顯示卡';
 
   @override
   String get settingsLyricsEdgeFade => '歌詞邊緣漸隱';
@@ -16806,7 +16882,21 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      '歌詞也能用拼音首字母搜尋（如 wanzg）；關閉可縮小索引體積（變更後需重建索引）';
+      '歌詞也能用拼音首字母搜尋（如 wanzg）；關閉可縮小索引體積（重建索引後生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '中繼資料拼音檢索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '以拼音或首字母搜尋歌名 / 歌手 / 專輯；預設關閉，重建索引後生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌詞拼音檢索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '以拼音音節搜尋歌詞；歌詞拼音是體積最大的衍生欄位，預設關閉，重建索引後生效';
 
   @override
   String get settingsSearchIndexNote =>

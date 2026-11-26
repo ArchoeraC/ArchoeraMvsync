@@ -890,13 +890,14 @@ void indexer_set_log_sink(void (*sink)(int, const char*, const char*), int min_l
   **不存路径**；查询侧经 `TracksDb.existingTrackIds` 剔除已不在 `library.db` 的陈旧 id，
   再按 id 取行 → 播放路径始终以 scanner 曲库为准（曲目改名 / 移动即新父键，旧文档由增量按
   `seen` 集删除、新文档按脏集加入）。
-  **收敛触发**（P5 补）：`SearchService.reindex()` 除设置页与「`.lrc` 子开关切换」外，
+  **收敛触发**（P5 补）：`SearchService.reindex()` 除设置页「重建索引」外，
   另在**扫描完成且索引已就绪**时由曲库层调用（`library_store_scan.dart`）——否则扫描新增的曲目
   在索引就绪态下搜索不到（索引就绪时查询不再回退 `LIKE`）。总开关关闭 / 未构建时不触发
   （`SearchService.indexReady` 为 false，关闭态零成本）。
-- **设置入口**：总开关 `启用本地曲库搜索索引`（默认关）+ 两个子项 `索引 .lrc 侧车歌词`（默认关）、
-  `生成歌词罗马音索引`（`search.index.romaji_lyrics`，默认关，T2-9；切换触发全量重建）
-  + 动作「重建索引 / 删除索引」。子项仅在总开关开启时可用；关闭时 Dart 侧不打开 `search.db`、
+- **设置入口**：总开关 `启用本地曲库搜索索引`（默认关）+ 派生列子项（**全部默认关、编译内置**）：
+  `索引 .lrc 侧车歌词`、`元数据拼音检索`、`歌词拼音检索`、`歌词首字母检索`、
+  `生成歌词罗马音索引`；子项切换**只写偏好、不自动重建**，现有索引保留并在下次重建时生效。
+  另提供「重建索引 / 删除索引」动作。子项仅在总开关开启时可用；关闭时 Dart 侧不打开 `search.db`、
   不调 `indexer_*` FFI。
 - UI：音乐库搜索框 / 全局搜索接入（排序替换现有 `LIKE`）；沿用 250ms 去抖；总开关关闭时保持现状 `LIKE`。
 - **排行上限 `kSearchIndexRankLimit = 10000`（2026-11-12 量化后保持不动）**：该值只决定

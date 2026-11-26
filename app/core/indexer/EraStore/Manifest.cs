@@ -70,6 +70,12 @@ internal static class ManifestOptionsBits
     /// <c>initials_lyrics_tok</c> 数据，查询侧也不再使用，直到用户显式开启并重建）。
     /// </summary>
     public const int InitialsLyrics = 1 << 7;
+
+    /// <summary>
+    /// 是否写入**歌词拼音**列（<c>pinyin_lyrics_tok</c>，默认关）。
+    /// 与 <see cref="Pinyin"/>（元数据拼音）独立；旧 Manifest 缺该位按关闭处理。
+    /// </summary>
+    public const int LyricsPinyin = 1 << 8;
 }
 
 /// <summary>

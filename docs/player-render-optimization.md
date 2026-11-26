@@ -121,6 +121,8 @@ iGPU 瓶颈 = 填充率 / 显存带宽 / overdraw。原则：
 4. **只用通用特性**：`sampler2D` + 小 uniform 数组；**不用** compute / storage buffer / 大 UBO（iGPU 与老驱动不可靠）。
 5. **不依赖独显能力**：无 MSAA 高倍、无几何/网格着色器、无光追。
 6. 避免高成本 `ImageFilter`：全屏 `sigma 45` 属于红线级，必须降采样或改单 pass 近似。
+7. **这是性能预算基线，不是「必须落在集显」**：效果必须在 iGPU 上不卡，但双显卡
+   Intel Mac 的 GPU 选择由系统决定（见 §3.5），不为了省电主动放弃独显。
 
 ### 3.3 渲染器优先，CPU 仅兜底
 
@@ -144,6 +146,189 @@ iGPU 瓶颈 = 填充率 / 显存带宽 / overdraw。原则：
 - **现状对照**：每帧 `new TextPainter(...).layout()` 属瞬态分配 + GC 抖动；缓存是「有界常驻换 CPU」，
   稳态内存不升反降。对比参考：一张 1024² 封面解码即 4 MB，歌词缓存小一个量级。
 - **校验**：DevTools Memory 实测峰值与常驻，纳入 P1/P4 验收。
+
+### 3.5 macOS 后端：Impeller + Metal（2026-11-27）
+
+> 结论：**macOS 的 Flutter UI 已经是 GPU 渲染，不需要自研 Metal 通道**。Flutter 3.47+
+> 在 macOS 默认启用 Impeller，Impeller 的 macOS 后端就是 **Metal**；本项目使用
+> Flutter 3.50.1，因此默认路径已经是 GPU。但还要分清两件事：**「走 Metal」不等于
+> 「走独显」**——双显卡 Intel Mac 上具体用哪块 GPU，由 WindowServer 按 app 的声明决定。
+
+#### 渲染后端开关
+
+- **契约/开关**：`app/macos/Runner/Info.plist` 显式写 `FLTEnableImpeller=true`。
+  Flutter 官方文档：macOS 3.47 起 Impeller 默认开启，未来会移除 opt-out；禁用方式
+  是在 `Info.plist` 写 `FLTEnableImpeller=false`（我们显式写 true，避免模板复制或
+  依赖升级把 GPU 路径悄悄关掉）。
+- **系统 API**：Metal。Flutter Engine 内部创建 `MTLDevice` / `MTLCommandQueue` /
+  `CAMetalLayer` 并提交命令缓冲；应用侧**不**直接持有 Metal 上下文，也不新增
+  `Metal.framework` 渲染通道（遵守 §7「不为整屏 UI 引入 FFI + 原生 GPU」）。
+- **注意**：App Sandbox 不需要额外的 Metal entitlement；不要给 Runner 增加未定义的
+  `com.apple.security.device.metal`。若未来确实要自研 Metal 特效，再按 §7 的例外流程
+  单独评审（单一特效、不是整屏 UI 通道）。
+
+#### 双显卡：为什么「要求独显却跑在集显上」
+
+macOS 上「用哪块 GPU」有**两层**，缺一层都不行：
+
+1. **WindowServer 用哪块 GPU 驱动屏幕**（合成 / 呈现）——由 app 的
+   `Info.plist` 声明 + 系统「电池 → 自动显卡切换」决定；
+2. **Flutter 引擎用哪块 GPU 渲染**——由引擎内部 `SelectMetalDevice()` 决定，
+   **这一层不受 plist 影响**。
+
+**第 2 层是本次问题的真正原因**：Flutter 的 macOS 嵌入层
+（`shell/platform/darwin/macos/framework/Source/FlutterRenderer.mm`，
+随 [flutter#164569](https://github.com/flutter/flutter/pull/164569) 引入，
+动机是省电 flutter#47822 与绕开 eGPU 拔插崩溃 flutter#163218）**硬编码**：
+
+```objc
+// Attempts to find the integrated GPU backed metal device.
+id<MTLDevice> SelectMetalDevice() {
+  NSArray<id<MTLDevice>>* devices = MTLCopyAllDevices();
+  for (id<MTLDevice> device in devices) {
+    if (device.hasUnifiedMemory) { return device; }   // ← 集显优先
+  }
+  return MTLCreateSystemDefaultDevice();
+}
+```
+
+在双显卡 Intel Mac 上，**Intel 核显** `hasUnifiedMemory == YES`、AMD 独显为
+`NO`，所以引擎永远拿到核显；`MTLCreateSystemDefaultDevice()` 那条回退根本走不到。
+这就是「明明要求高性能 / 独显，实际仍跑在集显上」的完整链路。
+
+##### 开关：设置页「独立显卡加速」（三档）
+
+| 位置 | 当前值 | 说明 |
+| --- | --- | --- |
+| `Info.plist` → `NSSupportsAutomaticGraphicsSwitching` | `true` | **只声明「允许自动切换」**，不把 app 钉死在独显。写 `false` 时，即使选「集成显卡」系统仍会保留独显驱动屏幕，「省电」形同虚设 |
+| 设置页 → 性能 / 渲染 → **独立显卡加速** | 默认 `auto` | 存 `prefs.json` 的 `render.macos_gpu`（`auto` / `discrete` / `integrated`）；`GPUSelection.m` 在**启动时**读取，**改完需重启应用**（引擎在 Flutter 初始化时就选定了 `MTLDevice`）。早期预览版的布尔键 `render.macos_discrete_gpu` 会自动迁移 |
+| 环境变量 `ARCHOERA_MACOS_GPU` | 未设置 | 现场 A/B 用，优先级最高：`auto` / `discrete` / `integrated`（兼容 `default` / `high-performance`，仅终端 / `flutter run` 启动时继承） |
+
+三档语义：
+
+- **自动（默认）**：独显的 Metal 能力**不低于**集显时才用独显，否则保持集显。
+  判定是「独显是否支持集显具备的全部 family」（Mac2 / Common3 / Metal3），
+  不做降级。
+- **优先独立显卡**：强制独显。**可能降级**——例如 2018 款 MacBook Pro 15" 的
+  Intel UHD 630 支持 Metal 3，而 Radeon Pro 555X 只有 Metal 2；Polaris 独显
+  还落在 flutter#196265 的 `toByteData` 全 0 范围内（封面取色 / 流体背景走兜底）。
+- **集成显卡**：始终集显，省电优先。
+
+> 实测参照（System Information）：`Intel UHD Graphics 630` → Metal 3 / 1536 MB 动态
+> 显存；`Radeon Pro 555X` → Metal 2 / 4 GB。**同一台机器上「独显」的 API 级别更低**，
+> 所以默认 `auto` 在这类机器上保持集显，需要独显算力时再手动切「优先独立显卡」。
+
+##### 第 2 层：引擎设备（`GPUSelection.m`）
+
+`app/macos/Runner/GPUSelection.m` 用 dyld 的 `__DATA,__interpose` 段在进程内替换
+两个 C 符号（不改引擎、不打补丁、不加新的 GPU 通道）：
+
+- `MTLCopyAllDevices()`：只保留高性能设备（非 `isLowPower`、非
+  `hasUnifiedMemory`、非 `isRemovable`），让上面的 `for` 循环找不到核显；
+- `MTLCreateSystemDefaultDevice()`：系统默认设备不是高性能设备时，直接返回高性能
+  设备（多独显 / Mac Pro 取工作集最大的一块）。
+
+两端都做「拿不到就原样透传」，因此以下场景行为与 Flutter 默认一致：
+
+- **Apple Silicon / 单核显 Intel**：没有「非低功耗且非统一内存」的设备，直接透传
+  （Apple Silicon 只有一块统一内存 GPU，「独显」概念不成立，开关无效果）；
+- **eGPU**（`isRemovable`）不参与强制选择——Flutter 的做法正是为了绕开 eGPU 拔插
+  崩溃（flutter#163218），这里不倒退；
+- **开关关闭**（或环境变量覆盖）：回到 Flutter 的「优先集显」，由系统按电池 /
+  温度策略决定，省电优先。
+
+- **代价要讲清**：开启时 app 运行期间独显常开（播放器长期挂着 = 明显更耗电、更热）；
+  想省电就在设置页关掉，属**运行期可回退**的取舍，不影响渲染正确性。
+- **跨 GPU 拷贝**：若系统把显示 GPU 留在集显、而引擎在独显渲染，每帧要跨 GPU
+  拷贝（Apple《Selecting device objects for graphics rendering》）。所以 A/B 必须
+  同时看「活动监视器 → 能耗 → 需要高性能 GPU / GPU 历史」与「DevTools raster 帧
+  时间」；若确认存在拷贝，可把 `NSSupportsAutomaticGraphicsSwitching` 设为
+  `false`，让 WindowServer 把显示也钉在独显（代价：关闭开关后仍保留独显）。
+
+##### 探针与验收
+
+- **启动探针**：`app/macos/Runner/MainFlutterWindow.swift` 用
+  `MTLCreateSystemDefaultDevice()` + `MTLCopyAllDevices()` 记录偏好与设备，只读探测、
+  不创建 command queue：
+  `[archoera] GPU[启动]: preference=auto|discrete|integrated, default=AMD Radeon Pro 5500M (lowPower=no, removable=no, unified=no, …); devices(2)=…`
+  另有 `[archoera] macOS GPU preference: <档位> (prefs: …/prefs.json)` 与
+  `[archoera] GPU device: … families=… rwTex=… buf=…MB` 说明偏好来源与各设备能力；**启动时必须看到 `[archoera] GPU interpose active
+  (MTLCopyAllDevices / MTLCreateSystemDefaultDevice)`**——没有这行就说明 dyld 没应用
+  interpose（自签名 / 加固运行时差异），此时第 2 层等于没生效，只能改用自编译引擎。
+  选 `discrete` 却拿到 `lowPower=yes` 时会额外打印 WARNING（interpose 未生效）；
+  `auto` 档因「独显只有 Metal 2」而保持集显时，会打印
+  `GPU auto: 独显 … 缺少集显 … 的部分 Metal family，保持集显`。
+- **运行期切换**：同时监听 `NSApplication.didChangeScreenParametersNotification` 与
+  `NSWindow.didChangeScreenNotification`（外接屏插拔 / 系统换 GPU 驱动屏幕），
+  每次变化重新记录一次，便于确认「播放中被系统切回集显」。
+- **真机验收**：
+  1. `flutter run -d macos --verbose 2>&1 | grep -iE "impeller|metal"`，应看到
+     `Using the Impeller rendering backend (Metal)`；
+  2. Console.app 过滤 `archoera`，双显卡机应看到 `preference=discrete`、
+     `default=… lowPower=no` 与 `GPU interpose active`；
+  3. 活动监视器 → 能耗 → 「需要高性能 GPU」列，本 app 应为「是」；GPU 历史里应看到
+     AMD 独显有占用；
+  4. DevTools Performance 看 **raster** 线程，确认不是软件回退（软件回退时 raster
+     会显著变慢、CPU 占用上升）；三档（自动 / 优先独显 / 集成）各跑一次做 A/B。
+- **守卫**：`app/test/macos_impeller_config_test.dart`（纯文本，三端 CI 可跑）断言
+  `FLTEnableImpeller=true`、`NSSupportsAutomaticGraphicsSwitching` 不为 `false`、
+  Runner 的 Metal 探针与运行期监听、`GPUSelection.m` 的 interpose 段与逃生口、
+  该文件确实加入 Runner target 的 Sources 阶段（漏加 = 静默不生效），以及
+  Dart 偏好键与原生读取的 JSON 键完全一致。
+
+##### 核显 / 独显不是同一套 Metal 能力
+
+两块 GPU 的 Metal **能力集与上限不同**，换到独显后所有 Metal 相关行为都要重新验证：
+
+| 维度 | 典型差异 |
+| --- | --- |
+| GPU family | 同为 Mac2 起步，但独显才常见 `MTLGPUFamilyMetal3`；不能用「独显 ⊇ 集显」假设 |
+| 上限 | `maxBufferLength`、`maxThreadgroupMemoryLength`、纹理尺寸上限各不相同 |
+| 特性 tier | `readWriteTextureSupport`（none/tier1/tier2）、`argumentBuffersSupport`（tier1/tier2） |
+| 内存模型 | 集显统一内存（`hasUnifiedMemory`/`isLowPower`），独显独立显存（`recommendedMaxWorkingSetSize` 是显存预算） |
+| 对象生命周期 | `MTLTexture` / 管线状态绑定 device，**不能跨设备复用**；shader / 管线按设备编译 |
+
+对应处理：
+
+- **选设备有门槛**：只强选满足 `MTLGPUFamilyMac2` 的高性能设备；`auto` 档还要求
+  独显支持集显具备的**全部** family（`ArchoeraSupportsAllFamilies`），否则保持集显
+  ——不为了「用独显」而挑一块能力更弱的卡。
+- **能力落日志**：首次选设备时打印每块 GPU 的
+  `families=Mac2,Metal3 rwTex=tier2 argBuf=tier2 buf=…MB tgMem=…KB`
+  （`[archoera] GPU device: …`），并在「独显缺少集显具备的 Metal3」时打 WARNING
+  （`auto` 档此时会自动保持集显，并在日志里说明原因）。
+- **读回兜底**：`Image.toByteData` 在部分 AMD 独显上会全 0
+  （flutter#196265 Radeon Pro 560X、flutter#195402 缺 `synchronizeResource`）。
+  `lib/services/render/gpu_readback.dart` 的 `isBlankReadback()` 用「全 0（含 alpha）」
+  与「真正的纯黑封面（alpha=255）」区分，封面取色 / 亮度采样 / 流体背景三条链路
+  均已接线：读回失败时回退默认主色、保留用户遮罩、退回非流体背景，不会把界面画成纯黑。
+- **shader / 特效**：Impeller 的 shader 按设备编译，`FragmentProgram`（水纹 / 流体）
+  在独显上若编译失败，现有回退阶梯（CPU 网格 / 非流体背景）继续生效；
+  A/B 时两块 GPU 都要看播放页效果，不能只看「GPU 占用上去了」。
+
+真机验证（开启 / 关闭「独立显卡加速」各跑一次）：
+
+1. 日志里两块 GPU 的 `families` / `rwTex` / `buf` 是否如预期，有无 WARNING；
+2. 封面取色（主题色跟随封面）、背景遮罩自动抬升、流体背景都正常，不出现纯黑；
+3. 播放页水纹 / 歌词滚动帧时间（DevTools raster）无回退。
+
+#### x86_64（Intel Mac）补充
+
+- **同一套路径**：`FLTEnableImpeller` 与 Metal 后端都是架构无关的；x86_64 的
+  `FlutterMacOS.framework` 在 Flutter 3.50 仍随包分发，`Info.plist` 配置对 arm64 /
+  x86_64 同时生效，不需要第二份 plist 或架构分支。
+- **Metal 能力**：项目 macOS 部署目标是 14.0；所有官方支持 macOS 14 的 Intel Mac
+  都有 Metal 2/3 GPU（Intel iGPU 或 AMD dGPU）。`MTLCreateSystemDefaultDevice()`
+  在 Intel 上同样返回设备，`hasUnifiedMemory` 可区分共享内存 / 独显显存。
+- **已知风险**：Flutter 对 Intel Mac 进入维护 / 弃用窗口；Impeller 在部分 Intel
+  机器上仍有已登记问题（例如图片网格滚动整窗闪烁 flutter#191538、eGPU 崩溃
+  flutter#163218）。因此 x86_64 包发版前必须做真机冒烟：
+  1. 全屏播放页 / 图片网格滚动 / 歌词滚动；
+  2. `Console` 看 GPU 日志与是否出现软件回退；
+  3. 若某台 Intel 机器出现 Impeller 专属渲染问题，临时把该构建的
+     `FLTEnableImpeller` 设为 `false` 作为止损（会回退软件渲染，不能作为默认）。
+- **打包**：`packaging/macos/build-release.sh --arch x86_64` 已有架构守卫；GPU
+  配置不改变 Mach-O 架构，也不需要额外框架链接（Swift `import Metal` 自动链接）。
 
 ---
 
@@ -476,6 +661,7 @@ ARCHOERA_COVER_MASK=off       # 跳过全屏封面右缘渗入遮罩（仅诊断
 | **P3 ✅** | 频谱：单 Path 批量 + 渐隐并入画笔 | 无 `ShaderMask` 离屏层；三样式冒烟测试绿 |
 | **P4** | 逐字符精灵图集（公开 API 限制，见 §4.2；待 P1–P3 实测后定） | 歌词区 UI 线程≈常数（与行数弱相关） |
 | **P5** | 自适应画质 + 档位 | **部分✅（2026-11-03）**：`QualityGovernor` 接线——涟漪/流体 `renderScale` 按档位降采样、频谱降重绘频率（不关闭）；默认开启。歌词失焦仍由 `LyricsBlurBudget` 独立守卫。**真机验证待做** |
+| **P6 ✅（配置）** | macOS：Impeller（Metal）+ 显卡三档（自动 / 优先独显 / 集成） | 2026-11-27：`Info.plist` 显式 `FLTEnableImpeller=true`；设置页「独立显卡加速」三档（存 `prefs.json` 的 `render.macos_gpu`，默认 `auto` = 独显 family 不低于集显才用独显）→ `GPUSelection.m` 用 dyld interpose 覆盖引擎硬编码的「优先集显」（flutter#164569）；设备能力日志 + `MTLGPUFamilyMac2` 门槛 + `ARCHOERA_MACOS_GPU` 逃生口；AMD 独显 `toByteData` 全 0 的三处兜底；Runner Metal 探针 + 换屏监听；`macos_impeller_config_test.dart` 守卫；真机三档 A/B（GPU 占用 + raster）待跑 |
 
 > 顺序原则：**先 P1（收益最大且不依赖渲染后端）→ 再 P2**；P3 随时可插；P4/P5 视 P1/P2 后剩余瓶颈决定。
 

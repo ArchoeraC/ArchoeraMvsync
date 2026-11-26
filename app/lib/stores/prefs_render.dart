@@ -15,6 +15,24 @@ const rippleDamageClipKey = 'render.rippleDamageClip';
 const lyricsEdgeFadeKey = 'render.lyricsEdgeFade';
 const renderFpsKey = 'render.fpsCap';
 
+/// macOS 显卡选择键（三档，见 docs/player-render-optimization.md §3.5）。
+///
+/// Flutter 引擎在 macOS 上硬编码「优先集显」（`FlutterRenderer.mm` 的
+/// `SelectMetalDevice()`，flutter#164569），Runner 的 `GPUSelection.m` 用
+/// dyld interpose 改写 `MTLCopyAllDevices` / `MTLCreateSystemDefaultDevice`。
+/// 该文件在**启动时**直接读 `prefs.json` 的同一个键，因此修改后必须重启应用
+/// 才生效；Apple Silicon 只有一块统一内存 GPU，本项不产生行为差异。
+const macosGPUKey = 'render.macos_gpu';
+
+/// 旧布尔键（早期预览版写过）。仅用于迁移到 [macosGPUKey]。
+const legacyMacosDiscreteGPUKey = 'render.macos_discrete_gpu';
+
+/// `auto`：独显的 Metal 能力**不低于**集显时才用独显（否则保持集显）；
+/// `discrete`：强制独显（可能降级，例如 Metal 3 集显 + Metal 2 独显）；
+/// `integrated`：始终集显（省电）。
+const String defaultMacosGPU = 'auto';
+const Set<String> macosGPUValues = {'auto', 'discrete', 'integrated'};
+
 /// 渲染帧数上限的可调范围（设置页滑块）。
 const int kRenderFpsMin = 30;
 const int kRenderFpsMax = 165;
@@ -98,6 +116,26 @@ extension RenderPrefs on AppPrefs {
       lyricsEdgeFadeKey: lyricsEdgeFadeValues.contains(value)
           ? value
           : defaultLyricsEdgeFade,
+    },
+  );
+
+  /// macOS 显卡选择（`auto` / `discrete` / `integrated`，默认 `auto`）。
+  ///
+  /// 只影响**下一次启动**：引擎在 Flutter 初始化时就选定了 `MTLDevice`。
+  /// 非法值回退默认；早期布尔键（`true`/`false`）按 `discrete`/`integrated` 迁移。
+  String get macosGPU {
+    final v = data[macosGPUKey];
+    if (v is String && macosGPUValues.contains(v)) return v;
+    final legacy = data[legacyMacosDiscreteGPUKey];
+    if (legacy is bool) return legacy ? 'discrete' : 'integrated';
+    return defaultMacosGPU;
+  }
+
+  /// 设置 macOS 显卡选择（非法值回退默认；重启后生效）。
+  AppPrefs copyWithMacosGPU(String value) => AppPrefs(
+    initialData: {
+      ...data,
+      macosGPUKey: macosGPUValues.contains(value) ? value : defaultMacosGPU,
     },
   );
 

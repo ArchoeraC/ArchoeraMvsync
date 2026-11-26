@@ -17,6 +17,7 @@ internal static class EraStorePostingsTests
         SingleBlockRoundTrip();
         TfExceptionTable();
         MultiBlockAndAdvance();
+        DocsPacked();
         PositionDeltas();
         PostingsCorruption();
         GoldenQingTian();
@@ -64,7 +65,20 @@ internal static class EraStorePostingsTests
         for (var i = 0; i < entries.Length; i++)
             entries[i] = new PostingEntry(i, i == 5 ? 3 : 1, null);
 
-        var (postings, positions) = Write(entries);
+        // 强制 varint doc 序列 + 满 16B 位图，逐字节保持 O11 之前的布局。
+        byte[] postings;
+        byte[] positions;
+        try
+        {
+            PostingsWriter.DebugForceDocsPacked = false;
+            PostingsWriter.DebugForceFullBitmap = true;
+            (postings, positions) = Write(entries);
+        }
+        finally
+        {
+            PostingsWriter.DebugForceDocsPacked = null;
+            PostingsWriter.DebugForceFullBitmap = false;
+        }
         var reader = new PostingsReader(postings, positions);
 
         // 块头 14 + 位图 16 + 10 条 doc（各 1B）+ 例外（index 1B + tf 1B）+ pos_off 4。
@@ -112,6 +126,93 @@ internal static class EraStorePostingsTests
             $"{advanced}/{cursor.CurrentDoc}");
         Program.Check("倒排多块: Advance(9999) 耗尽", !cursor.Advance(9999),
             cursor.CurrentDoc.ToString());
+    }
+
+    /// <summary>
+    /// O11：doc 序列按块位打包（Δ LSB-first）+ 自动选择较小块体；稀疏 / 单点 / 大 Δ 往返；
+    /// 强制 varint 与强制 packed 的逐字节断言；未知 flags 位被拒。
+    /// </summary>
+    private static void DocsPacked()
+    {
+        // 10 条连续 doc（Δ=1）：varint 10B vs packed 1(width)+2 = 3B → 自动 packed。
+        var entries = new PostingEntry[10];
+        for (var i = 0; i < entries.Length; i++)
+            entries[i] = new PostingEntry(i, 1, null);
+
+        var (postings, positions) = Write(entries);
+        var flags = postings[8];
+        Program.Check("doc 位打包: 自动选择 packed", (flags & 0x02) != 0, $"flags=0x{flags:X2}");
+        Program.Check("doc 位打包: tf 位图裁剪", (flags & 0x04) != 0, $"flags=0x{flags:X2}");
+        Program.Check("doc 位打包: 块长 23B", postings.Length == 23, postings.Length.ToString());
+        // 14 头 + 2 位图（bit0..9）+ width=1 + 打包 Δ[0,1×9] = FE 03 + pos_off 4。
+        Program.Check("doc 位打包: 块体逐字节",
+            Convert.ToHexString(postings.AsSpan(16)) == "01FE0300000000",
+            Convert.ToHexString(postings.AsSpan(16)));
+
+        var decoded = new PostingsReader(postings, positions).DecodeAll(0, 10);
+        var ok = decoded.Count == 10;
+        for (var i = 0; i < decoded.Count && ok; i++) ok = decoded[i].Doc == i;
+        Program.Check("doc 位打包: 往返", ok, decoded.Count.ToString());
+
+        // 强制 varint：同上输入，doc 序列 10B。
+        try
+        {
+            PostingsWriter.DebugForceDocsPacked = false;
+            (postings, positions) = Write(entries);
+        }
+        finally
+        {
+            PostingsWriter.DebugForceDocsPacked = null;
+        }
+        Program.Check("doc 位打包: 强制 varint 块长 30B", postings.Length == 30,
+            postings.Length.ToString());
+        Program.Check("doc 位打包: 强制 varint flags 仅裁剪位",
+            postings[8] == 0x04, $"flags=0x{postings[8]:X2}");
+        Program.Check("doc 位打包: 强制 varint 往返",
+            new PostingsReader(postings, positions).DecodeAll(0, 10)
+                .Select(e => e.Doc).SequenceEqual(Enumerable.Range(0, 10)));
+
+        // 稀疏 / 单点 0 / 大 Δ：宽 31 时 packed 可能更大 → 自动回落 varint；两者都能往返。
+        var sparse = new[] { new PostingEntry(0, 1, null), new PostingEntry(5, 1, null),
+            new PostingEntry(100, 1, null), new PostingEntry(int.MaxValue - 1, 1, null) };
+        (postings, positions) = Write(sparse);
+        Program.Check("doc 位打包: 稀疏大 Δ 自动回落 varint", (postings[8] & 0x02) == 0,
+            $"flags=0x{postings[8]:X2}");
+        Program.Check("doc 位打包: 稀疏大 Δ 往返",
+            new PostingsReader(postings, positions).DecodeAll(0, 4)
+                .Select(e => e.Doc).SequenceEqual(sparse.Select(e => e.Doc)));
+
+        // 强制 packed + 单个 doc 0 → width=0、打包 0 字节。
+        try
+        {
+            PostingsWriter.DebugForceDocsPacked = true;
+            (postings, positions) = Write(new[] { new PostingEntry(0, 1, null) });
+        }
+        finally
+        {
+            PostingsWriter.DebugForceDocsPacked = null;
+        }
+        Program.Check("doc 位打包: 单 doc 0 width=0",
+            postings[8] == 0x06 && postings[15] == 0,
+            $"flags=0x{postings[8]:X2} width={postings[15]}");
+        Program.Check("doc 位打包: 单 doc 0 往返",
+            new PostingsReader(postings, positions).DecodeAll(0, 1)[0].Doc == 0);
+
+        // 未知 flags 位 0x08：重算 CRC 后仍必须拒绝。
+        var bad = (byte[])postings.Clone();
+        bad[8] |= 0x08;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+            bad.AsSpan(9, 4), Crc32C.Compute(bad.AsSpan(14)));
+        var threw = false;
+        try
+        {
+            _ = new PostingsReader(bad, positions).DecodeAll(0, 1);
+        }
+        catch (InvalidDataException)
+        {
+            threw = true;
+        }
+        Program.Check("doc 位打包: 未知 flags 位被拒", threw);
     }
 
     /// <summary>位置 Δ 编码往返 [0,2,5,9]；O8 自动选位打包，强制 varint 时逐字节不变。</summary>
@@ -177,7 +278,18 @@ internal static class EraStorePostingsTests
             new PostingEntry(0, 1, new[] { 0 }),
             new PostingEntry(1, 1, new[] { 0 }),
         };
-        var (postings, positions) = Write(entries);
+        byte[] postings;
+        byte[] positions;
+        try
+        {
+            // 黄金夹具保留 O11 之前的 16B 满位图布局。
+            PostingsWriter.DebugForceFullBitmap = true;
+            (postings, positions) = Write(entries);
+        }
+        finally
+        {
+            PostingsWriter.DebugForceFullBitmap = false;
+        }
 
         Program.Check("倒排黄金: 段长 36B", postings.Length == 36, postings.Length.ToString());
         Program.Check("位置黄金: 段长 18B", positions.Length == 18, positions.Length.ToString());

@@ -50,6 +50,22 @@ class AppLocalizationsDe extends AppLocalizations {
       'Nur aktive Ripple-Bänder neu zeichnen; nur CPU-Fallback';
 
   @override
+  String get settingsMacOSGPU => 'Dedizierte GPU-Beschleunigung';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Auto nutzt die dedizierte GPU nur, wenn sie alle Metal-Funktionen der integrierten GPU unterstützt; Dediziert bevorzugen erzwingt sie (ggf. nur Metal 2, bei AMD mit Ersatz für Coverfarbe/Fluid-Hintergrund). Neustart erforderlich';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Automatisch (empfohlen)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Dedizierte GPU bevorzugen';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'Integrierte GPU';
+
+  @override
   String get settingsLyricsEdgeFade => 'Lyrics-Randausblendung';
 
   @override
@@ -4719,7 +4735,21 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsSearchIndexInitialsDesc =>
-      'Liedtexte auch über Pinyin-Initialen durchsuchbar machen (z. B. wanzg); ausschalten verkleinert den Index (Änderung erfordert Neuaufbau)';
+      'Liedtexte auch über Pinyin-Initialen durchsuchbar machen (z. B. wanzg); ausschalten verkleinert den Index (wirkt nach dem Neuaufbau)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Metadaten-Pinyin indexieren';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Titel / Interpreten / Alben nach Pinyin oder Initialen durchsuchen; standardmäßig aus (wirkt nach dem Neuaufbau des Index)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Liedtext-Pinyin indexieren';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Liedtexte nach Pinyin-Silben durchsuchen; größte abgeleitete Spalte, standardmäßig aus (wirkt nach dem Neuaufbau)';
 
   @override
   String get settingsSearchIndexNote =>

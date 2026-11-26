@@ -66,14 +66,15 @@ internal static class IndexCapabilities
         if (meta.Pinyin)
         {
             caps.Add(PhoneticMeta);
-            caps.Add(PhoneticLyricsPinyin);
             // v15 起首字母列才是 bigram。旧索引（analyzer < 15）首字母是整段一个 token，
             // 中间首字母查不到，不能声明该能力（T3.9：不谎报）。
             if (meta.AnalyzerVersion >= Analyzer.InitialsBigramMinVersion) caps.Add(InitialsBigram);
         }
-        // 歌词首字母是独立能力（T3.4 V4）：关闭时列内容为空，不能宣称可用，
-        // 否则方案协商会以为「歌词首字母」可召回。元数据首字母不受影响。
-        if (meta.Pinyin && meta.InitialsLyrics) caps.Add(InitialsLyrics);
+        // 歌词拼音与元数据拼音独立：只有构建时显式开启（Manifest 位）才声明可用。
+        if (meta.PinyinLyrics) caps.Add(PhoneticLyricsPinyin);
+        // 歌词首字母是独立能力（T3.4 V4）：关闭时列内容为空，不能宣称可用；
+        // 与拼音列无关（首字母由 CJK 段直接产生）。
+        if (meta.InitialsLyrics) caps.Add(InitialsLyrics);
         if (meta.HasJapanese || meta.HasKorean) caps.Add(Readings);
         return caps;
     }
