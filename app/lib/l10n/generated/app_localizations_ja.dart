@@ -4577,6 +4577,68 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsSearchIndexRebuildStarted => '索引の再構築を開始しました';
 
   @override
+  String get settingsSearchIndexDiagVersions => 'インデックスの世代とバージョン';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'スキーマ $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'アナライザー $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '検索データパック';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'パック $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'インデックスと一致';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '別のパックで構築';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '欠落';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基盤テーブル正常';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基盤テーブル欠落';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '低下した機能 $count 件';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌詞の信頼度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · なし $none';
+  }
+
+  @override
   String get libraryFullScan => '全件スキャン';
 
   @override

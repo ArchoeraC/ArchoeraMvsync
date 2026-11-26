@@ -4519,6 +4519,68 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSearchIndexRebuildStarted => '已开始重建索引';
 
   @override
+  String get settingsSearchIndexDiagVersions => '索引世代与版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜索数据包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '数据包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '与索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它数据包构建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基础表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基础表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降级能力 $count 项';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌词置信度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 无 $none';
+  }
+
+  @override
   String get libraryFullScan => '全量扫描';
 
   @override
@@ -10694,6 +10756,68 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexRebuildStarted => '已开始重建索引';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '索引世代与版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜索数据包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '数据包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '与索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它数据包构建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基础表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基础表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降级能力 $count 项';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌词置信度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 无 $none';
+  }
 
   @override
   String get libraryFullScan => '全量扫描';
@@ -16872,6 +16996,68 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexRebuildStarted => '已開始重建索引';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '索引世代與版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜尋資料包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '資料包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '與索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它資料包構建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基礎表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基礎表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降級能力 $count 項';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌詞信賴度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 無 $none';
+  }
 
   @override
   String get libraryFullScan => '全量掃描';
