@@ -14,10 +14,13 @@
 #include <cstring>
 
 namespace {
+// v9：APL_EVENT_WINDOW_STATE 增加 flags（最小化/前台/最大化/全屏/隐藏），
+// `u.window` 由 8 字节扩到 12 字节（仍在 16 字节 union 内，AplEvent 布局不变）；
+// 窗口状态改为三端原生事件驱动，Dart 不再用 window_manager 监听。
 // v8：新增 APL_EVENT_SESSION_END / APL_CAP_SESSION_END（系统关机/注销事件；
 // 向后兼容的加法，但事件常量与能力位属于同一契约，版本号同步抬升）。
 // v7：移除 apl_open_url / APL_CAP_OPEN_URL（破坏性 ABI 变更，2026-11-09）。
-constexpr int32_t kAbiVersion = 8;
+constexpr int32_t kAbiVersion = 9;
 
 // SEC-31：reveal 路径输入契约——仅接受应用内已解析的**绝对本地路径**。
 // 拒绝空串、URI（`scheme://`，含 `file://`/`http://`）与相对路径；C 串天然在 NUL 截断。

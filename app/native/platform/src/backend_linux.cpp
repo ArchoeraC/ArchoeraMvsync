@@ -990,6 +990,7 @@ void* g_gtk = nullptr;
 void* g_gdk = nullptr;
 void* g_glib = nullptr;
 void* g_gio = nullptr;
+void* g_gobject = nullptr;
 bool g_loaded = false;
 
 // 用 g_idle_add 延后到主循环空闲执行：g_main_context_invoke 会同步调用，
@@ -998,6 +999,12 @@ bool g_loaded = false;
 unsigned (*g_idle_add)(int (*)(void*), void*) = nullptr;
 unsigned (*g_timeout_add)(unsigned, int (*)(void*), void*) = nullptr;
 int (*g_source_remove)(unsigned) = nullptr;
+// GTK 信号（事件驱动；替代 500ms 轮询）。用 dlopen 的 gobject 符号连接，
+// 不引入编译期 GTK 头依赖（与现有 dlopen 策略一致）。
+unsigned long (*g_signal_connect_data)(void* instance, const char* signal,
+                                       void* handler, void* data,
+                                       void* destroy, int flags) = nullptr;
+void (*g_signal_handler_disconnect)(void* instance, unsigned long id) = nullptr;
 // 取窗口：优先应用自身窗口列表（gtk_application_get_windows，官方 API，列表归
 // application 所有、无需释放）；避免 gtk_window_list_toplevels() 遍历全局顶层
 // 窗口列表（实测会陷入无上限遍历，导致主线程 100% CPU + 内存暴涨卡死）。
@@ -1005,15 +1012,23 @@ void* (*g_application_get_default)() = nullptr;
 void* (*gtk_application_get_windows)(void*) = nullptr;
 int (*gtk_widget_get_visible)(void*) = nullptr;
 int (*gtk_window_is_active)(void*) = nullptr;
+int (*gtk_window_is_maximized)(void*) = nullptr;
+int (*gtk_window_is_fullscreen)(void*) = nullptr;
 void* (*gtk_widget_get_window)(void*) = nullptr;
 int (*gdk_window_get_state)(void*) = nullptr;
 void (*gtk_window_present)(void*) = nullptr;
 
 void* g_win = nullptr;
-unsigned g_timer = 0;
+unsigned g_timer = 0;      // 信号不可用时的轮询兜底
+unsigned g_retry = 0;      // 启动早期窗口尚未创建时的重试 source
+unsigned long g_handlers[8] = {};
+int g_handler_count = 0;
 std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_minimized{false};
 std::atomic<bool> g_focused{true};
+std::atomic<bool> g_maximized{false};
+std::atomic<bool> g_fullscreen{false};
+std::atomic<bool> g_hidden{false};
 
 template <typename T>
 T sym(void* handle, const char* name) {
@@ -1031,10 +1046,16 @@ bool load() {
     g_gio = dlopen("libgio-2.0.so.0", RTLD_NOW);
     if (g_gio == nullptr) g_gio = dlopen(nullptr, RTLD_NOW);
     if (g_gio == nullptr) g_gio = g_gtk;
+    g_gobject = dlopen("libgobject-2.0.so.0", RTLD_NOW);
+    if (g_gobject == nullptr) g_gobject = g_gtk;
     if (g_gtk == nullptr || g_glib == nullptr) return false;
     g_idle_add = sym<decltype(g_idle_add)>(g_glib, "g_idle_add");
     g_timeout_add = sym<decltype(g_timeout_add)>(g_glib, "g_timeout_add");
     g_source_remove = sym<decltype(g_source_remove)>(g_glib, "g_source_remove");
+    g_signal_connect_data = sym<decltype(g_signal_connect_data)>(
+        g_gobject, "g_signal_connect_data");
+    g_signal_handler_disconnect = sym<decltype(g_signal_handler_disconnect)>(
+        g_gobject, "g_signal_handler_disconnect");
     g_application_get_default = sym<decltype(g_application_get_default)>(
         g_gio, "g_application_get_default");
     gtk_application_get_windows = sym<decltype(gtk_application_get_windows)>(
@@ -1043,6 +1064,10 @@ bool load() {
         g_gtk, "gtk_widget_get_visible");
     gtk_window_is_active = sym<decltype(gtk_window_is_active)>(
         g_gtk, "gtk_window_is_active");
+    gtk_window_is_maximized = sym<decltype(gtk_window_is_maximized)>(
+        g_gtk, "gtk_window_is_maximized");
+    gtk_window_is_fullscreen = sym<decltype(gtk_window_is_fullscreen)>(
+        g_gtk, "gtk_window_is_fullscreen");
     gtk_widget_get_window = sym<decltype(gtk_widget_get_window)>(
         g_gtk, "gtk_widget_get_window");
     gdk_window_get_state = sym<decltype(gdk_window_get_state)>(
@@ -1100,10 +1125,15 @@ void activate() {
 
 void emit() {
     if (!g_enabled.load(std::memory_order_acquire)) return;
-    dispatch(makeWindowState(g_minimized.load(std::memory_order_acquire),
-                             g_focused.load(std::memory_order_acquire)));
+    dispatch(makeWindowState(
+        g_minimized.load(std::memory_order_acquire),
+        g_focused.load(std::memory_order_acquire),
+        g_maximized.load(std::memory_order_acquire),
+        g_fullscreen.load(std::memory_order_acquire),
+        g_hidden.load(std::memory_order_acquire)));
 }
 
+// 从 GTK/GDK 读取完整窗口状态；信号回调与轮询兜底共用。
 int poll(void*) {
     if (g_win == nullptr) return 1;  // G_SOURCE_CONTINUE
     const bool active = gtk_window_is_active(g_win) != 0;
@@ -1112,13 +1142,65 @@ int poll(void*) {
     if (gdkwin != nullptr) {
         minimized = (gdk_window_get_state(gdkwin) & kGdkStateIconified) != 0;
     }
+    const bool hidden = gtk_widget_get_visible(g_win) == 0;
+    const bool maximized =
+        gtk_window_is_maximized != nullptr && gtk_window_is_maximized(g_win) != 0;
+    const bool fullscreen = gtk_window_is_fullscreen != nullptr &&
+                            gtk_window_is_fullscreen(g_win) != 0;
     if (active != g_focused.load(std::memory_order_acquire) ||
-        minimized != g_minimized.load(std::memory_order_acquire)) {
+        minimized != g_minimized.load(std::memory_order_acquire) ||
+        hidden != g_hidden.load(std::memory_order_acquire) ||
+        maximized != g_maximized.load(std::memory_order_acquire) ||
+        fullscreen != g_fullscreen.load(std::memory_order_acquire)) {
         g_focused.store(active, std::memory_order_release);
         g_minimized.store(minimized, std::memory_order_release);
+        g_hidden.store(hidden, std::memory_order_release);
+        g_maximized.store(maximized, std::memory_order_release);
+        g_fullscreen.store(fullscreen, std::memory_order_release);
         emit();
     }
-    return 1;
+    return 1;  // G_SOURCE_CONTINUE
+}
+
+// GTK 事件信号：只作「状态可能变化」的触发，真实状态仍由 poll 查询。
+// 返回值 FALSE 让 GTK 继续默认处理（不吞掉聚焦/状态事件）。
+int onStateSignal(void*, void*, void*) {
+    poll(nullptr);
+    return 0;
+}
+
+int onVisibilitySignal(void*, void*) {
+    poll(nullptr);
+    return 0;
+}
+
+void connectSignals() {
+    if (g_win == nullptr || g_signal_connect_data == nullptr ||
+        g_signal_handler_disconnect == nullptr || g_handler_count > 0) {
+        return;
+    }
+    auto add = [](const char* name, void* handler) {
+        if (g_handler_count >= 8) return;
+        g_handlers[g_handler_count++] = g_signal_connect_data(
+            g_win, name, handler, nullptr, nullptr, 0);
+    };
+    // 事件驱动的焦点 / 状态变化（最大化 / 全屏 / 图标化都走 window-state-event）。
+    add("focus-in-event", reinterpret_cast<void*>(&onStateSignal));
+    add("focus-out-event", reinterpret_cast<void*>(&onStateSignal));
+    add("window-state-event", reinterpret_cast<void*>(&onStateSignal));
+    add("configure-event", reinterpret_cast<void*>(&onStateSignal));
+    // 显示 / 隐藏（托盘隐藏、最小化到托盘）：GTK show/hide 信号无事件参数。
+    add("show", reinterpret_cast<void*>(&onVisibilitySignal));
+    add("hide", reinterpret_cast<void*>(&onVisibilitySignal));
+}
+
+void disconnectSignals() {
+    if (g_win != nullptr && g_signal_handler_disconnect != nullptr) {
+        for (int i = 0; i < g_handler_count; i++) {
+            g_signal_handler_disconnect(g_win, g_handlers[i]);
+        }
+    }
+    g_handler_count = 0;
 }
 
 int setupOnMainThread(void*) {
@@ -1127,26 +1209,41 @@ int setupOnMainThread(void*) {
         GList* next;
         GList* prev;
     };
-    void* app = g_application_get_default != nullptr
-                    ? g_application_get_default()
-                    : nullptr;
-    if (app != nullptr) {
-        // 应用自身窗口列表（按最近聚焦排序，首元素为当前聚焦窗口）；列表归
-        // application 所有，只读、不可修改/释放。
-        auto* it = static_cast<GList*>(gtk_application_get_windows(app));
-        while (it != nullptr) {
-            void* win = it->data;
-            if (win != nullptr && gtk_widget_get_visible(win) != 0) {
-                g_win = win;
-                break;
+    // 本次调用消耗掉调度它的 source（idle 或上一次 retry timeout）；失败时
+    // 重新挂一个新的 timeout，返回 0 只移除当前 source，不影响新挂的。
+    g_retry = 0;
+    if (g_win == nullptr) {
+        void* app = g_application_get_default != nullptr
+                        ? g_application_get_default()
+                        : nullptr;
+        if (app != nullptr) {
+            // 应用自身窗口列表（按最近聚焦排序，首元素为当前聚焦窗口）；列表归
+            // application 所有，只读、不可修改/释放。
+            auto* it = static_cast<GList*>(gtk_application_get_windows(app));
+            while (it != nullptr) {
+                void* win = it->data;
+                if (win != nullptr && gtk_widget_get_visible(win) != 0) {
+                    g_win = win;
+                    break;
+                }
+                it = it->next;
             }
-            it = it->next;
         }
     }
-    if (g_win == nullptr) return 0;  // G_SOURCE_REMOVE
+    if (g_win == nullptr) {
+        // 启动早期窗口还没创建：每 500ms 重试，而不是永久静默（旧实现直接
+        // G_SOURCE_REMOVE，桥接之后再也没事件）。该 source 由 setEvents(false) 撤销。
+        if (g_retry == 0) g_retry = g_timeout_add(500, setupOnMainThread, nullptr);
+        return 0;  // 本次 timeout 结束；下一次在 g_retry 里继续
+    }
+    g_retry = 0;
+    connectSignals();
     poll(nullptr);
-    if (g_timer == 0) g_timer = g_timeout_add(500, poll, nullptr);
-    return 0;  // G_SOURCE_REMOVE
+    // 信号可用时不装轮询；仅当 gobject 缺失（极少见的裁剪环境）保留兜底。
+    if (g_handler_count == 0 && g_timer == 0) {
+        g_timer = g_timeout_add(500, poll, nullptr);
+    }
+    return 0;  // G_SOURCE_REMOVE（若作为重试 timeout，找到窗口后自然停止）
 }
 
 int32_t setEvents(bool on) {
@@ -1162,6 +1259,11 @@ int32_t setEvents(bool on) {
         g_source_remove(g_timer);
         g_timer = 0;
     }
+    if (g_retry != 0) {
+        g_source_remove(g_retry);
+        g_retry = 0;
+    }
+    disconnectSignals();
     return OK;
 }
 

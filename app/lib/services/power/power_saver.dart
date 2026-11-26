@@ -71,9 +71,11 @@ const Map<PowerSaverReason, Duration> _intervalByReason = {
   required bool hidden,
 }) {
   return (
-    minimized: next.minimized ? true : (hidden ? minimized : false),
+    minimized: next.minimized || next.hidden || (hidden ? minimized : false),
     focused: next.focused,
-    screenOff: (next.focused && !next.minimized) ? false : screenOff,
+    screenOff: (next.focused && !next.minimized && !next.hidden)
+        ? false
+        : screenOff,
   );
 }
 
@@ -107,17 +109,9 @@ class PowerSaverService {
   /// 节能模式总开关（设置持久化，默认开）。
   bool _enabled = true;
 
-  /// 桥接窗口状态是否已生效。
-  ///
-  /// 生效后聚焦状态以桥接为准（Windows = 顶层 WndProc 的 WM_ACTIVATE +
-  /// 前台窗口查询；macOS = key 通知；Linux = GTK active）。window_manager 的
-  /// 聚焦事件在 Windows 上来自 `WM_NCACTIVATE`，打开菜单/原生对话框等场景会
-  /// 产生误报 blur，不能再覆盖桥接结果（否则前台窗口被误判后台 → 1 FPS）。
-  bool _bridgeWindowActive = false;
-
   bool _minimized = false;
 
-  /// 托盘隐藏（nativeapi 无 hide/show 事件，由托盘集成显式置位）。
+  /// 托盘隐藏（兼容显式通知；桥接 ABI v9 也会用 hidden flag 推送同一语义）。
   bool _hidden = false;
   bool _focused = true;
   bool _screenOff = false;
@@ -152,15 +146,25 @@ class PowerSaverService {
   int? _lastEngineIntervalMs;
 
   /// 开始监听窗口状态（并异步订阅平台熄屏/窗口状态）。
-  /// nativeapi 窗口监听：焦点/最小化/还原 + 桥接未覆盖时的兜底。
+  ///
+  /// ABI v9 起窗口状态主路径是原生桥接（GTK 信号 / WndProc 子类化 /
+  /// NSWindow 通知）；只有桥接不可用（能力缺失 / 无窗口环境）时才回退
+  /// window_manager 监听，避免两套事件互相覆盖。
   void attach() {
-    if (_windowListenerId == null) {
+    unawaited(_attachWindowWatcher());
+    unawaited(_attachScreenWatcher());
+  }
+
+  /// 桥接不可用时的旧路径：window_manager 窗口事件。
+  void _attachWindowManagerFallback() {
+    if (_windowListenerId != null) return;
+    try {
       final window = WindowManager.instance.getCurrent();
       _appWindow = window;
       _windowListenerId = window?.addListener(_onWindowEvent);
+    } catch (e) {
+      Log.w('power', 'window_manager 窗口事件回退不可用: $e');
     }
-    unawaited(_attachWindowWatcher());
-    unawaited(_attachScreenWatcher());
   }
 
   /// 经平台能力外观订阅窗口最小化/失焦（桥接 WINDOW_STATE 能力位存在时）。
@@ -169,10 +173,10 @@ class PowerSaverService {
     if (_windowSub != null) return;
     final ok = await _window.setEvents(true);
     if (!ok) {
-      Log.w('power', '桥接窗口状态不可用（回退 nativeapi 窗口事件）');
+      Log.w('power', '桥接窗口状态不可用（回退 window_manager 窗口事件）');
+      _attachWindowManagerFallback();
       return;
     }
-    _bridgeWindowActive = true;
     void applyState(SystemWindowState s) {
       final next = mergeBridgeWindowState(
         s,
@@ -288,14 +292,11 @@ class PowerSaverService {
         _screenOff = false; // 恢复 ⇒ 屏幕点亮
         _apply();
       case WindowFocusedEvent():
-        // 桥接可用时以其为准：Windows 的 WM_NCACTIVATE 误报会在这里
-        // 把前台窗口标成失焦（菜单/原生对话框/标题栏交互等场景）。
-        if (_bridgeWindowActive) return;
+        // 仅在桥接不可用时走这条回退路径（桥接可用时不会注册 WM 监听）。
         _focused = true;
         _screenOff = false; // 窗口获得焦点 ⇒ 屏幕必然点亮/未锁屏
         _apply();
       case WindowBlurredEvent():
-        if (_bridgeWindowActive) return;
         _focused = false;
         _apply();
       default:

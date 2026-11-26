@@ -18,6 +18,9 @@ class FfiSystemWindow implements SystemWindow {
       final snap = SystemWindowState(
         minimized: e.minimized,
         focused: e.focused,
+        maximized: e.maximized,
+        fullscreen: e.fullscreen,
+        hidden: e.hidden,
       );
       _state = snap;
       _stateCtrl.add(snap);
@@ -49,8 +52,31 @@ class FfiSystemWindow implements SystemWindow {
     focused: true,
   );
 
+  /// 订阅引用计数：power_saver / 窗口按钮 / 全屏状态共用同一单例，任一方
+  /// 取消订阅不能把全局原生监听关掉（否则其余消费方静默失效）。
+  int _eventRefs = 0;
+  bool _eventsOn = false;
+
   @override
-  Future<bool> setEvents(bool on) async => _b.setWindowEvents(on) == aplOk;
+  Future<bool> setEvents(bool on) async {
+    if (on) {
+      _eventRefs++;
+      if (!_eventsOn) {
+        _eventsOn = _b.setWindowEvents(true) == aplOk;
+        if (!_eventsOn) {
+          _eventRefs--;
+          return false;
+        }
+      }
+      return true;
+    }
+    if (_eventRefs > 0) _eventRefs--;
+    if (_eventRefs == 0 && _eventsOn) {
+      _eventsOn = false;
+      _b.setWindowEvents(false);
+    }
+    return true;
+  }
 
   @override
   Stream<SystemWindowState> get state => _stateCtrl.stream;
@@ -64,7 +90,11 @@ class FfiSystemWindow implements SystemWindow {
 
   @override
   Future<void> dispose() async {
-    _b.setWindowEvents(false);
+    _eventRefs = 0;
+    if (_eventsOn) {
+      _eventsOn = false;
+      _b.setWindowEvents(false);
+    }
     await _winSub.cancel();
     await _backendSub.cancel();
     await _stateCtrl.close();

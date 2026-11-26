@@ -2,10 +2,14 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
+
+import '../services/platform/platform_capabilities.dart';
+import '../services/platform/system_window.dart';
 
 /// 进程级窗口全屏状态（**唯一一处**注册原生窗口事件监听）。
 ///
@@ -24,10 +28,12 @@ import 'package:window_manager/window_manager.dart';
 ///
 /// ## 现在的契约
 ///
-/// - 进程内**只注册一次**原生监听（首次读取本 provider 时），随 provider 存活，
-///   页面反复挂载/卸载不再增删原生监听；
-/// - 全屏状态**只由窗口事件更新**（进入 / 退出全屏），读状态是纯内存操作，
-///   热路径上没有任何原生调用；
+/// - 全屏状态由**原生桥接**的窗口 flags（`fullscreen`）更新（ABI v9：GTK 信号 /
+///   WndProc 子类化 / NSWindow 通知），Dart 不再注册 window_manager 事件监听；
+///   只有桥接不可用时才回退旧的 WM 监听；
+/// - 进程内只订阅一次桥接窗口状态，随 provider 存活，页面反复挂载/卸载不再
+///   增删原生监听；
+/// - 读状态是纯内存操作，热路径没有任何跨线程原生调用；
 /// - 唯一的原生写入是用户点「全屏」按钮（[toggle]），不在挂载路径上。
 ///
 /// 初始值取 `false`：应用没有「启动即全屏」的偏好，且刻意不去读那个会阻塞的
@@ -39,7 +45,11 @@ final windowFullScreenProvider =
 
 class WindowFullScreenNotifier extends Notifier<bool> {
   Window? _window;
-  ListenerId? _listenerId;
+  ListenerId? _listenerId; // window_manager 回退
+  SystemWindow? _bridgeWindow;
+  StreamSubscription<SystemWindowState>? _windowSub;
+  bool _knownFullscreen = false;
+  bool _disposed = false;
 
   /// 单元测试（`flutter_tester`）里没有真实窗口：`getCurrent()` 这类 FFI 调用会
   /// 停在原生侧不返回（Dart 侧超时都触发不了），挂载播放页的 widget 测试会直接
@@ -49,22 +59,56 @@ class WindowFullScreenNotifier extends Notifier<bool> {
 
   @override
   bool build() {
-    _attach();
+    final initial = _attach();
     ref.onDispose(() {
+      _disposed = true;
       final listenerId = _listenerId;
       if (listenerId != null) _window?.removeListener(listenerId);
       _listenerId = null;
       _window = null;
+      unawaited(_windowSub?.cancel());
+      _windowSub = null;
+      final bridge = _bridgeWindow;
+      _bridgeWindow = null;
+      if (bridge != null) unawaited(bridge.setEvents(false));
     });
-    return false;
+    return initial;
   }
 
-  /// 取当前窗口并注册（一次）原生窗口事件监听。
-  ///
-  /// 首次读取 provider 时窗口一定已存在（播放页在窗口之后才可打开）；若极端
-  /// 情况下取不到（无窗口环境 / 单元测试），[_currentWindow] 返回 null 且不抛错。
-  void _attach() {
-    if (!_nativeWindowAvailable) return;
+  /// 订阅一次原生桥接窗口状态；桥接不可用才回退 window_manager 监听。
+  /// 返回订阅前的初值（桥接尚未推送快照时为 false）。
+  bool _attach() {
+    if (!_nativeWindowAvailable) return false;
+    if (_windowSub != null || _listenerId != null) return _knownFullscreen;
+    try {
+      final bridge = ref.read(platformCapabilitiesProvider).window;
+      _bridgeWindow = bridge;
+      unawaited(() async {
+        final ok = await bridge.setEvents(true);
+        if (_disposed) {
+          // build 后立刻卸载：撤销刚建立的订阅，避免 provider 释放后仍占用单例。
+          if (ok) unawaited(bridge.setEvents(false));
+          return;
+        }
+        if (!ok) {
+          _attachWindowManagerFallback();
+          return;
+        }
+        _windowSub = bridge.state.listen((s) {
+          _knownFullscreen = s.fullscreen;
+          if (s.fullscreen == state) return;
+          state = s.fullscreen;
+        });
+      }());
+      _knownFullscreen = bridge.current.fullscreen;
+      return _knownFullscreen;
+    } catch (_) {
+      _attachWindowManagerFallback();
+      return _knownFullscreen;
+    }
+  }
+
+  void _attachWindowManagerFallback() {
     if (_listenerId != null) return;
     final window = _window ??= _currentWindow();
     if (window == null) return;

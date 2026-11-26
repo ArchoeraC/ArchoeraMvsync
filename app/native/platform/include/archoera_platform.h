@@ -121,7 +121,20 @@ typedef struct AplTrackMeta {
 APL_API int32_t apl_power_set_sleep_inhibit(int32_t on);
 APL_API int32_t apl_power_set_screen_events(int32_t on);
 
-/* ── SystemWindow ──────────────────────────────────────────────── */
+/* ── SystemWindow ────────────────────────────────────────────────
+ * 窗口状态事件（订阅即推一次快照，之后仅变化时推送）。
+ * u.window 的 minimized/focused 字段保留为 flag 的兼容副本；新代码统一读 flags：
+ *   bit0 minimized（图标化）、bit1 focused（应用在前台）、
+ *   bit2 maximized（最大化 / zoom）、bit3 fullscreen（全屏）、
+ *   bit4 hidden（窗口不可见：托盘隐藏 / 最小化到任务栏之外的隐藏）。
+ * 状态由各平台原生事件驱动（Win32 子类化 / GTK 信号 / NSWindow 通知），
+ * Dart 侧不再用 window_manager 轮询或监听窗口状态。 */
+#define APL_WINDOW_FLAG_MINIMIZED  (1u << 0)
+#define APL_WINDOW_FLAG_FOCUSED    (1u << 1)
+#define APL_WINDOW_FLAG_MAXIMIZED  (1u << 2)
+#define APL_WINDOW_FLAG_FULLSCREEN (1u << 3)
+#define APL_WINDOW_FLAG_HIDDEN     (1u << 4)
+
 APL_API int32_t apl_window_set_events(int32_t on);
 
 /* ── SystemMedia ───────────────────────────────────────────────── */
@@ -268,7 +281,11 @@ typedef struct AplEvent {
         int32_t command;   /* MEDIA_COMMAND */
         struct { int64_t rel_ms; int64_t abs_ms; } seek;   /* MEDIA_SEEK */
         int32_t active;    /* SCREEN_STATE：1=熄屏/屏保激活 */
-        struct { int32_t minimized; int32_t focused; } window; /* WINDOW_STATE */
+        struct {
+            int32_t minimized; /* 兼容副本 = flags bit0 */
+            int32_t focused;   /* 兼容副本 = flags bit1 */
+            int32_t flags;     /* APL_WINDOW_FLAG_* 位图（权威值） */
+        } window; /* WINDOW_STATE */
         int32_t backend_lost; /* BACKEND_STATE */
         struct { int32_t r; int32_t g; int32_t b; } accent; /* SYSTEM_ACCENT：0-255 */
         struct { int32_t dark; } theme; /* SYSTEM_THEME：1=深色 0=浅色 */

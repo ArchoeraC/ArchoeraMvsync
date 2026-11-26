@@ -2,11 +2,15 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// SystemWindow 契约：窗口最小化/失焦状态探测（2026-09-10 新增）。
+/// SystemWindow 契约：窗口状态探测（最小化/前台/最大化/全屏/隐藏）。
 ///
-/// 事件由原生桥接（X11 / WndProc 子类化 / NSWindow 通知）探测并回传；
-/// 桥接未置能力位（纯 Wayland 等）时由工厂注入 [NoopSystemWindow]，
-/// 调用方（power_saver）回退 window_manager 监听（既有路径）。
+/// 事件由原生桥接（GTK 信号 / WndProc 子类化 / NSWindow 通知）探测并回传；
+/// ABI v9 起 `flags` 是权威值，Dart 侧窗口「监听」全部走本契约，不再用
+/// window_manager 的事件监听（window_manager 仅保留窗口控制写入，如
+/// minimize/maximize/setFullScreen）。
+///
+/// 桥接未置能力位（纯 Wayland 等）时由工厂注入 [NoopSystemWindow]，调用方
+/// 可回退 window_manager 监听（既有路径）。
 ///
 /// 见 docs/platform-capability-facade.md §2.1 / docs/platform-native-bridge.md §3.4。
 library;
@@ -17,19 +21,35 @@ import 'platform_failure.dart';
 
 /// 窗口状态快照（桥接按事件即时推送，无轮询）。
 class SystemWindowState {
-  const SystemWindowState({required this.minimized, required this.focused});
+  const SystemWindowState({
+    required this.minimized,
+    required this.focused,
+    this.maximized = false,
+    this.fullscreen = false,
+    this.hidden = false,
+  });
 
   final bool minimized;
   final bool focused;
+  final bool maximized;
+  final bool fullscreen;
+
+  /// 窗口不可见（托盘隐藏 / 从任务栏隐藏）。与 [minimized] 独立：
+  /// 最小化仍算可见，隐藏才是用户看不到窗口。
+  final bool hidden;
 
   @override
   bool operator ==(Object other) =>
       other is SystemWindowState &&
       other.minimized == minimized &&
-      other.focused == focused;
+      other.focused == focused &&
+      other.maximized == maximized &&
+      other.fullscreen == fullscreen &&
+      other.hidden == hidden;
 
   @override
-  int get hashCode => Object.hash(minimized, focused);
+  int get hashCode =>
+      Object.hash(minimized, focused, maximized, fullscreen, hidden);
 }
 
 /// 窗口状态事件订阅。

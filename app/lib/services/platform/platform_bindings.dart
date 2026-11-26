@@ -68,9 +68,18 @@ const int aplEventTrayRightClick = 11;
 const int aplEventTrayMenuCommand = 12;
 const int aplEventSessionEnd = 13;
 
-/// 契约版本 8：新增 `APL_EVENT_SESSION_END` / `APL_CAP_SESSION_END`（系统关机/注销事件）。
+/// 契约版本 9：窗口状态 `u.window` 增加 `flags`（最小化/前台/最大化/全屏/隐藏），
+/// 三端改为原生事件驱动，Dart 不再用 window_manager 监听窗口状态。
+/// 版本 8：新增 `APL_EVENT_SESSION_END` / `APL_CAP_SESSION_END`（系统关机/注销事件）。
 /// 版本 7：移除 `apl_open_url` / `APL_CAP_OPEN_URL`（破坏性 ABI 变更）。
-const int aplAbiVersion = 8;
+const int aplAbiVersion = 9;
+
+/// 窗口状态 flags（对齐 `APL_WINDOW_FLAG_*`）。
+const int aplWindowFlagMinimized = 1 << 0;
+const int aplWindowFlagFocused = 1 << 1;
+const int aplWindowFlagMaximized = 1 << 2;
+const int aplWindowFlagFullscreen = 1 << 3;
+const int aplWindowFlagHidden = 1 << 4;
 
 /// 托盘菜单项（对齐 `AplTrayMenuItem`）：id==0 为分隔符；checked==-1 非复选。
 class AplTrayMenuItem {
@@ -126,6 +135,10 @@ final class AplWindowPayload extends Struct {
 
   @Int32()
   external int focused;
+
+  /// `APL_WINDOW_FLAG_*` 位图（权威值；minimized/focused 为兼容副本）。
+  @Int32()
+  external int flags;
 }
 
 final class AplAccentPayload extends Struct {
@@ -360,9 +373,19 @@ final class AplScreenEvent extends AplNativeEvent {
 }
 
 final class AplWindowEvent extends AplNativeEvent {
-  const AplWindowEvent({required this.minimized, required this.focused});
+  const AplWindowEvent({
+    required this.minimized,
+    required this.focused,
+    required this.maximized,
+    required this.fullscreen,
+    required this.hidden,
+  });
+
   final bool minimized;
   final bool focused;
+  final bool maximized;
+  final bool fullscreen;
+  final bool hidden;
 }
 
 final class AplBackendEvent extends AplNativeEvent {
@@ -868,8 +891,15 @@ class PlatformBindings {
       case aplEventWindowState:
         b._windowCtrl.add(
           AplWindowEvent(
-            minimized: ref.u.window.minimized != 0,
-            focused: ref.u.window.focused != 0,
+            minimized:
+                ref.u.window.flags & aplWindowFlagMinimized != 0 ||
+                ref.u.window.minimized != 0,
+            focused:
+                ref.u.window.flags & aplWindowFlagFocused != 0 ||
+                ref.u.window.focused != 0,
+            maximized: ref.u.window.flags & aplWindowFlagMaximized != 0,
+            fullscreen: ref.u.window.flags & aplWindowFlagFullscreen != 0,
+            hidden: ref.u.window.flags & aplWindowFlagHidden != 0,
           ),
         );
       case aplEventBackendState:

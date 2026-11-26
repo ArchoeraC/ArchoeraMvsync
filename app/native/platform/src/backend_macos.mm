@@ -77,6 +77,9 @@ std::atomic<bool> g_theme_dark{false};
 std::atomic<bool> g_theme_valid{false};
 std::atomic<bool> g_minimized{false};
 std::atomic<bool> g_focused{true};
+std::atomic<bool> g_maximized{false};
+std::atomic<bool> g_fullscreen{false};
+std::atomic<bool> g_hidden{false};
 
 id g_activity = nil;
 bool g_remote_registered = false;
@@ -91,8 +94,12 @@ bool g_tray_visible = true;         // 状态项可见性
 
 void emitWindow() {
     if (!g_window_events.load(std::memory_order_acquire)) return;
-    dispatch(makeWindowState(g_minimized.load(std::memory_order_acquire),
-                             g_focused.load(std::memory_order_acquire)));
+    dispatch(makeWindowState(
+        g_minimized.load(std::memory_order_acquire),
+        g_focused.load(std::memory_order_acquire),
+        g_maximized.load(std::memory_order_acquire),
+        g_fullscreen.load(std::memory_order_acquire),
+        g_hidden.load(std::memory_order_acquire)));
 }
 
 }  // namespace
@@ -210,6 +217,30 @@ static void popUpTrayMenu(NSStatusItem* item, NSMenu* menu) {
     archoera::emitWindow();
 }
 
+/// 通用窗口几何/层叠状态刷新：resize / zoom / 全屏 / order on-off 都走这里。
+/// 通知在 AppKit 主线程派发，故这里可以安全读取 NSWindow 属性；Dart 线程只
+/// 读原子快照（emitWindow 不做任何 AppKit 调用）。
+- (void)onWindowStateChanged:(NSNotification*)note {
+    id object = note.object;
+    if (![object isKindOfClass:[NSWindow class]]) return;
+    NSWindow* window = (NSWindow*)object;
+    // 观察者注册在 object:nil 上（AppKit 没有按窗口订阅的公开 API），必须过滤
+    // 自有主窗口：原生文件对话框 / 菜单窗口的 resize/order 通知不得覆盖主窗口状态。
+    NSWindow* main = [NSApp mainWindow];
+    if (main == nil) main = [NSApp keyWindow];
+    if (main != nil && window != main) return;
+    const bool hidden = window.isVisible == NO;
+    const bool minimized = window.isMiniaturized;
+    const bool maximized = window.isZoomed;
+    const bool fullscreen =
+        (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+    archoera::g_hidden.store(hidden, std::memory_order_release);
+    archoera::g_minimized.store(minimized, std::memory_order_release);
+    archoera::g_maximized.store(maximized, std::memory_order_release);
+    archoera::g_fullscreen.store(fullscreen, std::memory_order_release);
+    archoera::emitWindow();
+}
+
 - (void)onAccent:(NSNotification*)note {
     (void)note;
     if (archoera::g_accent_events.load(std::memory_order_acquire)) {
@@ -324,6 +355,11 @@ void observe(NSNotificationCenter* center, NSNotificationName name,
     [center addObserver:observer() selector:selector name:name object:nil];
 }
 
+void unobserve(NSNotificationCenter* center, NSNotificationName name) {
+    if (center == nil || name == nil) return;
+    [center removeObserver:observer() name:name object:nil];
+}
+
 // ── 媒体会话 ──────────────────────────────────────────────────────
 bool g_playing = false;
 int64_t g_position_ms = 0;
@@ -430,6 +466,9 @@ int32_t shutdown() {
         [[NSProcessInfo processInfo] endActivity:g_activity];
         g_activity = nil;
     }
+    // 退出前显式摘掉自己注册的窗口观察者（进程退出期 AppKit 仍会投递
+    // resignKey / order-off 通知；观察者必须活着且有效，或已注销）。
+    windowSetEvents(0);
     g_screen_events.store(false, std::memory_order_release);
     g_window_events.store(false, std::memory_order_release);
     trayDestroy();
@@ -468,18 +507,40 @@ int32_t powerSetScreenEvents(int32_t on) {
 }
 
 int32_t windowSetEvents(int32_t on) {
+    NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
     if (on != 0) {
-        NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
         observe(nc, NSWindowDidMiniaturizeNotification,
                 @selector(onMiniaturize:));
         observe(nc, NSWindowDidDeminiaturizeNotification,
                 @selector(onDeminiaturize:));
         observe(nc, NSWindowDidBecomeKeyNotification, @selector(onBecomeKey:));
         observe(nc, NSWindowDidResignKeyNotification, @selector(onResignKey:));
+        // 最大化 / 全屏 / 显示隐藏全部由 AppKit 通知驱动（不轮询）：
+        // resize 覆盖 zoom 与全屏的几何变化，order on/off 覆盖托盘隐藏。
+        observe(nc, NSWindowDidResizeNotification,
+                @selector(onWindowStateChanged:));
+        observe(nc, NSWindowDidEnterFullScreenNotification,
+                @selector(onWindowStateChanged:));
+        observe(nc, NSWindowDidExitFullScreenNotification,
+                @selector(onWindowStateChanged:));
+        // 隐藏 / 显示：AppKit 的 order on/off 没有公开通知名，用遮挡状态
+        // 变化（isVisible 在回调里读取）覆盖托盘隐藏 / 还原。
+        observe(nc, NSWindowDidChangeOcclusionStateNotification,
+                @selector(onWindowStateChanged:));
         g_window_events.store(true, std::memory_order_release);
-        emitWindow();  // 初值
+        emitWindow();  // 初值（原子快照；AppKit 属性只在通知回调里读）
     } else {
         g_window_events.store(false, std::memory_order_release);
+        // 自己注册的窗口观察者必须自己摘掉（第三方插件退出崩溃的根因就是
+        // 观察者指向已释放对象）。只按窗口通知名注销，不动其它能力。
+        unobserve(nc, NSWindowDidMiniaturizeNotification);
+        unobserve(nc, NSWindowDidDeminiaturizeNotification);
+        unobserve(nc, NSWindowDidBecomeKeyNotification);
+        unobserve(nc, NSWindowDidResignKeyNotification);
+        unobserve(nc, NSWindowDidResizeNotification);
+        unobserve(nc, NSWindowDidEnterFullScreenNotification);
+        unobserve(nc, NSWindowDidExitFullScreenNotification);
+        unobserve(nc, NSWindowDidChangeOcclusionStateNotification);
     }
     return OK;
 }

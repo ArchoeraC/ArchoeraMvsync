@@ -387,9 +387,30 @@ void emitWindow() {
     const HWND hwnd = g_hwnd;
     bool minimized = false;
     bool focused = false;
+    bool maximized = false;
+    bool fullscreen = false;
+    bool hidden = false;
     if (hwnd != nullptr) {
-        minimized = ::IsIconic(hwnd) != 0 || ::IsWindowVisible(hwnd) == 0;
-        if (!minimized) {
+        minimized = ::IsIconic(hwnd) != 0;
+        hidden = ::IsWindowVisible(hwnd) == 0;
+        maximized = ::IsZoomed(hwnd) != 0;
+        // 全屏判定（window_manager/nativeapi 走边框样式 + 覆盖整块显示器）：
+        // 无标题栏 / 无可调边框，且窗口矩形与所在显示器矩形一致。只作状态展示，
+        // 不做控制；误差容忍 1 px，避免 DPI 取整把全屏误判成最大化。
+        LONG style = ::GetWindowLongW(hwnd, GWL_STYLE);
+        RECT wr{};
+        if ((style & (WS_CAPTION | WS_THICKFRAME)) == 0 &&
+            ::GetWindowRect(hwnd, &wr) != 0) {
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            HMONITOR mon = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (mon != nullptr && ::GetMonitorInfoW(mon, &mi) != 0) {
+                const RECT& mr = mi.rcMonitor;
+                fullscreen = wr.left <= mr.left + 1 && wr.top <= mr.top + 1 &&
+                             wr.right >= mr.right - 1 && wr.bottom >= mr.bottom - 1;
+            }
+        }
+        if (!minimized && !hidden) {
             const HWND foreground = ::GetForegroundWindow();
             DWORD pid = 0;
             if (foreground != nullptr) {
@@ -398,7 +419,7 @@ void emitWindow() {
             focused = foreground != nullptr && pid == ::GetCurrentProcessId();
         }
     }
-    dispatch(makeWindowState(minimized, focused));
+    dispatch(makeWindowState(minimized, focused, maximized, fullscreen, hidden));
 }
 
 // 现代 Windows 把媒体键（含蓝牙 AVRCP）经 SMTC 派发；SMTC 非当前会话/仅前台时
@@ -438,6 +459,10 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         case WM_SIZE:
             // 消息只作为「状态可能已变化」的触发；真实状态统一由
             // emitWindow() 向系统查询（见上方说明）。
+            emitWindow();
+            break;
+        case WM_STYLECHANGED:
+            // 全屏切换会改窗口样式（去标题栏 / 边框），WM_SIZE 不一定触发。
             emitWindow();
             break;
         case WM_ACTIVATE:

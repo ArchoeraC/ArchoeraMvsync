@@ -17,6 +17,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../app/app_quit.dart';
 import '../../l10n/l10n.dart';
+import '../../services/platform/platform_capabilities.dart';
+import '../../services/platform/system_window.dart';
 import '../common/tray_integration.dart';
 import '../player/s_controls.dart';
 
@@ -45,16 +47,18 @@ class WindowDragArea extends StatelessWidget {
 /// 顶栏内的窗口按钮组（最小化 / 最大化或还原 / 关闭）。
 ///
 /// 仅在 [WindowDragArea] 之外的独立区域使用：按钮点击不应被拖拽层抢占。
-class WindowControls extends StatefulWidget {
+class WindowControls extends ConsumerStatefulWidget {
   const WindowControls({super.key});
 
   @override
-  State<WindowControls> createState() => _WindowControlsState();
+  ConsumerState<WindowControls> createState() => _WindowControlsState();
 }
 
-class _WindowControlsState extends State<WindowControls> {
+class _WindowControlsState extends ConsumerState<WindowControls> {
   Window? _window;
-  ListenerId? _listenerId;
+  ListenerId? _listenerId; // window_manager 回退路径
+  SystemWindow? _bridgeWindow;
+  StreamSubscription<SystemWindowState>? _windowSub;
   bool _maximized = false;
 
   @override
@@ -63,10 +67,47 @@ class _WindowControlsState extends State<WindowControls> {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     try {
       _window = WindowManager.instance.getCurrent();
-      _maximized = _window?.isMaximized ?? false;
-      _listenerId = WindowManager.instance.addListener(_onWindowEvent);
     } catch (_) {
       // 无窗口环境（单测 / 桥接缺失）：按钮静默禁用，不影响布局。
+    }
+    _attachWindowState();
+  }
+
+  /// 最大化状态优先走原生桥接（ABI v9 flags）；能力缺失时回退 WM 监听。
+  void _attachWindowState() {
+    final SystemWindow window;
+    try {
+      window = ref.read(platformCapabilitiesProvider).window;
+    } catch (_) {
+      return;
+    }
+    _bridgeWindow = window;
+    unawaited(() async {
+      final ok = await window.setEvents(true);
+      if (!mounted) {
+        if (ok) unawaited(window.setEvents(false));
+        return;
+      }
+      if (!ok) {
+        _attachWindowManagerFallback();
+        return;
+      }
+      _maximized = window.current.maximized;
+      _windowSub = window.state.listen((s) {
+        if (!mounted || s.maximized == _maximized) return;
+        setState(() => _maximized = s.maximized);
+      });
+    }());
+  }
+
+  void _attachWindowManagerFallback() {
+    final window = _window;
+    if (window == null || _listenerId != null) return;
+    try {
+      _maximized = window.isMaximized;
+      _listenerId = WindowManager.instance.addListener(_onWindowEvent);
+    } catch (_) {
+      _listenerId = null;
     }
   }
 
@@ -78,6 +119,9 @@ class _WindowControlsState extends State<WindowControls> {
         WindowManager.instance.removeListener(id);
       } catch (_) {}
     }
+    unawaited(_windowSub?.cancel());
+    final bridge = _bridgeWindow;
+    if (bridge != null) unawaited(bridge.setEvents(false));
     super.dispose();
   }
 
@@ -95,7 +139,9 @@ class _WindowControlsState extends State<WindowControls> {
   void _toggleMaximize() {
     final window = _window;
     if (window == null) return;
-    if (window.isMaximized) {
+    // 用事件同步的本地状态决定方向：Windows 上 `isMaximized` 是跨线程
+    // 同步读取（window_manager 会 PostToThread + 最多等 5s），热路径不能用。
+    if (_maximized) {
       window.unmaximize();
     } else {
       window.maximize();

@@ -57,6 +57,13 @@ constexpr int32_t EVENT_TRAY_RIGHT_CLICK = 11;
 constexpr int32_t EVENT_TRAY_MENU_COMMAND = 12;
 constexpr int32_t EVENT_SESSION_END = 13;
 
+// 窗口状态 flags（对齐 include/archoera_platform.h APL_WINDOW_FLAG_*）。
+constexpr int32_t WINDOW_FLAG_MINIMIZED = 1 << 0;
+constexpr int32_t WINDOW_FLAG_FOCUSED = 1 << 1;
+constexpr int32_t WINDOW_FLAG_MAXIMIZED = 1 << 2;
+constexpr int32_t WINDOW_FLAG_FULLSCREEN = 1 << 3;
+constexpr int32_t WINDOW_FLAG_HIDDEN = 1 << 4;
+
 constexpr int32_t CMD_PLAY = 0;
 constexpr int32_t CMD_PAUSE = 1;
 constexpr int32_t CMD_TOGGLE = 2;
@@ -89,7 +96,8 @@ void dispatch(const AplEvent& event);
 AplEvent makeCommand(int32_t command);
 AplEvent makeSeek(int64_t rel_ms, int64_t abs_ms);
 AplEvent makeScreenState(bool active);
-AplEvent makeWindowState(bool minimized, bool focused);
+AplEvent makeWindowState(bool minimized, bool focused, bool maximized,
+                         bool fullscreen, bool hidden);
 AplEvent makeBackendLost(bool lost);
 AplEvent makeSystemAccent(int32_t r, int32_t g, int32_t b);
 AplEvent makeSystemTheme(bool dark);

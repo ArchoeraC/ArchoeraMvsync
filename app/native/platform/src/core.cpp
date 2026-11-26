@@ -100,11 +100,19 @@ AplEvent makeScreenState(bool active) {
     return e;
 }
 
-AplEvent makeWindowState(bool minimized, bool focused) {
+AplEvent makeWindowState(bool minimized, bool focused, bool maximized,
+                         bool fullscreen, bool hidden) {
     AplEvent e{};
     e.type = APL_EVENT_WINDOW_STATE;
     e.u.window.minimized = minimized ? 1 : 0;
     e.u.window.focused = focused ? 1 : 0;
+    int32_t flags = 0;
+    if (minimized) flags |= WINDOW_FLAG_MINIMIZED;
+    if (focused) flags |= WINDOW_FLAG_FOCUSED;
+    if (maximized) flags |= WINDOW_FLAG_MAXIMIZED;
+    if (fullscreen) flags |= WINDOW_FLAG_FULLSCREEN;
+    if (hidden) flags |= WINDOW_FLAG_HIDDEN;
+    e.u.window.flags = flags;
     return e;
 }
 

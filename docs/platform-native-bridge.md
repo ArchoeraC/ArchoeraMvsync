@@ -889,3 +889,36 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
 
 > 迁移前，任何**新功能**不得再新增 `window_manager` 调用；本节的止损（关闭按钮改道）
 > 是所有现网版本的推荐修复。
+
+### 2026-11-26 第一批落地：窗口「监听」已迁入 C++（ABI v9）
+
+> 范围：**只迁核心状态监听，不迁控制**。`window_manager` 仍负责 minimize/maximize/
+> `isFullScreen = ...`、拖拽/缩放/位置等写入；最小化/前台/最大化/全屏/隐藏的状态
+> 监听已切到桥接，桥接不可用时才回退旧路径。关闭请求与彩蛋的「最小化陷阱」仍是
+> `window_manager` 事件（见文末「尚未迁」）。
+
+- **契约**：`AplEvent.u.window` 增加 `flags`（bit0 minimized / bit1 focused /
+  bit2 maximized / bit3 fullscreen / bit4 hidden），`minimized`/`focused` 保留为
+  兼容副本；`AplEvent` 大小不变（仍在 16B union 内）。`kAbiVersion` 8 → 9。
+- **Windows**：`emitWindow()` 现场查询 `IsIconic / IsWindowVisible / IsZoomed /
+  GetWindowRect + MonitorInfo`；`WM_SIZE / WM_STYLECHANGED / WM_ACTIVATE /
+  WM_SHOWWINDOW` 只作触发。跨线程同步读 `isMaximized` 的调用点已移除。
+- **Linux**：`gtkwin` 由 500ms 轮询改为 GTK 信号（`focus-in/out-event`、
+  `window-state-event`、`configure-event`、`show/hide`，经 dlopen
+  `g_signal_connect_data`），gobject 缺失时保留轮询兜底；启动早期找不到窗口
+  改为 500ms 重试（旧实现永久静默）；`setEvents(false)` 会断开信号并撤销 source。
+- **macOS**：补齐 `NSWindowDidResize / DidEnterFullScreen / DidExitFullScreen /
+  DidChangeOcclusionState` 通知；状态读取只在 AppKit 主线程回调里发生，Dart
+  线程只读原子快照。`setEvents(false)` / `shutdown()` 显式 `removeObserver`
+  （旧实现只清标志、不注销，正是第三方插件退出崩溃的同款风险）。
+- **Dart**：`SystemWindowState` 增加 `maximized/fullscreen/hidden`；
+  `FfiSystemWindow.setEvents` 改为引用计数（power_saver / 窗口按钮 / 全屏状态
+  共用单例）；`power_saver`、`window_controls`、`window_full_screen` 已切到桥接
+  事件，桥接能力缺失时才回退 `window_manager`。
+- **本机验证**：Linux 平台库编译 + GTK 事件探针（maximize / hide / show 均收到
+  flags 变化）；macOS arm64/x86_64 交叉编译+链接通过；Windows 后端仅源码级检查
+  （本机无 msvc-wine，需 Windows CI 真机构建）。
+- **尚未迁**：关闭请求（`WM_CLOSE` / `delete-event` / `windowShouldClose:`）仍在
+  `window_manager`/托盘策略；彩蛋「最小化陷阱」仍监听 `WindowRestoredEvent`；
+  控制类 `apl_window_*` 与 macOS ⌘Q 终止钩子仍是下一批。验收项 1
+  （`rg window_manager` 零命中）本批不适用。
