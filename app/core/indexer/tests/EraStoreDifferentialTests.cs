@@ -478,7 +478,7 @@ internal static class EraStoreDifferentialTests
                 SectionBody(raw, Section(sections, SectionKind.DictIndex, segmentId))),
             Postings = new PostingsReader(
                 SectionBody(raw, Section(sections, SectionKind.Postings, segmentId)),
-                SectionBody(raw, Section(sections, SectionKind.Positions, segmentId))),
+                OptionalSectionBody(raw, sections, SectionKind.Positions, segmentId)),
         };
     }
 
@@ -491,6 +491,16 @@ internal static class EraStoreDifferentialTests
 
     private static byte[] SectionBody(byte[] file, SectionRef section) =>
         file.AsSpan((int)section.Offset, (int)section.Length).ToArray();
+
+    /// <summary>可选段体（Positions）：整段免位置时不写该段，空数组即「无位置块」。</summary>
+    private static byte[] OptionalSectionBody(
+        byte[] file, List<SectionRef> sections, SectionKind kind, ushort segmentId)
+    {
+        foreach (var section in sections)
+            if (section.Kind == kind && section.SegmentId == segmentId)
+                return SectionBody(file, section);
+        return Array.Empty<byte>();
+    }
 
     private static BuildOptions Options() => new()
     {

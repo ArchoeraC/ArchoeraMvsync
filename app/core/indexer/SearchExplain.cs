@@ -28,13 +28,14 @@ internal sealed class ExplainSource
 /// 直接取同一个值——不再走 explain 期的逐列探测（否则排序键与解释会互相矛盾）。</para>
 ///
 /// <para><see cref="ResolvedField"/> 只在**精确度未复核**的步骤上仍作诊断探测的别名
-/// （宽命中步、歌词 / 读音 / 拼音 / 首字母 / 跨语言 / 容错步），那时它可以比
-/// <see cref="Field"/> 更细（例如 typo 命中真实落在 title、或译文命中落在 lyricsTr）。</para>
+/// （宽命中步、读音 / 拼音 / 首字母 / 跨语言 / 容错步），那时它可以比
+/// <see cref="Field"/> 更细（例如 typo 命中真实落在 title、或译文命中落在 lyricsTr）。
+/// Q1 歌词整行复核命中后字段仍是保守的 Lyrics，<see cref="ResolvedField"/> 随复核标志取同一值。</para>
 ///
 /// <para><b>T3.11</b>：<see cref="Exact"/> / <see cref="Proximity"/> 与
 /// <see cref="Bucket"/> 的第 4 / 5 元现在是排序实际用的值（不再是常量与 -1）。
-/// 未复核的步（歌词 / 读音 / 转写 / 容错、或单步命中超预算）写
-/// <c>exact="none"</c> / <c>proximity=-1</c>。</para>
+/// 未复核的步（读音 / 转写 / 容错、或单步命中超预算）写
+/// <c>exact="none"</c> / <c>proximity=-1</c>；歌词整行复核（Q1）只可能写 <c>equal</c>。</para>
 /// </summary>
 internal sealed class SearchExplanation
 {
@@ -181,7 +182,8 @@ internal static class SearchExplainBuilder
         var total = Math.Max(1, totalTerms);
         var matched = Math.Clamp((int)Math.Round(evidence.Coverage * total), 0, total);
         // 复核过的证据：field 就是真实字段，resolvedField 必须与排序键一致（不再探测）。
-        // 未复核（宽命中 / 转写 / 歌词族）：保留逐列探测作为诊断补充。
+        // 未复核（宽命中 / 转写 / 读音 / 拼音 / 首字母 / 容错）：保留逐列探测作为诊断补充。
+        // 歌词整行复核（Q1）命中时 ExactChecked=true，resolvedField 与 field 同值（Lyrics）。
         var resolved = evidence.ExactChecked
             ? evidence.Field
             : ResolveField(candidate, probesByPass, probe);

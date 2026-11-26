@@ -5,8 +5,8 @@
 > `SearchSession → EraQueryPlan`（bitset 召回 + 预计算 tf + 固定大小 top-k）；
 > T3.14 七项门禁 7/7 通过。逐轮实测、门禁与环境见
 > **`docs/local-search-indexer-t314-gate.md`**；剩余项（真机验证 / 产品决策 / 可选优化）
-> 见该文档「下一步」与 §9「索引器可进一步改进的地方」（歌词精确度 / positions 打包 /
-> 段大小 / 脏集哈希等，均标注了改法与代价），以及本文件 §S4 进度表。
+> 见该文档「下一步」与 §9「索引器可进一步改进的地方」（歌词精确度 / O8 位置打包
+> 已落地 / 段大小 / 脏集哈希等，均标注了改法与代价），以及本文件 §S4 进度表。
 >
 > 本文保留**设计动机与决策记录**；任何"现状"表述以带日期的「落地进度」段落与 gate 文档为准
 > （正文中 v7 / FTS5 的段落属于历史背景，不是当前实现）。本文只回答两个问题：
@@ -653,8 +653,16 @@ search/
 | 区 | 大小 | 说明 |
 |---|---|---|
 | 块头 | 8B | `doc_count u16`、`last_doc u32`、`flags u8`、`crc32c u32`（对齐后 12B） |
-| doc 序列 | 变长 | `doc_delta varint` + `pos_count varint` + 逐位置 Δvarint |
+| flags | 1B | `0x01 = has_positions`；`0x02 = positions_packed`（O8，2026-11-26） |
+| doc 序列（varint） | 变长 | `doc_delta varint` + `pos_count varint` + 逐位置 Δvarint |
+| doc 序列（packed） | 变长 | `doc_delta varint` + `pos_count varint` + `width u8` + Δpositions 位打包 |
 
+- O8：写侧对**每个位置块**分别计算 varint 与位打包的块体字节数，取较小者（相等保留
+  varint）。`width` 为该 doc 最大 Δpos 的位宽（0..31，只有单个位置 0 时为 0），
+  Δpositions 按 **LSB-first** 连续打包进 `ceil(tf*width/8)` 字节；doc_delta / pos_count
+  仍为 varint。块头 / CRC / `pos_off` 语义不变，查询侧看到的仍是同一位置数组。
+- 新 reader 同时接受两种块体；旧 reader 会因未知 flags 位拒绝 packed 块。索引由同一 App
+  本地重建 / 新增量段写入，不升 `index_format`（升版会让旧索引不可读）。
 - 位置按**段内 token 序号**记录；`seg_sep` 也占一个位置，所以跨段相邻天然被阻断；
 - 位置块与倒排块**按相同 doc 顺序**排列，短语查询只对候选 doc 解码位置；
 - 不做"全字段位置"以外的扩展：没有字符级偏移（高亮由 DocStore 原文重算）。
@@ -771,13 +779,15 @@ DocStore 是**列式**的，只服务三件事：精确度复核、结果字段�
 |---|---|---|
 | 词典 | 25–45 MB | 唯一词 2–4M；前编码后平均 10–14B/词 |
 | 倒排 | 100–135 MB | 约 70–90M postings；Δvarint（<128 占 1B）+ tf 位图 |
-| 位置 | 70–95 MB | 约 60–80M 位置；Δvarint |
+| 位置 | 70–95 MB | 约 60–80M 位置；Δvarint / 逐块位打包（O8） |
 | DocStore | 5–10 MB | 列式 + 歌手/专辑字典 |
 | 统计 / 墓碑 / 块索引 | 2–5 MB | 与文档数线性 |
 | **合计** | **202–290 MB** | 现状 382.5 MB → **v1 0.53–0.76×**；位打包 / 例外优化后 0.45–0.65× |
 
-- 加位打包（PForDelta）与更激进的 tf 编码：再降 **8–15%**；
-- 关歌词拼音位置（V2，非默认）：再降 **5–8%**；
+- 位置块位打包（O8）已在 5k 校验语料落地：Positions −4.16%、文件 −2.68%，查询质量
+  逐题不变；倒排 PForDelta 例外帧仍可再降 **8–15%**，但复杂度更高，未启用；
+- 关可选歌词音译位置（V2 的保留部分；歌词拼音位置经 5k 质量门证明不可去掉，
+  见 t314 门禁「第九轮」）；
 - 结论：**不关任何功能也能压到 0.80× 以内**；能否到 0.60× 取决于编码优化落地。
 
 #### 3.3.0.10 性能模型（单查询）
@@ -804,7 +814,7 @@ DocStore 是**列式**的，只服务三件事：精确度复核、结果字段�
 | O5 | tf=1 位图 + 例外表 | tf 开销 −70–90% | 已含在 v1；解码是位测试 |
 | O6 | 结果 LRU（键含 `gen`/`scheme`） | 重复查询 P50 −30% | 内存 ≤128 条 |
 | O7 | 候选 bitset 去重（段内） | `total` / 去重 −20–30% | 用池化 bitset |
-| O8 | 位打包 / PForDelta | 倒排再 −8–15% | 复杂度高；仅在体积门禁不足时启用 |
+| O8 | 位打包 / PForDelta | 位置块已落地（2026-11-26）：5k Positions −4.16%、文件 −2.68%；倒排位打包预计再 −8–15% | 位置：逐块 varint vs packed，qbench eval 逐题一致；倒排 PForDelta 例外帧复杂，留作后续 |
 | O9 | SIMD varint 解码 | 解码 ×1.5–2 | 先 .NET intrinsics，后考虑 Zig |
 | O10 | 预取（`Prefetch` 词条块 / 倒排块） | 大库 P95 −10–20% | 跨平台差异大，需实测 |
 
@@ -970,15 +980,17 @@ doc1: 01        # delta = 1
 | `0x04` | filename 字面 | ✅ | 日文文件名读音另计 |
 | `0x05` | lyrics 原文 | ✅ | 行级去重后写 |
 | `0x06` | lyrics 译文 | ✅ | 无译文层则不写 |
-| `0x07` | lyrics 音译 | ✅ | 仅显式音译层 |
+| `0x07` | lyrics 音译 | ❌（S2 保留项） | 仅显式音译层；短语降级为 AND |
 | `0x11–0x13` | title / artist / album 拼音 | ✅ | 段内逐字对齐 |
 | `0x14–0x16` | title / artist / album 首字母 | ✅ | 只出 bigram |
 | `0x17` | 日 / 韩读音 | ✅ | 仅库画像命中时写 |
-| `0x21` | lyrics 拼音 | ✅（默认） | **保留短语能力**；"不存位置"是非默认优化（V2） |
+| `0x21` | lyrics 拼音 | ✅ | **必须保留**：5k qbench eval 证明免位置会让 P@1 0.973→0.838 |
 | `0x22` | lyrics 首字母 | ✅ | 默认不写，设置项可开 |
 
-> 位置（positions）默认**全字段都写**，这是行为等价的前提；EraStore 用 Δvarint 块压缩位置，
-> 不是 SQLite 那种逐条存。只有 §8.1 的 V2（歌词拼音免位置）会在用户确认后关闭 `0x21` 的位置。
+> 位置（positions）默认**除 `0x07` 外全字段都写**；S2（2026-11-26 修正）只把可选音译层
+> 设为生产全量 / 增量默认免位置（`EraStore.BuildDefaults`），`PinyinLyrics` 与其余字段保持
+> 位置。EraStore 用 Δvarint 块压缩位置，不是 SQLite 那种逐条存；旧索引仍可读（它们只是
+> 保留位置），新构建 / 新增量段才免位置。
 
 **版本锚（写进 Manifest，一票否决）**：
 
@@ -2542,7 +2554,7 @@ S2 的**已知近似**（不是缺陷，是 v7 没有 DocStore 原文的必然�
 | T3.3 | 切读路径到 EraStore | 修复后重建（索引可丢弃；不保留旧读取路径） | 回放集无回归 |
 | T3.4 | **V4**：歌词拼音默认写、`initials_lyrics` 默认关 | 设置项（需重建） | 默认路径拼音召回无损；首字母歌词默认可关 |
 | T3.5 | **V1**：歌词行级去重（原文 / 译文 / 拼音同源） | 修复后重建 | 去重率 ≥ 20%（真实语料抽样） |
-| T3.6 | **V2（非默认）**：歌词拼音免位置（`positioned=false`），仅在其余无损手段仍不足时评估 | 保持默认带位置 | 启用时 `explain` 标注；歌词拼音召回不缩水（只放宽相邻） |
+| T3.6 | **V2（修正后只保留音译层）**：`LyricsRomanization` 免位置（`positioned=false`）；`PinyinLyrics` 必须带位置（5k eval 回归），全量 / 增量共用 `EraStore.BuildDefaults` 清单 | 显式 `BuildOptions.NoPositionFields` 仍可覆盖（测试 / 诊断） | 启用时 `explain` 标注；音译短语降级为 AND，拼音短语保持相邻校验 |
 | T3.7 | **V3**：歌词字段不建 unigram（只 bigram） | 修复后重建 | 单字查询行为不变（本来不查歌词） |
 | T3.8 | **V5/V6**：`lyrics_rom` 仅显式层写入 + 病态数据护栏（4096 唯一行 / 128 KB 每层） | 按真实分位上调护栏 | 真实库中**0 首正常曲目被截断**；截断仅发生在超护栏记录并打点 |
 | T3.9 | 首字母 bigram（`tokenizer_version+1`） | 修复后重建 | 部分首字母召回提升；单字母仍未召回 |
@@ -2691,7 +2703,7 @@ S2 的**已知近似**（不是缺陷，是 v7 没有 DocStore 原文的必然�
 |---|---|---|---|
 | T3.4 V4 | ✅ 已实现：`IndexerOptions.InitialsLyrics`（默认 **关**）+ Manifest 位 `1<<7` + `EraOptionsMatch` + FFI `initialsLyrics` + Dart 设置；查询侧按 Manifest 位收窄到 `initials_meta_tok` | 30k live bytes −18.7%（4.39 KiB/曲）；仅 `wan` 首字母题下降，opt-in 完全恢复 | **已完成** |
 | T3.5 V1 | ✅ 已实现：行级 + 归一化去重（与 `LyricsStats` 同一 key），analyzer v14 | 真实库 ≥20% 去重率待抽样验证 | **P0 已完成** |
-| T3.6 V2 | `NoPositionFields` 仅原型启用（`bench/erastore`），生产/增量未启用；`Positioned` 在 `SearchRanker.cs:136-142` 硬编码 true | 需要 option bit + 增量一致 + `explain` 真实标注 | **P2（跳过）** |
+| T3.6 V2 | **已收口（2026-11-26）**：生产全量 + 增量 `EraStore.BuildDefaults` 只给 `LyricsRomanization` 免位置；`PinyinLyrics` 保留位置（独立 5k qbench eval：两条一起免位置 ALL P@1 0.973→0.838、NDCG@10 0.978→0.854，`woaini` / `woai` / 歌词行题 P@1 1→0）。`PhraseIter.Positioned` 已由 T2.5 透传。升级后的混合段（旧段带位置 + 新增量段免位置）由 `Merger.MergeTerms` 按 term 归一：仅混合词条整条降为无位置，旧段独有词条保留位置；读取侧允许段内无 `Positions` section。positions 体积压缩由 **O8 位置块位打包**承担（5k Positions −4.16%，质量逐题一致） | 无剩余主线；进一步 PForDelta 例外帧可选 | **已完成（音译层免位置 + O8）** |
 | T3.7 V3 | ✅ 已实现：歌词三列 `includeUnigrams=false`（analyzer v14） | 30k live bytes −24.7%，单字歌词查询行为不变 | **P0 已完成** |
 | T3.8 V5/V6 | ✅ 已实现：索引路径 4096 行 / 128 KiB 截断 + `lyricsTruncated*` 指标；V5 本就满足 | 另修掉 >255B 词条导致整库构建失败的缺陷（`oversizeTokens`） | **P0 已完成** |
 | T3.9 | ✅ 已实现：每段首字母 bigram（无 unigram、`#` 分隔边界、排除拉丁/数字），查询侧 2 字词条 / 长串词组；analyzer v15 / tokenizer v4，能力按版本声明 | 30k live bytes +0.44%；`nz` 中段命中新增，`wan` 仍命中；eval 总体逐项不变 | **已完成** |
@@ -2703,7 +2715,9 @@ S2 的**已知近似**（不是缺陷，是 v7 没有 DocStore 原文的必然�
   不碰查询引擎 / 排序器。
 - **P1（需重建 + 召回评审）**：T3.4 → T3.9 → T3.11。T3.4 先做以缩小歌词首字母规模，
   T3.9 再扩元数据 bigram。
-- **P2（不做）**：T3.6。门禁已过，它是精度换体积的非默认项，且会牵动 `explain` 语义。
+- **P2（不做 / 只保留音译层）**：T3.6。歌词拼音免位置已被 5k 质量门否决；仅保留可选
+  音译层的免位置，positions 体积压缩已由 **O8 位打包**在 2026-11-26 落地
+  （5k Positions −4.16%，质量逐题一致）。
 
 **测量口径的三条硬约束**
 
@@ -2896,15 +2910,21 @@ S2 的**已知近似**（不是缺陷，是 v7 没有 DocStore 原文的必然�
   前缀即码点前缀），拉丁天然按词边界。
 - **成本护栏**：只在**该步未截断命中数 ≤ `Cap = 2048`** 时读 DocStore；判定用未截断命中数
   而非返回条数，翻页 / `limit` 不影响结论。宽命中步保持 exactness=none，不读 DocStore。
+- **Q1 歌词整行（2026-11-26 补充）**：DocStore v5 追加 `lyrics_digest`（每 doc 一份有序去重的
+  64 位行哈希，`Analyzer.NormalizeMetadata` 去 ASCII 空格后 FNV-1a 64）。只在**字面主趟**且
+  scope 覆盖歌词（Lyrics / Mixed）、命中 ≤ cap 时二分查找；整行相等记 `equal` 且字段保持保守
+  的 `lyrics`（元数据三列命中的档位 / 字段桶不变）。**只支持相等**：前缀 / 包含仍 `none`，
+  因为摘要不含原文；旧 v1–v4 索引必须全量重建（`CurrentMetaVersion 4`）。
 - **邻近度（第 5 键）**：单 term = 0；Meta 步且表达式恰为一个多 token 短语 = `token 数 - 1`
   （位置连续已由 `PhraseIter` 证明）；散落多 term 与歌词 / 混合 / 读音族 = `int.MaxValue`
   （再扫一遍位置会破坏 T3.14 的成本模型，按 spec「算不出」处理）。
 - **解释与分页**：`explain.bucket` 现在填满 5 元（kind / coverage / field / exact / proximity），
   `proximity` 未知时实体值映射为 `-1`（线格式未变）；`SearchPaging` 的 proximity 槽写入真实值，
   keyset 翻页与新排序键一致。
-- **`positioned`**：现按「该步是否含位置短语」报告（散落 AND = false）。这与 spec「无位置字段
-  降级时才 false」略有出入——生产未启用免位置字段，故目前只影响诊断语义；T3.6 启用时必须
-  改为由 `PhraseIter.Positioned` 透传。
+- **`positioned`**：已由 `PhraseIter.Positioned` 真实透传（T2.5）。S2（2026-11-26 修正）
+  只让可选音译层 `LyricsRomanization` 默认免位置，因此音译短语确实降级为 AND，
+  `explain` / `trace` 显示 `positioned=false`；`PinyinLyrics` 仍带位置，拼音短语保持
+  相邻校验（避免 5k eval 那类假阳性）。
 - **质量实测**（30k / 5k，同一 37 条集）：
   - 30k 逐项不变（NDCG@10 0.9827 / P@1 1.000 / P@10 0.9054）——该集已经没有可提升空间。
   - **5k**：`narrow` 桶 P@1 **0.333 → 0.667**、MRR@10 **0.611 → 0.778**、NDCG@10 **0.710 → 0.833**；
@@ -3026,7 +3046,10 @@ Dart 侧：S1 之后只改 FFI 契约与渲染，不参与召回 / 排序演进
 | T2.16 | 完成 | `bench/erastore/out/` 八份 JSON：build / footprint / open / startup / query / latency / merge / verify |
 | T2.17 | 完成 | 本节 |
 
-**quick 实测**（5,000 doc / 3 段 / 12 字段族 / 派生层免位置，固定 `file_uuid` 与 `created_ms`）
+**quick 实测**（5,000 doc / 3 段 / 12 字段族 / 派生层免位置，固定 `file_uuid` 与 `created_ms`；
+该数字是 bench 当时的 `{Romanization, PinyinLyrics}` 口径，生产未启用。2026-11-26 质量门后
+最终只保留音译层免位置，歌词拼音带位置；历史数字不可当作当前生产体积，
+见 t314 门禁「第九轮」）
 
 | 项 | 实测 |
 |---|---|
@@ -3058,8 +3081,16 @@ Dart 侧：S1 之后只改 FFI 契约与渲染，不参与召回 / 排序演进
 
 1. **full（50k 长歌词）仍未跑**：30k 用的是 10–20 行短歌词；`PROFILE=full` 是 20–40 行 × 12 层全开的最坏情况，受仓库红线约束须分段执行、显式 `ALLOW_LONG_BENCH=1`，尚无官方数字。RSS/体积/段数都要按 full 重新校准。
 2. **`Manifest.MaxSections = 64` 是硬顶**：每段写 5 个 section（DocStore / Dict / DictIndex / Postings / Positions）⇒ **最多 12 段**。写入侧不校验、读取侧 `Manifest.Parse` 超限抛 `InvalidDataException`，即**超限会写出打不开的索引**。`MaxSegmentBytes = 32 MB` 与默认 `DocsPerSegment = 16,000` 先到先得：长歌词 full 语料下每 doc 内存估算更大，段数可能逼近 12。S3 必须三选一：按已知总数自适应段大小（如 `min(DocsPerSegment, ceil(total/8))`）、把 Dict+DictIndex 合并为 4 段/段（⇒16 段），或 format v2 提高 `MaxSections`；并在 Builder 侧加**构建期硬校验**，宁可构建失败也不产出不可读索引。
-3. **positions 仍占 46–47%**：已对两条派生转写层免位置，剩余位置块来自歌词原文 / 译文 / 首字母等。若要继续压体积，下一步是让 `initialsLyrics` / `pinyinMeta` 也免位置（代价同样是短语查询降级为 AND）。
+3. **positions 仍占 ~63%（O8 后 5k 最终索引 25,563,565 B 中 16,207,455 B）**：S2 修正后只对
+   可选音译层免位置，`PinyinLyrics` 必须保留（5k qbench eval：两条一起免位置 ALL P@1
+   0.973→0.838；`woaini` / `woai` / 歌词行题 P@1 1→0）。`initialsLyrics` / `pinyinMeta`
+   经测量后也未采纳（首字母相邻 bigram / 元数据短语假阳性）。O8 位置块位打包已落地
+   （varint 16,910,138 → packed 16,207,455，−4.16%），仍不改变短语相邻语义；进一步收益
+   需要 PForDelta 例外帧等更复杂编码。
 4. **`NoPositionFields` 的语义必须写进 explain**：无位置字段上 `Positions()` 返回空，`PhraseIter` **降级为纯交集（AND）并置 `Positioned=false`**（不是"不匹配"）。查询层必须在 `explain` 中标注，否则用户会以为短语精确命中。
+   升级后混合合并按 term 归一：任一条目无位置则整词条丢位置（旧段独有词条仍保留）；
+   一个段所有词条都免位置时 Builder 不写 `Positions` section，`StoreReader` 把缺失段
+   视为空位置块（`DocStore` / `Dict` / `DictIndex` / `Postings` 仍必须存在）。
 5. **GC 配置只在 bench 生效**：`System.GC.ConserveMemory=9` / `Gen0Size=2 MB` 写在本 bench 的 `RuntimeHostConfigurationOption`；生产 NativeAOT 产物是否等效需在 S3 用真实产物复核（不复核则 30k RSS 回落到约 154 MB）。
 6. **体积比值尚不可判**：1,240 / 1,203 B/轨是合成语料数字，不能与现网 SQLite 382.5 MB / 30k（≈13.1 KB/轨）直接相除；≤0.75× 只能用 S0 的同语料同查询集基线判定。
 7. **差分只到存储层**：P9 / T2.14 比的是段内文档序列；桶序、打分、top-k 游标属 S3 的 Ranker（§3.6.4），当前没有语义等价基线。
@@ -3653,14 +3684,17 @@ dotnet run --project app/core/indexer -- replay run \
 - `passes` 在 v2 删除，诊断只保留 `explain` + `trace`；
 - `scheme` 变更只影响缓存键，不重建索引；
 - 首字母 bigram 与拼音用不同 `field_id`，必须有一条向量证明 `xz` 不会误命中拼音音节；
-- 歌词拼音是独立字段族（`0x21`），与元数据读音分开；位置默认写，免位置是非默认优化。
+- 歌词拼音是独立字段族（`0x21`），与元数据读音分开；**必须保留位置**（5k eval 已证明
+  免位置会掉 P@1 / NDCG）。只有可选音译层 `0x07` 生产默认免位置（短语降级为 AND，
+  `explain` 标注），元数据拼音仍带位置。
 
 **仍未决（不阻塞 S1）**：
 
 1. `recall@1` 是否作为**正式 UI 入口**暴露（"深度搜索"），还是只在诊断 / 高级设置里；
 2. 同曲多版本（remaster / live）是否做 `dedupe-versions@1`——需要曲目时长等额外字段；
 3. S4 策展双语表的许可证与词表来源（未就绪则 S4 不启动）；
-4. 若 §8 仍不达标，是否接受 V2（歌词拼音免位置）——需你确认，且默认不启用。
+4. ~~是否接受 V2（歌词拼音免位置）~~：**已决（2026-11-26）**——否。歌词拼音保留位置；
+   只保留可选音译层免位置。positions 体积压缩由 **O8 位置块位打包**承担（已落地）。
 
 ---
 
@@ -3705,14 +3739,14 @@ dotnet run --project app/core/indexer -- replay run \
 ### 8.1 体积削减手段（S3 必须落地，按收益排序）
 
 > **功能不可用体积换**：`lyrics_pinyin`（歌词拼音）是**一等能力**，不许删除、不许默认关闭来达标。
-> 下文 V1 / V3 / V5 / V6 / V7 严格无损；V2 是"词仍在、相邻要求放宽"的精度取舍，**非默认**，
-> 只在其余无损手段仍不足时评估，并需用户确认。凡是要"少召回一部分歌词拼音"的方案，
-> 一律不进默认配置。
+> 下文 V1 / V3 / V5 / V6 / V7 严格无损；V2 是"词仍在、相邻要求放宽"的精度取舍。
+> **2026-11-26 修正：只对可选音译层生效**；歌词拼音免位置已被 5k qbench eval 否决
+> （ALL P@1 0.973→0.838）。凡是要"少召回一部分歌词拼音"的方案，一律不进默认配置。
 
 | # | 手段 | 预计节省 | 召回影响 | 备注 |
 |---|---|---|---|---|
 | V1 | **歌词行级去重**（归一后相同的行只索引一次） | 歌词 token 的 20–40% | 无（重复行本来就不提供新词） | 副歌重复是主要来源；对原文 / 译文 / 拼音同时生效 |
-| V2 | **歌词读音不存位置**（只 doc 级命中，只存 postings） | 歌词读音部分的 30–50% | **精度取舍**：多音节从短语（相邻）降为 AND（词仍在，只是不再要求相邻） | **非默认**：仅在其余无损手段仍不足时评估，需用户确认；元数据读音仍存位置 |
+| V2 | **仅可选歌词音译不存位置**（只 doc 级命中，只存 postings） | 音译层的位置块 | **精度取舍**：音译短语降级为 AND；无位置短语的 bm25 贡献为 0 | **2026-11-26 保留项**；`PinyinLyrics` **禁止**免位置（5k eval 回归），元数据拼音 / 首字母仍存位置 |
 | V3 | **歌词列不建 unigram**（只 bigram） | ≈ 2 token/行 | 无（单字查询本来就不查歌词） | 与 `RequireMetadataForSingleChar` 一致 |
 | V4 | **`initials_lyrics` 默认关**（`pinyin_lyrics` 始终保留且默认开） | 歌词派生列的 15–25% | 歌词**首字母**默认不可用（拼音不受影响） | 首字母是独立能力，不是拼音；设置项可随时开启 |
 | V5 | `lyrics_rom` 仅在存在显式音译层时写入 | 小 | 无 | 现状已部分如此 |
@@ -3736,9 +3770,12 @@ dotnet run --project app/core/indexer -- replay run \
 | **分层统计** | 各层去重率分别统计：译文的重复率通常低于原文，不共用 20–40% 这个比例 |
 
 > 结论：体积不靠"砍歌词"，靠 V1 去重 + V3 去 unigram + V4 关首字母 + 存储编码；
-> V2（歌词读音免位置）属精度取舍，非默认；V6 只在异常数据（例如整本小说被塞进歌词字段）时兜底。
+> V2（歌词读音免位置）只保留可选音译层，歌词拼音必须带位置；V6 只在异常数据
+> （例如整本小说被塞进歌词字段）时兜底。positions 的压缩由 O8 块级位打包承担
+> （2026-11-26 已落地，5k −4.16%），倒排位打包仍未启用。
 
-预期合计（EraStore）：v1 编码 **0.55–0.75×**，加 O8（位打包）后 **0.45–0.60×**；
+模型预期（EraStore）：v1 编码 **0.55–0.75×**；O8 位置块位打包在 5k 实测文件 −2.68%，
+计入后仍以实测为准。倒排若再做 PForDelta 位打包，预计再降 **5–12%**。
 计入歌词拼音（默认开）后仍应 **≤0.75×**，门禁仍是 **≤0.80×**。
 若只到 0.80×，优先加 V1 的实现质量（去重率）与 O1–O7，**不要**先关歌词拼音。
 
@@ -3751,7 +3788,7 @@ dotnet run --project app/core/indexer -- replay run \
 |---|---|---|---|
 | L1 | `lyrics_rom_tok` 仅在存在显式音译层时写入 | 2–5% | ✅ 现状本就如此 |
 | L2 | 词典前编码 + 块索引调优（块大小 / 前缀截断） | 3–8% | ✅ |
-| L3 | 倒排块压缩（PForDelta / 位打包）替代纯 varint | 5–12% | ✅ |
+| L3 | 倒排块压缩（PForDelta / 位打包）替代纯 varint | 5–12% | ✅（位置块 O8 已落地；倒排待做） |
 | L4 | 元数据列式 + 字符串字典化（歌手 / 专辑重复度高） | 2–5% | ✅ |
 | L5 | 更快 / 更频繁的合并，压低死行比例 | 2–5% | ✅ 只影响写放大 |
 
@@ -3975,7 +4012,7 @@ indexBuilding ──构建完成回调──▶ 若查询非空，静默重跑�
 | 六趟 + 丢词 + CJK 容错 | 计划里的 7 个 step | 顺序保留，语义边界显式化 |
 | `bm25` 单池排序 | 桶序 → 桶内 bm25 | 跨桶不可比 |
 | `initials_meta_tok` 整段 token | 首字母 bigram（无 unigram） | 支持部分首字母，仍禁止单字母 |
-| `pinyin_lyrics_tok` / `initials_lyrics_tok` | 独立字段族 `0x21` / `0x22`：拼音默认写、首字母默认关 | 主路径不再扫读音字段；位置默认写 |
+| `pinyin_lyrics_tok` / `initials_lyrics_tok` | 独立字段族 `0x21` / `0x22`：拼音默认写、首字母默认关 | 主路径不再扫读音字段；`0x21` / `0x22` 均带位置（歌词拼音免位置已否决） |
 | `reading_meta_tok` + `reading_tok` 副本 | `field 0x17` + DocStore 原文 | 不需要"副本列"，DocStore 可复核 |
 | `indexed_mtime` | `rev`（内容指纹） | 根治 D-3 |
 | `optimize` | 分层段合并（死行 ≥20% / 段数 ≥8，单次 2s） | 成本与脏曲数解耦 |
@@ -3999,7 +4036,7 @@ indexBuilding ──构建完成回调──▶ 若查询非空，静默重跑�
 | 歌词去重 | 行级（归一后相等） | §8.1 V1；目标去重率 ≥20% |
 | 歌词 unigram | 不建（只 bigram） | §8.1 V3 |
 | 歌词护栏 | 4096 唯一行 / 128 KB **每层**（去重后计数；正常歌词不截断） | §8.1 V6；阈值由真实库 p99.9 校准 |
-| 歌词读音 | 字段族 `0x21`，默认开、位置默认写；`0x22` 首字母默认关 | §8.1 V4 + ADR-4；免位置（V2）非默认 |
+| 歌词读音 | 字段族 `0x21`，默认开、**保留位置**；`0x22` 首字母默认关 | §8.1 V4 + ADR-4 + 2026-11-26 5k 质量门 |
 | 模糊词表 | 词典前缀区间 + 有界编辑距离（**无额外表**） | §8.4；禁止全量载入词表 |
 | `total` 默认 | `none`（响应 `total=-1`） | §3.6.4；避免每次查询遍历倒排 |
 | `limit` 上限 | 10000（超出截断并返回 `clamped=true`） | UI 单屏用不到更多；保护长尾 |
@@ -4479,7 +4516,7 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 | ADR-6b | 搜索逻辑全部下沉 .NET，Dart 不再实现同类算法 | 已定 | 两层各写一份：口径漂移、无跨层契约测试 |
 | ADR-7 | 版本拆四维（schema/normalizer/tokenizer/scheme） | 已定 | 单 `AnalyzerVersion`：改阈值也全量重建 |
 | ADR-7b | 能力协商 + `degradeTo` 方案 | 已定 | 运行期试错：列不存在才发现，用户看到异常 |
-| ADR-11 | 体积只接受**无损优化**：去重、编码、压缩、合并；V2（歌词读音无位置）非默认且需用户确认 | 已定 | 关拼音 / 只索引副歌 / 词级合并：都是丢能力或明显降召回 |
+| ADR-11 | 体积只接受**可控优化**：去重、编码、压缩、合并；2026-11-26 起仅可选歌词音译层生产默认为无位置，**歌词拼音必须带位置**（5k eval 回归），其余字段也带位置 | 已定 | 关拼音 / 只索引副歌 / 词级合并：都是丢能力或明显降召回；免位置歌词拼音已被实测否决 |
 | ADR-12 | 模糊词表直接扫词典前缀区间（**无额外表**） | 已定 | 复制一份词表：启动慢、常驻内存大，与 §8 冲突 |
 | ADR-13 | **发布只带一个后端**（EraStore），无运行时切换、无双写、无引擎配置项 | **已定（v0.22）** | 双后端：两套故障模型、两倍测试面，且违反"不回退" |
 | ADR-8 | 首字母改 bigram（不出 unigram） | ✅ 已实施（S3 / T3.9，analyzer v15） | 整段 token：部分首字母（`xz`）永远搜不到 |
@@ -4590,6 +4627,7 @@ UTF-16: 晴(0) 天(1) 😀(2,3)
 | v0.31 | 2026-11-24 | S2 explain / trace（T2.7 部分，解锁 T2.3 / T2.5）：新增 `SearchExplain.cs`（前 50 条 `explain` + `trace`，wire kind 定稿 10 档 lowerCamel）；`FtsStore.MatchesDocument` 按 kind 用步骤词元逐列探测真实字段（`resolvedField`，只读派生）；请求 / CLI `--explain` / FFI 响应接线，缓存键区分 explain；N8 由 BLOCKED 转绿（Cover 修饰不进 matched、真实字段 title），`SearchExplainTests` 覆盖只读一致性 / trace / exact / partial / typo；N10 / N11 / N18 保留 BLOCKED 并写明前置；T2.3 收口（15 条 changed=0 / identical=true）；C# PASS 3003 / FAIL 0 / KNOWN-GAP 2 / BLOCKED 5，CLI 与 FFI 0 警告 0 错误 |
 | v0.32 | 2026-11-24 | S2.5 T2.9 陈旧曲目过滤：`era_search_open` 的 `options_json.libraryDb` 透传到查询层；`SearchSession` 在返回时按 `library.db.tracks` 分批 `IN` 回查，缓存保留原始 top-k、每次派生过滤（缓存命中也不吐幽灵），库不可读失败开放并记 warn；CLI `query --library`、Dart `SearchService` 传源曲库路径；N12 转绿（含缓存路径），C# PASS 3005 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5，`dart analyze lib` 0 issue，search 相关 Flutter 测试全绿 |
 | v0.33 | 2026-11-24 | S2.5 T2.8 歌词片段下沉：新增 `SearchSnippet.cs`，`snippet=true` 时前 10 条返回 `{field,text,ranges,truncated}`；查询期只读 `library.db`（`busy_timeout=1000`）合成原文 / 译文 / 音译三层并按字面命中截取 ≤512 UTF-16 窗口，库缺失 / 锁冲突失败开放为 null；片段随结果缓存（缓存键含 `snippet`），`WithoutTracks` 同步过滤；CLI `query --snippet`、FFI / `IndexerJson` 输出接线；新增 `SearchSnippetTests` + `SearchApiTests` JSON 形状；C# PASS 3020 / FAIL 0 / KNOWN-GAP 1 / BLOCKED 5 |
+| v0.34 | 2026-11-26 | Q1 歌词精确度：DocStore v5 追加 `lyrics_digest`（归一化整行 FNV-1a 64，有序去重；4 B/doc 偏移 + 8 B/行），字面主趟 / 歌词 scope / ≤cap 时二分查找 → `exactness=equal`，字段保持保守 `lyrics`；前缀 / 包含仍 none；`CurrentMetaVersion 4`，旧索引全量重建；合并原样拷贝；2k 语料抽样 +697 B/曲；C# PASS 4045 / FAIL 0 |
 
 ---
 

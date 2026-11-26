@@ -185,8 +185,8 @@ internal static class LayerConfidenceTests
 
     private static void StorageLayout()
     {
-        Program.Check("T4.2 存储: DocStore v4 / metaVersion ≥3",
-            EraStore.DocStoreWriter.Version == 4
+        Program.Check("T4.2 存储: DocStore ≥v4 / metaVersion ≥3",
+            EraStore.DocStoreWriter.Version >= 4
             && EraStore.Manifest.CurrentMetaVersion >= 3,
             $"{EraStore.DocStoreWriter.Version}/{EraStore.Manifest.CurrentMetaVersion}");
         Program.Check("T4.2 存储: tokenizer 版本已递增（5）",

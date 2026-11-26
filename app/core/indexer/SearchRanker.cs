@@ -28,13 +28,15 @@ internal enum FieldKind
 ///
 /// <para>T3.11：字面精确度改由 <see cref="SearchExactness"/> 读 DocStore 归一列复核
 /// （元数据步与 scope=all 的混合步、单步命中 ≤ <see cref="SearchExactness.DefaultCap"/>），
-/// 邻近度由 <see cref="SearchRanker.FromStep"/> 按步骤形状给出；歌词 / 读音 / 转写族保持
-/// S2 的保守值。</para>
+/// 邻近度由 <see cref="SearchRanker.FromStep"/> 按步骤形状给出。Q1：歌词字面步另有
+/// <c>lyrics_digest</c> 整行相等复核（只给 <see cref="SearchExactness.Equal"/>，前缀 / 包含仍
+/// <see cref="SearchExactness.None"/>）；读音 / 转写 / 模糊族保持 S2 的保守值。</para>
 ///
 /// <para><see cref="ExactChecked"/> 是「该证据的字面精确度确实在 DocStore 上算过」的标志：
 /// explain 用它决定 <c>resolvedField</c> 是否仍走逐列探测（见
 /// <see cref="SearchExplainBuilder"/>）。宽命中步（&gt; cap）不读 DocStore，因此为 false；
-/// 歌词 / 读音 / 拼音 / 首字母 / 容错步也不复核，同样为 false。</para>
+/// 歌词整行复核（Q1）只改第 4 键，不单独置位（Mixed 步的元数据复核块仍会置位）；
+/// 读音 / 拼音 / 首字母 / 转写 / 容错步不复核，同样为 false。</para>
 /// </summary>
 internal readonly record struct Evidence(
     MatchKind Kind,
@@ -135,8 +137,9 @@ internal sealed class Candidate
 /// bm25 → docId。exactness / proximity 在 T3.11 起是真实值（字面步读 DocStore 归一列、
 /// 按步骤形状判邻近度）；<b>field 也由复核决定</b>——命中 title / artist / album 归一列时
 /// 写真实字段，复核为「近似」时保留字段族的保守映射（Mixed → Lyrics，宁可把歌词命中排低）。
-/// 歌词 / 读音 / 拼音 / 首字母 / 转写 / 容错步仍记
-/// <see cref="SearchExactness.None"/> + <see cref="ProximityUnknown"/>。</para>
+/// 歌词字面步只在整行相等时记 <see cref="SearchExactness.Equal"/>（Q1）；其余歌词 / 读音 /
+/// 拼音 / 首字母 / 转写 / 容错步仍记 <see cref="SearchExactness.None"/> +
+/// <see cref="ProximityUnknown"/>。</para>
 /// </summary>
 internal static class SearchRanker
 {
@@ -375,6 +378,11 @@ internal static class SearchRanker
 /// <see cref="EraStore.EraQueryPlan"/> 的未截断计数，与请求的 <c>limit</c> / 游标无关，翻页判定一致）。
 /// 宽命中步一律记 <see cref="None"/>，不读 DocStore——p50 / p95 门禁靠这条守住（T3.14）。</para>
 ///
+/// <para><b>Q1 歌词整行</b>：DocStore v5 的 <c>lyrics_digest</c> 存每行歌词的归一化 64 位哈希
+/// （<see cref="EraStore.LyricDigest"/>）。字面主趟且 scope 覆盖歌词列、命中 ≤ cap 时，
+/// 元数据三列都没命中才二分查找该列：整行相等记 <see cref="Equal"/>，**字段保持保守的
+/// Lyrics**。哈希恢复不了原文，前缀 / 包含仍记 <see cref="None"/>。</para>
+///
 /// <para><b>适用步骤</b>：表达式可能命中 title / artist / album **字面**列（0x01–0x03）且
 /// 搜索文本就是查询原文的步骤——<see cref="FieldFamily.Meta"/> 与 scope=all 的
 /// <see cref="FieldFamily.Mixed"/>（主趟 + 中文容错趟）。scope=lyrics 收紧到歌词列、
@@ -426,11 +434,30 @@ internal static class SearchExactness
     /// <summary>测试接缝：本进程累计的 DocStore 归一列读取次数。</summary>
     internal static long DebugDocReads => Interlocked.Read(ref _docReads);
 
-    /// <summary>测试接缝：清零 <see cref="DebugDocReads"/>。</summary>
-    internal static void DebugResetDocReads() => Interlocked.Exchange(ref _docReads, 0);
+    private static long _lyricDigestReads;
+
+    /// <summary>测试接缝：本进程累计的 DocStore 歌词行摘要（v5 <c>lyrics_digest</c>）读取次数。</summary>
+    internal static long DebugLyricDigestReads => Interlocked.Read(ref _lyricDigestReads);
+
+    /// <summary>测试接缝：清零两类 DocStore 读取计数。</summary>
+    internal static void DebugResetDocReads()
+    {
+        Interlocked.Exchange(ref _docReads, 0);
+        Interlocked.Exchange(ref _lyricDigestReads, 0);
+    }
 
     /// <summary>记一次 DocStore 归一列读取（<see cref="DocStoreReader.NormSpans"/>）。</summary>
     internal static void CountDocRead() => Interlocked.Increment(ref _docReads);
+
+    /// <summary>记一次 DocStore 歌词行摘要读取（<see cref="DocStoreReader.ContainsLyricLine"/>）。</summary>
+    internal static void CountLyricDigestRead() => Interlocked.Increment(ref _lyricDigestReads);
+
+    /// <summary>
+    /// 查询归一形对应的歌词行哈希（Q1）：与 <see cref="EraStore.LyricDigest.HashLine"/>
+    /// 同一 FNV-1a 口径，因此可以用「整行相等」直接命中 DocStore v5 的 <c>lyrics_digest</c>。
+    /// </summary>
+    public static ulong? HashQuery(ReadOnlySpan<byte> normalizedQuery)
+        => EraStore.LyricDigest.HashQuery(normalizedQuery);
 
     /// <summary>ASCII 空格（<see cref="Analyzer.NormalizeMetadata"/> 折叠后的唯一空白）。</summary>
     private const byte Space = 0x20;

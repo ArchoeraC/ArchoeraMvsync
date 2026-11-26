@@ -24,7 +24,8 @@ internal readonly record struct AnalyzedDoc(
     long Mtime = 0,
     long LrcMtime = 0,
     long LrcSize = 0,
-    byte LayerConf = 0);
+    byte LayerConf = 0,
+    IReadOnlyList<string>? LyricLines = null);
 
 /// <summary>
 /// 全量构建参数。<see cref="FileUuid"/> / <see cref="CreatedMs"/> / <see cref="Gen"/> 固定时，
@@ -52,10 +53,11 @@ internal sealed class BuildOptions
     public ulong CreatedMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
     /// <summary>
-    /// 不写位置块的字段族（V2：派生转写层只做文档级召回，短语由原文 / 元数据层承担）。
-    /// 命中集合与 tf 不受影响；<c>Positions()</c> 返回空，PhraseIter 在该字段降级为
-    /// 纯交集（<c>Positioned=false</c>），调用方需在 explain 中标注。
-    /// 默认为空 = 全部字段带位置（与历史字节完全一致）。
+    /// 不写位置块的字段族（V2 / S2：派生转写层只做文档级召回，短语由原文 / 元数据层承担）。
+    /// 命中集合与 term tf 不受影响；<c>Positions()</c> 返回空，PhraseIter 在该字段降级为
+    /// 纯交集（<c>Positioned=false</c>），调用方需在 explain 中标注。降级后的短语无法按
+    /// 位置计词频，bm25 对该短语的贡献为 0（既有语义见 <c>EraStoreBitsetEquivalenceTests</c>）。
+    /// 默认为空 = 全部字段带位置（与历史字节完全一致，测试 / 诊断可显式覆盖）。
     /// </summary>
     public HashSet<FieldId> NoPositionFields = new();
 
@@ -444,6 +446,9 @@ internal static class IndexBuilder
             TitleNorm = Analyzer.NormalizeMetadata(doc.Title),
             ArtistNorm = Analyzer.NormalizeMetadata(doc.Artist),
             AlbumNorm = Analyzer.NormalizeMetadata(doc.Album),
+            // v5 歌词行摘要（Q1）：与归一列同一生成点（全量 / 增量共用），
+            // 合并路径从旧段原样拷贝，不再调用 Analyzer.NormalizeMetadata。
+            LyricDigests = LyricDigest.Build(doc.LyricLines),
             Mtime = doc.Mtime,
             LrcMtime = doc.LrcMtime,
             LrcSize = doc.LrcSize,

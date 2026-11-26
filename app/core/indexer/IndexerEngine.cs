@@ -274,14 +274,14 @@ public sealed class IndexerEngine
                         Log.LogWarn("indexer", $"曲目在索引过程中消失，跳过: {item.Id}");
                         continue;
                     }
-                    var (tokens, truncatedLayers) = BuildTokens(track, options, generation);
+                    var (tokens, truncatedLayers, lyricLines) = BuildTokens(track, options, generation);
                     if (truncatedLayers > 0)
                     {
                         lyricsTruncatedLayers += truncatedLayers;
                         lyricsTruncatedTracks++;
                     }
                     profile.Add(tokens);
-                    var (doc, oversize) = BuildEraDoc(track, tokens);
+                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
                     oversizeTokens += oversize;
                     eraDocs.Add(doc);
                     indexed++;
@@ -396,6 +396,9 @@ public sealed class IndexerEngine
                     {
                         OptionsBits = BuildOptionsBits(meta),
                         Capabilities = EffectiveCapabilities(meta),
+                        // 增量新段必须与全量同一套免位置布局，否则同一曲库会按写入时间
+                        // 出现两种短语语义；旧段不受影响（既有索引仍可读，无需重建）。
+                        NoPositionFields = EraStore.BuildDefaults.CreateNoPositionFields(),
                     });
                 eraIncremental = true;
                 eraMerged = inc.Merged;
@@ -635,7 +638,7 @@ public sealed class IndexerEngine
                 foreach (var item in chunk)
                 {
                     if (!contents.TryGetValue(item.Id, out var track)) continue;
-                    var (tokens, truncated) = BuildTokens(track, options, generation);
+                    var (tokens, truncated, lyricLines) = BuildTokens(track, options, generation);
                     if (truncated > 0)
                     {
                         truncatedLayers += truncated;
@@ -643,7 +646,7 @@ public sealed class IndexerEngine
                     }
                     profile.Add(tokens);
                     live++;
-                    var (doc, oversize) = BuildEraDoc(track, tokens);
+                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
                     oversizeTokens += oversize;
                     yield return doc;
                 }
@@ -660,6 +663,9 @@ public sealed class IndexerEngine
                 DataPackId = DataPack.Current.Id,
                 OptionsBits = optionsBits,
                 Capabilities = capabilities,
+                // S2：生产默认给两条派生转写层免位置（与 bench 共用同一份清单）。
+                // 显式改 BuildOptions.NoPositionFields 仍可覆盖，用于测试 / 诊断。
+                NoPositionFields = EraStore.BuildDefaults.CreateNoPositionFields(),
                 // 真实中文歌词（2–8 KB/曲、12 字段族）下单段累加器的实际内存约为估算值的
                 // 6–8 倍；32 MB 估算会把峰值推到 200 MB+。4 MB 估算 ⇒ 约 25–35 MB 实际，
                 // 段数随之增加（2048 条 section 上限可容纳 ~400 段）。
@@ -693,7 +699,7 @@ public sealed class IndexerEngine
     /* 分层分析                                                            */
     /* ------------------------------------------------------------------ */
 
-    private static (DocTokens Tokens, int TruncatedLayers) BuildTokens(
+    private static (DocTokens Tokens, int TruncatedLayers, IReadOnlyList<string> LyricLines) BuildTokens(
         TrackRecord track, IndexerOptions options, long generation)
     {
         // 「整首是否日文」由任一源含假名判定：真实日文曲库里歌手 / 专辑常是**纯汉字**
@@ -750,6 +756,14 @@ public sealed class IndexerEngine
         // 日文读音只索引元数据段（歌词读音不索引，见 DocTokens.ReadingMetaTok 说明）；
         // 同一串另存一份原文副本供兜底趟分档（T1-4，EraStore 词典不保存整段原文）。
         var reading = options.Pinyin ? CombineReadings(title, artist, album, filename) : "";
+
+        // v5 歌词行摘要（Q1）的原料：**实际参与索引的**三个字面歌词层（原文 / 译文 /
+        // 显式音译），取预处理（去重 + V6 护栏）之后的文本。生成的罗马音由读音派生，
+        // 不是用户可搜的字面行，不参与摘要；重复行跨层由 LyricDigest.Build 去重。
+        var lyricLines = new List<string>();
+        CollectLines(originalLayer.Text, lyricLines);
+        CollectLines(translationLayer.Text, lyricLines);
+        CollectLines(romajiLayer.Text, lyricLines);
 
         // 每曲最多一条 warn：列出被截断的层与触发维度，便于定位病态歌词来源。
         var truncatedLayers = 0;
@@ -825,7 +839,17 @@ public sealed class IndexerEngine
             IndexedLrcSize = hasSidecar ? track.LrcSize : 0,
             IndexedGeneration = generation,
         };
-        return (tokens, truncatedLayers);
+        return (tokens, truncatedLayers, lyricLines);
+    }
+
+    /// <summary>把一个预处理后的歌词层按行加入摘要原料（空层 / 空行跳过）。</summary>
+    private static void CollectLines(string layerText, List<string> lines)
+    {
+        if (layerText.Length == 0) return;
+        foreach (var line in layerText.Split('\n'))
+        {
+            if (!string.IsNullOrWhiteSpace(line)) lines.Add(line);
+        }
     }
 
     /// <summary>
@@ -860,7 +884,7 @@ public sealed class IndexerEngine
     /// <see cref="EraStore.AnalyzedDoc"/>。12 字段 token 串与 EraStore 的字段族一一对应。
     /// </summary>
     private static (EraStore.AnalyzedDoc Doc, int OversizeTokens) BuildEraDoc(
-        TrackRecord track, DocTokens tokens)
+        TrackRecord track, DocTokens tokens, IReadOnlyList<string> lyricLines)
     {
         // 词条硬上限（EraFormat.MaxTermBytes = 255B）：超长无分隔拉丁词（URL / 长串）或超长
         // 首字母串会让 TermDict 抛异常、令整次全量构建失败。这里在写入前剔除并计数：
@@ -926,7 +950,7 @@ public sealed class IndexerEngine
             trackBytes, rev, 0, flags, fields,
             track.Title, track.ArtistText, track.AlbumText,
             tokens.IndexedMtime, tokens.IndexedLrcMtime, tokens.IndexedLrcSize,
-            tokens.LayerConf), oversize);
+            tokens.LayerConf, lyricLines), oversize);
     }
 
     /// <summary>

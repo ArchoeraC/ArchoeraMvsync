@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 using System.Text;
+using Archoera.Indexer.EraStore.Iterators;
 using Archoera.Lyrics;
 using Microsoft.Data.Sqlite;
 
@@ -37,6 +38,7 @@ internal static class EndToEnd
             RomajiLyrics(root);
             InitialsLyricsOption(root);
             InitialsBigramSearch(root);
+            ProductionRomanizationNoPositions(root);
             RepeatedFullBuild(root);
             EraIncremental(root);
             FullBuildCompactionWritesFreshGeneration(root);
@@ -1023,6 +1025,142 @@ internal static class EndToEnd
         Program.Check("歌词罗马音: 关闭触发全量", back.Full);
         Program.Check("歌词罗马音: 关闭后 tJ 读音 bigram 归零", MatchCount(index, SoraPhrase) == 0,
             MatchCount(index, SoraPhrase).ToString());
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 生产路径派生转写层免位置（S2）                                      */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// 生产路径只在**显式音译层**免位置（S2 修正，2026-11-26）：
+    /// <see cref="IndexerEngine"/> 全量 / 增量使用 <see cref="EraStore.BuildDefaults"/>，
+    /// 其中只有 <c>LyricsRomanization</c>；<c>PinyinLyrics</c> / <c>PinyinMeta</c> 必须
+    /// 保留位置（5k qbench eval 证明拼音短语降级为 AND 会显著掉 P@1 / NDCG）。
+    /// </summary>
+    private static void ProductionRomanizationNoPositions(string root)
+    {
+        var work = Path.Combine(root, "production-no-pos");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        // t0 的音译 / 拼音里 qing 与 tian 相邻；t1 故意插两个音节，用来证明
+        // 无位置音译的短语降级为 AND，而拼音短语仍按位置精确匹配。
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            InsertTrack(conn, "np0", Path.Combine(dir, "np0.mp3"), "晴天", "[]", null, "晴天", 1000);
+            InsertTrack(conn, "np1", Path.Combine(dir, "np1.mp3"), "雨天", "[]", null, "晴爱你天", 2000);
+        }
+        using (var conn = Open(db))
+        {
+            SetSidecar(conn, "np0", "[00:01.00]晴天\n", romaji: "[00:01.00]qing tian\n");
+            SetSidecar(conn, "np1", "[00:01.00]晴爱你天\n", romaji: "[00:01.00]qing ai ni tian\n");
+        }
+
+        var result = RunEngine(db, index, full: true,
+            options: new IndexerOptions { IndexLrc = true, Pinyin = true, RomajiLyrics = true });
+        Program.Check("生产免位置: indexed==2", result.Indexed == 2, result.Indexed.ToString());
+        Program.Check("生产免位置: romaji 选项已开",
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
+
+        Program.Check("生产免位置: BuildDefaults 只含歌词音译层",
+            EraStore.BuildDefaults.NoPositionFields.SequenceEqual(new[]
+            {
+                EraStore.FieldId.LyricsRomanization,
+            }),
+            string.Join(',', EraStore.BuildDefaults.NoPositionFields));
+
+        var sawRoman = false;
+        var sawPinyinLyrics = false;
+        var sawPinyinMeta = false;
+        var sawRomanPhrase = false;
+        var sawPinyinPhrase = false;
+
+        using var reader = new EraStore.StoreReader(EraFile(index));
+        foreach (var seg in reader.OpenPerSegment())
+        {
+            if (seg.Dict.TryFind(EraStore.FieldId.LyricsRomanization, "qing", out var roman))
+            {
+                sawRoman = true;
+                Program.Check("生产免位置: LyricsRomanization 词条 flags bit0=0",
+                    !roman.HasPositions, $"flags=0x{roman.Flags:X2}");
+                var cursor = seg.Postings.Open(roman.PostOffset, roman.Df);
+                Program.Check("生产免位置: LyricsRomanization 游标 HasPositions=false",
+                    cursor.Next() && !cursor.HasPositions,
+                    $"hasPos={cursor.HasPositions} tf={cursor.CurrentTf}");
+                if (PhraseDocs(seg, EraStore.FieldId.LyricsRomanization, "qing", "tian",
+                        out var positioned) is { } docs)
+                {
+                    sawRomanPhrase = true;
+                    Program.Check("生产免位置: 歌词音译短语 qing tian 降级 AND（doc0+doc1 / Positioned=false）",
+                        docs == "0,1" && !positioned, $"{docs}/{positioned}");
+                }
+            }
+
+            if (seg.Dict.TryFind(EraStore.FieldId.PinyinLyrics, "qing", out var pinyinLyrics))
+            {
+                sawPinyinLyrics = true;
+                Program.Check("生产免位置: PinyinLyrics 仍带位置",
+                    pinyinLyrics.HasPositions, $"flags=0x{pinyinLyrics.Flags:X2}");
+                var cursor = seg.Postings.Open(pinyinLyrics.PostOffset, pinyinLyrics.Df);
+                Program.Check("生产免位置: PinyinLyrics 游标 HasPositions=true",
+                    cursor.Next() && cursor.HasPositions,
+                    $"hasPos={cursor.HasPositions} tf={cursor.CurrentTf}");
+                if (PhraseDocs(seg, EraStore.FieldId.PinyinLyrics, "qing", "tian",
+                        out var positioned) is { } docs)
+                {
+                    sawPinyinPhrase = true;
+                    Program.Check("生产免位置: 歌词拼音短语仍校验相邻（只有 doc0 / Positioned=true）",
+                        docs == "0" && positioned, $"{docs}/{positioned}");
+                }
+            }
+
+            if (seg.Dict.TryFind(EraStore.FieldId.PinyinMeta, "qing", out var pinyinMeta))
+            {
+                sawPinyinMeta = true;
+                var cursor = seg.Postings.Open(pinyinMeta.PostOffset, pinyinMeta.Df);
+                Program.Check("生产免位置: PinyinMeta 仍带位置（短语精度不回退）",
+                    pinyinMeta.HasPositions && cursor.Next() && cursor.HasPositions,
+                    $"flags=0x{pinyinMeta.Flags:X2} hasPos={cursor.HasPositions}");
+            }
+        }
+
+        Program.Check("生产免位置: 两个字段都出现在词典", sawRoman && sawPinyinLyrics,
+            $"roman={sawRoman} pinyinLyrics={sawPinyinLyrics}");
+        Program.Check("生产免位置: 元数据拼音仍带位置", sawPinyinMeta, sawPinyinMeta.ToString());
+        Program.Check("生产免位置: 音译降级 / 拼音保位置都已覆盖",
+            sawRomanPhrase && sawPinyinPhrase, $"roman={sawRomanPhrase} pinyin={sawPinyinPhrase}");
+
+        var verify = EraStore.IndexVerifier.Verify(EraFile(index));
+        Program.Check("生产免位置: IndexVerifier.Verify 通过", verify.Ok,
+            string.Join("; ", verify.Errors));
+    }
+
+    /// <summary>
+    /// 在单段内跑 <c>qing tian</c> 短语：返回命中 doc 序列（找不到词条时 null）。
+    /// <c>positioned</c> 是 <see cref="PhraseIter.Positioned"/> 的最终事实。
+    /// </summary>
+    private static string? PhraseDocs(
+        EraStore.SegmentReaders seg, EraStore.FieldId field, string first, string second,
+        out bool positioned)
+    {
+        positioned = true;
+        if (!seg.Dict.TryFind(field, first, out _) || !seg.Dict.TryFind(field, second, out _))
+            return null;
+
+        var terms = new IDocIter[]
+        {
+            new TermIter(seg.Dict, seg.Postings, field, first),
+            new TermIter(seg.Dict, seg.Postings, field, second),
+        };
+        using var phrase = new PhraseIter(terms, positioned: true);
+        var docs = new List<int>();
+        while (phrase.Next()) docs.Add(phrase.Current);
+        positioned = phrase.Positioned;
+        return string.Join(',', docs);
     }
 
     /// <summary>

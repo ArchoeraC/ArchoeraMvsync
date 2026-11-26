@@ -505,6 +505,7 @@ internal static class Merger
             TitleNorm = Encoding.UTF8.GetString(norm.Title),
             ArtistNorm = Encoding.UTF8.GetString(norm.Artist),
             AlbumNorm = Encoding.UTF8.GetString(norm.Album),
+            LyricDigests = store.LyricDigestArray(doc),
             Mtime = store.Mtime(doc),
             LrcMtime = store.LrcMtime(doc),
             LrcSize = store.LrcSize(doc),
@@ -562,6 +563,21 @@ internal static class Merger
 
                 if (entries.Count == 0) continue; // 该词条只存在于被丢弃的旧副本
                 entries.Sort(static (a, b) => a.Doc.CompareTo(b.Doc));
+
+                // 混合来源（S2 升级后的典型情形：旧段给 LyricsRomanization /
+                // PinyinLyrics 写了位置，新增量段按 BuildDefaults 不再写）必须按 term
+                // 统一布局：任一条目无位置就整 term 丢弃位置，写侧才会得到一致的
+                // dict / 块 flag 0（短语降级为 AND，与无位置字段语义相同）。
+                // 只替换本词条列表里的元素，不改任何共享的位置数组，也不影响其它 term。
+                if (!HasUniformPositions(entries))
+                {
+                    for (var i = 0; i < entries.Count; i++)
+                    {
+                        if (entries[i].Positions is not null)
+                            entries[i] = new PostingEntry(entries[i].Doc, entries[i].Tf, null);
+                    }
+                }
+
                 yield return (key, entries);
             }
         }
@@ -569,6 +585,20 @@ internal static class Merger
         {
             foreach (var (_, terms, _) in readers) terms.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 该词条是否所有条目都带位置（或所有条目都不带）。混合条目在合并输出里不允许存在：
+    /// <see cref="PostingsWriter"/> 只接受全有或全无。S2 后旧段与新段可能同时贡献同一词条。
+    /// </summary>
+    private static bool HasUniformPositions(List<PostingEntry> entries)
+    {
+        var hasPositions = entries[0].Positions is not null;
+        for (var i = 1; i < entries.Count; i++)
+        {
+            if ((entries[i].Positions is not null) != hasPositions) return false;
+        }
+        return true;
     }
 
     /// <summary>byte[] 键的字节序优先队列比较器（键在入队后不再修改）。</summary>

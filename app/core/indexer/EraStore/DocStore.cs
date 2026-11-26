@@ -62,6 +62,14 @@ internal sealed class DocRecord
 
     /// <inheritdoc cref="TitleNorm"/>
     public string AlbumNorm { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 歌词行摘要（DocStore v5，Q1 歌词精确度）：每行歌词归一后的 64 位哈希，
+    /// **严格递增去重**（见 <see cref="LyricDigest"/>）。只覆盖原文 / 译文 / 显式音译
+    /// 三层中实际参与索引的行；生成的罗马音（读音派生）不参与。
+    /// 由 <see cref="IndexBuilder"/> 生成；<see cref="Merger"/> 从旧段原样拷贝，不重新哈希。
+    /// </summary>
+    public ulong[] LyricDigests { get; set; } = Array.Empty<ulong>();
 }
 
 /// <summary>
@@ -69,7 +77,7 @@ internal sealed class DocRecord
 ///
 /// 段体布局（全部小端、无对齐填充）：
 /// <code>
-/// u32 doc_count | u16 version(=4) | u16 text_columns(=6)
+/// u32 doc_count | u16 version(=5) | u16 text_columns(=6)
 /// track[16×N] | rev[16×N] | script_bits[u16×N] | flags[u8×N]
 /// layer_conf[u8×N]                      # v4 三层置信度（每层 2 bit，T4.2）
 /// mtime[u64×N] | lrc_mtime[u64×N] | lrc_size[u64×N]     # v2 增量状态
@@ -80,17 +88,20 @@ internal sealed class DocRecord
 /// title_norm   # v3 归一形（T3.11；Analyzer.NormalizeMetadata）
 /// artist_norm
 /// album_norm
+/// lyrics_digest: u32 offsets[N+1] + u64 sorted hashes   # v5（Q1；LyricDigest）
 /// </code>
-/// 文本偏移相对各自 blob 起点；空串长度为 0。v4 只在 flags 后追加一列 <c>layer_conf</c>，
-/// 其余列语义 / 顺序不变；旧 v1 / v2 / v3 布局不同，读取侧一律拒绝并提示全量重建。
+/// 文本偏移相对各自 blob 起点；空串长度为 0。v4 在 flags 后追加一列 <c>layer_conf</c>；
+/// v5 在最后一列追加 <c>lyrics_digest</c>（每 doc 的行哈希偏移 + 有序哈希 blob）。
+/// 其余列语义 / 顺序不变；旧 v1 / v2 / v3 / v4 布局不同，读取侧一律拒绝并提示全量重建。
 /// </summary>
 internal static class DocStoreWriter
 {
     /// <summary>
-    /// 段体版本（v2 增加增量状态列；v3 追加三列元数据归一形；v4 追加 <c>layer_conf</c>）。
+    /// 段体版本（v2 增加增量状态列；v3 追加三列元数据归一形；v4 追加 <c>layer_conf</c>；
+    /// v5 追加 <c>lyrics_digest</c> 歌词行哈希列，Q1）。
     /// 读取侧只接受本版本：旧索引必须全量重建，绝不按新布局误读。
     /// </summary>
-    public const ushort Version = 4;
+    public const ushort Version = 5;
 
     /// <summary>文本列数：raw title / artist / album + 归一 title_norm / artist_norm / album_norm。</summary>
     public const ushort TextColumns = 6;
@@ -128,6 +139,7 @@ internal static class DocStoreWriter
         WriteTextColumn(w, docs, static d => d.TitleNorm);
         WriteTextColumn(w, docs, static d => d.ArtistNorm);
         WriteTextColumn(w, docs, static d => d.AlbumNorm);
+        WriteDigestColumn(w, docs);
 
         return w.ToArray();
     }
@@ -144,6 +156,34 @@ internal static class DocStoreWriter
 
         foreach (var off in offs) w.WriteUInt32(off);
         foreach (var blob in blobs) w.WriteBytes(blob);
+    }
+
+    /// <summary>
+    /// 歌词行摘要列（v5）：<c>u32 offsets[N+1]</c>（字节偏移，空 doc 与前一 doc 相同）
+    /// + <c>u64×M</c> 小端有序哈希。偏移以字节计，便于和文本列一样用「末项 = blob 长度」
+    /// 做段尾校验；哈希数量由相邻偏移差 / 8 得出。
+    /// </summary>
+    private static void WriteDigestColumn(ByteWriter w, IReadOnlyList<DocRecord> docs)
+    {
+        var offsets = new uint[docs.Count + 1];
+        for (var i = 0; i < docs.Count; i++)
+        {
+            var digests = docs[i].LyricDigests;
+            if (digests is { Length: > 0 })
+            {
+                if (!LyricDigest.IsSortedUnique(digests))
+                    throw new ArgumentException("lyrics_digest 必须严格递增去重", nameof(docs));
+            }
+            offsets[i + 1] = offsets[i]
+                + (digests is null ? 0u : checked((uint)digests.Length * 8u));
+        }
+
+        foreach (var off in offsets) w.WriteUInt32(off);
+        foreach (var doc in docs)
+        {
+            if (doc.LyricDigests is null) continue;
+            foreach (var hash in doc.LyricDigests) w.WriteUInt64(hash);
+        }
     }
 
     private static void Validate(DocRecord d)
@@ -200,6 +240,7 @@ internal sealed class DocStoreReader
     private readonly int _titleNormOff;
     private readonly int _artistNormOff;
     private readonly int _albumNormOff;
+    private readonly int _lyricsDigestOff;
 
     public DocStoreReader(ReadOnlyMemory<byte> body)
     {
@@ -214,7 +255,7 @@ internal sealed class DocStoreReader
         if (version != DocStoreWriter.Version)
             throw new InvalidDataException(
                 $"DocStore 版本 {version} 不支持（当前 {DocStoreWriter.Version}）；"
-                + "旧 v1/v2/v3 索引必须全量重建");
+                + "旧 v1/v2/v3/v4 索引必须全量重建");
         if (textColumns != DocStoreWriter.TextColumns)
             throw new InvalidDataException(
                 $"DocStore 文本列数 {textColumns} 不支持（当前 {DocStoreWriter.TextColumns}）；旧索引必须全量重建");
@@ -230,7 +271,8 @@ internal sealed class DocStoreReader
             + _count                                // layer_conf（v4）
             + stateBytes
             + (long)_count * 2 * 12
-            + (long)_count * 4 * DocStoreWriter.TextColumns; // 每列 N+1 个偏移（末项由 blob 长度校验）
+            + (long)_count * 4 * DocStoreWriter.TextColumns // 每列 N+1 个偏移（末项由 blob 长度校验）
+            + (long)_count * 4; // v5 lyrics_digest 偏移表（哈希 blob 由末项校验）
         if (need > body.Length) throw new InvalidDataException("DocStore 段长不足");
 
         _trackOff = 8;
@@ -249,7 +291,9 @@ internal sealed class DocStoreReader
         _artistNormOff = ReadColumnEnd(_titleNormOff, _count, "title_norm");
         _albumNormOff = ReadColumnEnd(_artistNormOff, _count, "artist_norm");
         var end = ReadColumnEnd(_albumNormOff, _count, "album_norm");
-        if (end != body.Length) throw new InvalidDataException("DocStore 段长与内容不符");
+        _lyricsDigestOff = end;
+        var digestEnd = ReadBinaryColumnEnd(_lyricsDigestOff, _count, "lyrics_digest");
+        if (digestEnd != body.Length) throw new InvalidDataException("DocStore 段长与内容不符");
     }
 
     /// <summary>文档数。</summary>
@@ -376,6 +420,63 @@ internal sealed class DocStoreReader
         TextSpan(_artistNormOff, doc),
         TextSpan(_albumNormOff, doc));
 
+    /// <summary>该 doc 的歌词行哈希数量（<c>lyrics_digest</c> 列；v5 / Q1）。</summary>
+    public int LyricDigestCount(int doc)
+    {
+        var span = DigestSpan(doc);
+        return span.Length / 8;
+    }
+
+    /// <summary>
+    /// 该 doc 的歌词行哈希**副本**（有序去重；合并 / 测试用）。查询热路径不调用它，
+    /// 走 <see cref="ContainsLyricLine"/> 的二分查找（零分配）。
+    /// </summary>
+    public ulong[] LyricDigestArray(int doc)
+    {
+        var span = DigestSpan(doc);
+        var count = span.Length / 8;
+        var hashes = new ulong[count];
+        for (var i = 0; i < count; i++)
+            hashes[i] = BinaryPrimitives.ReadUInt64LittleEndian(span[(i * 8)..]);
+        return hashes;
+    }
+
+    /// <summary>
+    /// 该 doc 是否有一行歌词与查询整行相等（Q1）：在有序哈希数组里二分查找。
+    /// 每次调用只读 O(log n) 个 8 字节，不做分配。
+    /// </summary>
+    public bool ContainsLyricLine(int doc, ulong hash)
+    {
+        var span = DigestSpan(doc);
+        var count = span.Length / 8;
+        var lo = 0;
+        var hi = count - 1;
+        while (lo <= hi)
+        {
+            var mid = lo + ((hi - lo) >> 1);
+            var value = BinaryPrimitives.ReadUInt64LittleEndian(span[(mid * 8)..]);
+            if (value == hash) return true;
+            if (value < hash) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        return false;
+    }
+
+    /// <summary>某一 lyrics_digest 列的 doc 切片（字节视图，长度恒为 8 的倍数）。</summary>
+    private ReadOnlySpan<byte> DigestSpan(int doc)
+    {
+        CheckDoc(doc);
+        var span = _body.Span;
+        var offs = span.Slice(_lyricsDigestOff, (_count + 1) * 4);
+        var start = BinaryPrimitives.ReadUInt32LittleEndian(offs[(doc * 4)..]);
+        var end = BinaryPrimitives.ReadUInt32LittleEndian(offs[((doc + 1) * 4)..]);
+        if (end < start || (start & 7) != 0 || (end & 7) != 0)
+            throw new InvalidDataException("DocStore lyrics_digest 偏移非法");
+
+        var blobStart = _lyricsDigestOff + (_count + 1) * 4;
+        return Slice(blobStart + (int)start, checked((int)(end - start)));
+    }
+
     private string ReadText(int columnOff, int doc) => Encoding.UTF8.GetString(TextSpan(columnOff, doc));
 
     /// <summary>某一文本列的 doc 切片（UTF-8，零拷贝）。</summary>
@@ -399,6 +500,20 @@ internal sealed class DocStoreReader
         if ((long)columnOff + offsLen > _body.Length)
             throw new InvalidDataException($"DocStore {name} 偏移表越界");
         var blobLen = ReadColumnBlobLength(columnOff, count);
+        if ((long)columnOff + offsLen + blobLen > _body.Length)
+            throw new InvalidDataException($"DocStore {name} blob 越界");
+        return columnOff + offsLen + blobLen;
+    }
+
+    /// <summary>校验二进制列（偏移表 + u64 blob）：blob 长度必须是 8 的倍数。</summary>
+    private int ReadBinaryColumnEnd(int columnOff, int count, string name)
+    {
+        var offsLen = (count + 1) * 4;
+        if ((long)columnOff + offsLen > _body.Length)
+            throw new InvalidDataException($"DocStore {name} 偏移表越界");
+        var blobLen = ReadColumnBlobLength(columnOff, count);
+        if ((blobLen & 7) != 0)
+            throw new InvalidDataException($"DocStore {name} blob 长度不是 8 的倍数");
         if ((long)columnOff + offsLen + blobLen > _body.Length)
             throw new InvalidDataException($"DocStore {name} blob 越界");
         return columnOff + offsLen + blobLen;

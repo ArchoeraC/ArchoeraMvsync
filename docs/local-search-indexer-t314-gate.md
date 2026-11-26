@@ -5,7 +5,7 @@
 > 关联：`docs/local-search-indexer-rewrite-plan.md` §5.4 / §8
 >
 > **最终状态（2026-11-25）**：S0–S4 已全部实施；本文件记录 T3.10 / T3.13 / T3.14 / T3.15
-> 的门禁过程与后续各轮实测。最新数字见文末「第七轮」，剩余项见「下一步」。
+> 的门禁过程与后续各轮实测。最新数字见文末「第九轮」，剩余项见「下一步」。
 >
 > **结论先行**：T3.10 的功能已落地（增量 + 墓碑 + 分层合并），T3.13 的生产查询路径已
 > 零 v7/FTS5，T3.15 的切换逻辑已可复现；**T3.14 七项门禁 7/7 通过**（30k，空闲
@@ -395,13 +395,167 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
   构建收尾加 **defrag**：30k `fileBytes 279.1 → 136.6 MB`（回收 142.5 MB / 231 ms），
   磁盘每曲 9.09 → **4.45 KiB**，`overheadBytes` 只剩 Manifest。
 
+- **第八轮（2026-11-26，Q1 歌词精确度）**：DocStore **v5** 追加 `lyrics_digest`，
+  歌词族现在能对「整行相等」给出 `exactness = equal`（5k eval 的 `line_tail` #2 问题）。
+  - **格式**：段体最后一列 `u32 offsets[N+1] + u64×M`；每个 doc 一份**严格递增
+    去重**的 64 位行哈希，空 doc 的相邻偏移相同；读取端校验末偏移 = blob 长度、blob 长度
+    % 8 == 0、逐 doc 偏移递增。`lyrics_digest` 只追加一列，前六列与 v4 逐字节同构。
+  - **归一 / 哈希**：行先走 `Analyzer.NormalizeMetadata`（NFKC / 音标 / 异体 / 小写 / 繁简，
+    空白折叠 + 去首尾），去掉 ASCII 空格后按 UTF-8 做 **FNV-1a 64**（本地实现，不引依赖）。
+    查询用 `SearchExactness.NormalizeQuery` 的同一归一形，因此「我爱你 中国」=「我爱你中国」、
+    「我愛你」=「我爱你」、「LOVE   IS ALL WE NEED」=「love is all we need」。
+  - **覆盖层**：原文 / 译文 / **显式**音译三层中实际参与索引的行（预处理去重 + V6 护栏之后）；
+    由读音派生、非用户字面的生成罗马音不参与。跨层重复行由哈希排序去重。
+  - **生成 / 合并**：`IndexBuilder.MakeRecord` 是唯一生成点（全量 + 增量共用）；`Merger`
+    从旧段 `LyricDigestArray` **原样拷贝**，不重新归一 / 哈希，合并前后字节稳定。
+    DocStore **v4 → v5**、`Manifest.CurrentMetaVersion 3 → 4`；读取侧拒绝 v1–v4 并提示
+    「旧索引必须全量重建」（旧索引不迁移）。
+  - **查询**：只在**字面主趟**（`SearchPassNames.Lexical`）、scope 覆盖歌词（`FieldFamily.Lyrics`
+    / `Mixed`，非 `scope=metadata`）且该步未截断命中 ≤ `SearchExactness.Cap` 时读摘要。
+    元数据三列复核仍优先（T3.11 档位 / 字段桶不变）；三列都不命中才看整行哈希，命中记
+    `Equal`，Field **保持保守映射 Lyrics**（不让歌词冒充标题桶）。前缀 / 包含**仍为 `None`**——
+    摘要只回答「整行相等」，不存原文，无法恢复前缀 / 包含。
+  - **成本护栏**：丢词 / 拼音 / 读音 / 跨语言 / 模糊 / 中文容错步不读新列；宽命中步（> cap）
+    不读。读取计数与元数据复核并列：保留 `DebugDocReads`（归一列），新增
+    `DebugLyricDigestReads`（摘要列），二者都由 `DebugResetDocReads` 清零。
+  - **体积（实测 / 估算）**：`gen_corpus.py` 2k 抽样（seed 20261013）每曲唯一歌词行
+    均值 **86.6**（p50 86 / p95 134）→ **+697 B/曲**（4 B 偏移 + 8 B/行），约 **0.68 KiB**；
+    相对 S4 的 4.45 KiB/曲 **+15.3% → 5.13 KiB/曲**（30k 约 136.6 → 157.5 MB），
+    仍远低于 §8.0 的 10.2 KiB/曲（0.40× 基线）。真实库若有译文 / 显式音译层，按
+    「去重后每唯一行 +8 B」同口径增长。
+  - **测试**：新增 `tests/EraStoreLyricDigestTests.cs`（体积公式 / 空 doc / 空格大小写繁简
+    归一 / 部分行不命中 / 合并逐字节 / v3+v4 拒绝 / 整行相等压过 bm25 / 元数据档位不变 /
+    cap 与非歌词步零读取）。既有 e2e 期望值随语义重录（`我爱你`：c1 / c3 整行相等升到
+    #1 / #2，p1 行内包含退到 #3）。回归 **C# PASS 4045 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**；
+    本轮未跑 30k 长基准（`ALLOW_LONG_BENCH` 禁止），只做 2k 语料行数抽样 + 单测。
+  - **限制**：64 位哈希碰撞只可能多产生一次 `Equal`（只影响第 4 键，不改召回 / 高亮 / 片段）；
+    行内标点不剥除（与元数据 exactness 同口径，`NormalizeMetadata` 只折叠空白）。
+
+- **第九轮（2026-11-26，S2 评估：歌词音译免位置，拼音保留位置）**：先修正「文档 /
+  基准已声明、生产未启用」的默认口径。`bench/erastore` 与 §8 的 quick / 30k 数字一直以
+  `{LyricsRomanization, PinyinLyrics}` 免位置构建，但 `IndexerEngine` 的全量 / 增量都没传
+  `BuildOptions.NoPositionFields` / `IncrementalOptions`，生产索引一直写全字段位置。本轮
+  先让生产与 bench 共用 `EraStore.BuildDefaults`，随后独立 5k `qbench eval` 质量门推翻了
+  `PinyinLyrics` 免位置：**最终默认只保留 `LyricsRomanization` 免位置**。
+  - **2k 体积实测**（`gen_corpus.py --out /tmp/opencode/s2 --tracks 2000 --seed 20261126`，
+    2–8 KB 中文歌词、50% `.lrc`；CLI `build --full` + `stats`；`positions 占比` =
+    Positions 字节 / `liveBytes`）：
+
+    | 变体 | 免位置字段 | fileBytes | positions | positions 占比 | B/曲 | 段数 | 构建 |
+    |---|---|---:|---:|---:|---:|---:|---:|
+    | 基线（全字段位置） | 无 | 10,909,167 | 6,846,627 | 62.81% | 5,454.6 | 12 | 3,990 ms |
+    | 两条派生层免位置（**未发布**） | Romanization + PinyinLyrics | 7,118,687 | 3,141,176 | 44.18% | 3,559.3 | 10 | 3,831 ms |
+    | **最终：仅音译层** | Romanization | 10,909,167 | 6,846,627 | 62.81% | 5,454.6 | 12 | 4,375 ms |
+
+    两条派生层一起免位置的体积收益是真的（**-34.7%**），但它**不可发布**——见下。
+    该 2k 语料没有显式音译层，所以「仅音译层免位置」与基线的字节完全相同。
+  - **5k 质量门（qbench eval，37 题，`query_set.hash = 981bcfaa…`）**：
+    同一 `corpus5k/library.db` 上对比「全字段带位置」与「Romanization + PinyinLyrics
+    免位置」：
+
+    | 变体 | P@1 | P@10 | NDCG@10 | MRR@10 |
+    |---|---:|---:|---:|---:|
+    | 全字段带位置（基线） | **0.973** | **0.905** | **0.978** | **0.982** |
+    | 两条派生层免位置（未发布） | 0.838 | 0.854 | 0.854 | 0.874 |
+
+    | 查询 | 失败方式 | 带位置 → 免位置 |
+    |---|---|---|
+    | `pinyin_joined` (`woaini`) | 拼音短语降级为 AND，假阳性抬到前面 | P@1 1.000 → 0.000；MRR 1.000 → 0.500；NDCG 1.000 → 0.212 |
+    | `pinyin_word_prefix` (`woai`) | 同上 | P@1 1.000 → 0.000；MRR / NDCG 同量级下降 |
+    | `line_head` / `line_mid` / `line_tail` | 拼音 AND 分支制造假阳性，压过真实歌词整行命中 | P@1 1.000 → 0.000 |
+
+    **结论：`PinyinLyrics` 的位置是查询质量要求，不是可选体积项。** 当前查询层无法在
+    无位置前提下区分「音节相邻」与「整首都有」，所以必须保留位置。
+  - **最终字段集合**：`LyricsRomanization` 免位置；`PinyinLyrics`、`PinyinMeta`、其余字段
+    全部保留位置。`InitialsLyrics` / `PinyinMeta` 免位置此前测量后也未采纳（首字母相邻
+    bigram 假阳性；元数据短语精度）。`SearchPlanTests` 的拼音短语分数期望已恢复为 S2 前
+    （带位置）的值，不再保留任何「bm25=0 for pinyin」预期。
+  - **最终 5k 复核**：用修正后的 CLI 在 `/tmp/opencode/q5k/library.db` 全新构建
+    `/tmp/opencode/q5k/final-romaji`，`fileBytes = 26,266,248`（25.05 MiB / 26.26 MB 十进制，
+    5,253.2 B/曲，positions 64.38%），与带位置基线同字节（该语料音译层为空）；同一
+    qbench eval 的 **ALL P@1 0.973 / P@10 0.905 / NDCG@10 0.978 / MRR@10 0.982**，
+    逐题指标与基线**完全一致**（`query_set.hash` 同为 `981bcfaa…`）。
+  - **是否要重建**：**不需要**。这是物理布局偏好，不是格式版本变化：旧索引照常可读；
+    新构建 / 新增量段才按 `BuildDefaults` 写入。增量与全量共用同一清单，避免新旧段漂移。
+  - **混合段合并（升级后第一次 merge / compact 的关键）**：同一词条可能同时来自
+    「旧段（带位置）」与「新增量段（免位置）」。`Merger.MergeTerms` 在产出每个词条前
+    做 **per-term 归一**：只要该词条有任一条目无位置，就把这个词条的所有条目降为无位置，
+    写侧得到一致的 dict / block flag 0。**只有真正混合的词条会降级**；只出现在旧段的
+    词条仍保留位置，只出现在新段的词条本来无位置。全有 / 全无两种输入保持原行为。
+    该规则仍然必要：音译层在用户开启 / 关闭选项、或旧索引加增量段时同样会出现混合来源。
+  - **读取侧配套修复**：一个段的所有词条都免位置时，Builder 不写 `Positions` section；
+    `StoreReader.OpenPerSegment()` 现在把缺失的 Positions 当作空内存（该段无位置块），
+    DocStore / Dict / DictIndex / Postings 仍必须存在。`IndexVerifier` / `IndexStats` /
+    `bench` 原本就按「可选 Positions」处理。这样「全库免位置」或「合并后整段免位置」的
+    索引也能查询 / verify，而不会在打开时抛「缺少 Positions」。
+  - **测试**：`EndToEnd.ProductionRomanizationNoPositions`（经 `IndexerEngine` 全量建库，
+    开启 romaji：音译词条 flags bit0=0 / 游标 `HasPositions=false`、短语 AND；拼音词条
+    **仍 bit0=1** / 游标 `HasPositions=true`、短语保持相邻校验；`PinyinMeta` 仍带位置、
+    `IndexVerifier` 通过）；`EraStoreMixedPositionsTests` 用音译层实际复现升级路径：
+    23 个带位置旧段 + 1 个免位置增量段 → 24 段触发合并，断言不抛异常、verify 通过、
+    混合词条 flag 0、同段 Title 仍带位置、短语 AND；另覆盖全有位置（仍相邻校验）与
+    整段无 Positions section（读取 / 合并 / 查询均不抛异常）。C# 回归
+    **PASS 4078 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**；本轮未跑长基准
+    （`ALLOW_LONG_BENCH` 禁止），体积 / 时间取 2k / 5k 手动测量。
+  - **S2 状态：O8 已补齐（第十轮，2026-11-26），S2 收口**。免位置路线只保留音译层
+    这一项低风险、可选层的优化；positions 体积压缩改由 **O8 位打包**承担——它不改短语
+    相邻语义、不升 `index_format`，旧索引仍可读，新构建更小。详见下一轮。
+
+- **第十轮（2026-11-26，O8：位置块位打包）**：S2 的剩余主线落地。**只改 Positions 段
+  的块体**；倒排 / 词典 / DocStore / 查询语义都不变。
+  - **格式**：位置块 flags 新增 `0x02 = positions_packed`（`0x01 = has_positions` 不变）。
+    写侧对每个位置块分别算 varint 块体
+    `doc_delta varint | pos_count varint | Δpos varint...` 与位打包块体
+    `doc_delta varint | pos_count varint | width u8 | Σ Δpos（width bit, LSB-first）`
+    的字节数，**取较小者；相等保留 varint**。`width` 是该 doc 最大 Δpos 的位宽
+    （0..31；只有单个位置 0 时为 0），打包体长度 `ceil(tf*width/8)`；doc / tf 仍为
+    varint。位置块 12B 块头 / CRC / `pos_off` 语义不变。
+  - **5k 体积与构建**（同一 `library.db`，CLI `build --full`，基线二进制与 O8 二进制
+    各跑两次）：
+
+    | 变体 | fileBytes | Positions | positions 占比 | B/曲 | 段数 | 构建（两次） |
+    |---|---:|---:|---:|---:|---:|---:|
+    | 基线（仅 varint） | 26,266,248 | 16,910,138 | 64.38% | 5,253.2 | 1 | 8.72 s / 8.71 s |
+    | **O8 按块位打包** | **25,563,565** | **16,207,455** | **63.40%** | **5,112.7** | 1 | 8.54 s / 8.10 s |
+
+    差值 **−702,683 B（文件 −2.675%）**，全部来自 Positions 段
+    （**−4.16%**）；倒排 / 词典 / DocStore 字节完全不变。构建耗时在噪声内，
+    打包的尺寸估算与位写入没有可测回归。压缩后仍是 1 段（压缩前 30 段）。
+  - **质量（qbench eval，37 题，`query_set.hash = 981bcfaa…`）**：
+    同一 `library.db` 上对基线索引与 O8 索引各跑一次，`queries[]` 与 `aggregate`
+    **逐字段完全相等（0 差异）**：
+
+    | 变体 | P@1 | P@10 | NDCG@10 | MRR@10 |
+    |---|---:|---:|---:|---:|
+    | 基线（varint） | 0.9730 | 0.9054 | 0.9778 | 0.9820 |
+    | **O8（packed）** | **0.9730** | **0.9054** | **0.9778** | **0.9820** |
+
+  - **兼容 / 重建**：新 reader 同时接受旧 varint 块与新 packed 块；用 O8 二进制对
+    **旧格式基线索引**执行 `verify` 与 qbench eval 均通过（旧索引无需重建即可读）。
+    旧 reader 会在位置块 flags 看到未知位 `0x02` 并拒绝——因此**新构建的索引不能被
+    旧二进制读取**；索引由同一 App 本地重建 / 新增量段写入，这个代价可接受。
+    `index_format` 仍为 **1**（不升版）：升版会让旧索引不可读，而 flags 位扩展已经
+    提供「新读旧、旧拒绝新」的清晰边界。
+  - **测试**：新增 `EraStorePackedPositionsTests`，覆盖密集（Δ=1）/ 稀疏 / 单点 0 /
+    近 `int.MaxValue` 的 Δ / 300 doc 跨 3 块 × 三种编码（自动、强制 packed、强制
+    varint）的 `CurrentPositions` **逐 doc 切片** / 短语相邻 / width=0 / 自动选择较小
+    块体 / width=32 / 打包字节截断 / 非首 Δ=0 / 未知 flags / CRC 不符 /
+    `IndexVerifier` 接受 packed 且检出位置段损坏。`EraStorePostingsTests.PositionDeltas`
+    改为「自动选 packed + 强制 varint 逐字节」双断言。C# 回归
+    **PASS 4117 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**。
+  - **S2 收口**：`PinyinLyrics` 必须保留位置（5k 质量门），音译层仍默认免位置；
+    positions 体积改由 O8 无损压缩承担。进一步收益（PForDelta 例外帧 / 跨 doc 共享
+    width）需要更复杂编码，本轮不做。
+
+
 **下一步（2026-11-25 收尾后的真实剩余）**：
 
 1. Windows / macOS 实机跑 §7.1 的占用 / 中断场景（T3.15 收尾）——本机只能覆盖 Linux。
 2. T4.1 词表的人工复核：§5.5.4 要求 ≥10% 抽样 + 第二名评审签字（当前标 `seed`）。
 3. N10 / N11 / N18 三项 BLOCKED：per-track 语言画像 / 单字歌词召回语义 / 计划期 df 预算，
    均为产品决策。
-4. 可选：O8 位打包 / postings 紧凑化；`bench/REPORT.md` 重跑（需 `ALLOW_LONG_BENCH=1`）。
+4. S2 已于 2026-11-26 收口（音译层免位置 + O8 位置块位打包）；剩余只有
+   `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
 
 更细的可改进项（含改法与代价）见 §9。
 
@@ -414,7 +568,7 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 
 | # | 现状 / 证据 | 可改进方向 | 代价 / 风险 |
 |---|---|---|---|
-| Q1 | 歌词族 `exactness = none`：DocStore 不存歌词原文，5k 的 `line_tail` 整行精确匹配仍排 #2 | 在 DocStore 存「归一化歌词首行/摘要」或查询期按 `library.db` 复核命中段与查询的等值/前缀关系 | 索引体积 +（歌词原文是大头）；查询期读库会碰 `busy_timeout`；需 eval 门禁 |
+| Q1 | ✅ **已实现（2026-11-26）**：DocStore v5 `lyrics_digest`（归一化歌词整行 FNV-1a 64 哈希，有序去重），字面主趟 / ≤cap 时二分查找 → `exactness = equal`。仍**只支持整行相等**，前缀 / 包含保持 `none`（哈希无法恢复原文，也不存原文）；体积 +0.68 KiB/曲（2k 抽样均值 86.6 行） | 后续若要前缀 / 包含：只能存有界行前缀原文（体积更高）或查询期读 `library.db`（会碰 `busy_timeout`）；歌词层内子列（原文 / 译文 / 音译）仍不细分，字段桶保持 Lyrics | 已完成；旧索引必须全量重建；64 位碰撞只影响第 4 键 |
 | Q2 | proximity 只有元数据字段的真实值；散落多 term 的歌词/转写/模糊仍 `int.MaxValue` | 把 term 位置暴露到候选侧（`PostingsCursor` 已在用），对 ≤cap 的步骤做歌词段最小窗口 | 需要第二遍位置扫描；p50 预算只剩 ~2 ms，可能超门禁 |
 | Q3 | 短拼音前缀无长度门控：3–4 字符拼音（如 `hen*`）会扩到 `henry` 类无关词 | 按真实库统计 3–4 字符拼音命中分布，定「最短前缀 / 命中上限」 | 需要真实库数据；改门控会牺牲部分召回 |
 | Q4 | `MinExact` 仍是「首趟命中即停」：宽查询可能掩盖后面更精确的趟 | 改成「主趟命中数未达阈值时继续跑更高精度趟」，或按 kind 合并后再判短路 | 影响 UI 结果数与延迟；需要产品确认 |
@@ -428,11 +582,11 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | # | 现状 | 可改进方向 | 代价 |
 |---|---|---|---|
 | S1 | ~~`compact` 把归并结果 append 到同一 generation，随后 `defrag` 再整文件复制一遍（构建期峰值 2× 磁盘、耗 0.2–0.3 s）~~ **已实现（2026-11-26）**：全量构建收尾压缩走 `Merger.MergeToNewGeneration`，直接写只含活段体的新世代并原子切换 `CURRENT`，成功后跳过 defrag；增量合并仍保持同文件追加 | 后续只需观察真实曲库的峰值磁盘 / 收尾耗时（长基准未重跑） | 已完成；格式锚与既有索引不变，无需重建 |
-| S2 | positions 仍占索引 ~46%（30k：positions 123.8 MB / live 136.6 MB） | O8 位打包；或让 `initialsLyrics` / `pinyinMeta` 也免位置（短语降级为 AND） | 查询语义小幅放宽；位打包需格式版本 + 全量重建 |
+| S2 | **已实现（2026-11-26 收口）**：两段路线。① 可选音译层 `LyricsRomanization` 默认免位置；`PinyinLyrics` 必须保留位置（两条一起免位置的 2k 体积收益 -34.7%，但 5k qbench eval 把 ALL P@1 从 **0.973 打到 0.838**、NDCG@10 0.978 → 0.854）。② **O8 位置块位打包**（第十轮）：位置块 flags 新增 `0x02`，逐块比较 varint / packed 块体取较小者；5k `fileBytes` 26,266,248 → **25,563,565**（−2.68%），Positions 16,910,138 → **16,207,455**（−4.16%），qbench eval 逐题与基线完全一致；旧索引可读、无需重建 | 进一步压缩可做 PForDelta 例外帧 / 跨 doc 共享 width，但复杂度更高、本轮不做 | 已完成；`PinyinLyrics` / `PinyinMeta` 免位置仍不采纳（短语精度），`initialsLyrics` 同理 |
 | S3 | 超过 255 B 的词条被丢弃（`oversizeTokens`），该词不可检索 | 对超长词做分段 / 哈希词条 + 原文旁路，保留可检索性 | 词典格式与查询 IR 改动；真实库中极罕见 |
 | S4 | 段大小固定 4 MB 估算（RSS ↔ 查询延迟的核心矛盾） | 按平台 / 曲库规模 / 内存自适应段大小，或构建后按段数二次合并 | 需要多档实测（5k/30k/48.7k 已有基线） |
 | S5 | LRC 分层仍按「同时间戳第 1/2/3 行」猜（D-1）；无时间轴的内嵌歌词靠 +3 基线兜底 | 用语言识别 / 翻译对齐信号替代行位置猜测；分层置信度阈值回放校准 | 需要真实多语 LRC 样本 |
-| S6 | 脏集只认 `file_mtime` + `.lrc` mtime/size（D-3）：直接改 `library.db` 不改文件会漏更新 | DocStore 增加「元数据内容哈希」列，脏集比较 mtime **或** 哈希 | DocStore v5 + 全量重建；增量期多一次哈希计算 |
+| S6 | 脏集只认 `file_mtime` + `.lrc` mtime/size（D-3）：直接改 `library.db` 不改文件会漏更新 | DocStore 增加「元数据内容哈希」列，脏集比较 mtime **或** 哈希 | DocStore v6 + 全量重建（v5 已被 Q1 用掉）；增量期多一次哈希计算 |
 | S7 | v7 索引只能整库重建；无「按曲目墓碑回收」的轻量压缩 | 已有 `IncrementalUpdater.Maintain`，可加「死行 >X% 自动后台压缩」策略 | 已有实现，主要是策略调参 |
 
 ### 9.3 工程与验证
@@ -445,5 +599,6 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | E4 | `SearchApi.Busy` 是协议预留，当前不会返回 | 保留（写任务 API 尚未需要）；若做后台压缩任务可启用 |
 | E5 | health `schemaVersion` / `gen` 的 Dart 消费方为空 | 设置页可展示 `dataPack`/confidence 分布，便于用户自查 |
 
-> 建议顺序：**Q1（歌词精确度）→ S2（体积）→ Q3/Q4（门禁词与短路）**；
+> 建议顺序：~~Q1（歌词精确度）~~（2026-11-26 已完成，仅整行相等）→ ~~S2（体积）~~
+> （2026-11-26 已收口：音译层免位置 + O8 位打包）→ Q3/Q4（门禁词与短路）；
 > S1 已于 2026-11-26 完成；Q6/Q7/Q8 属产品决策，单独评审；其余按真机/工具改进排期。

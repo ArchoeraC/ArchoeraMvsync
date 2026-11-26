@@ -28,18 +28,35 @@ internal readonly record struct PostingEntry(int Doc, int Tf, int[]? Positions);
 /// 位置块（仅 has_positions，与倒排块按相同 doc 顺序成对写出）：
 /// <code>
 /// 块头 12B : doc_count u16 | last_doc u32 | flags u8 | reserved u8 | crc32c u32
-/// 块体     : 每 doc：doc_delta varint（首条相对 0）| pos_count varint | 逐个位置 Δvarint
+/// flags    : 0x01 has_positions | 0x02 positions 位打包（O8）
+/// 块体 varint : 每 doc：doc_delta varint（首条相对 0）| pos_count varint | 逐个位置 Δvarint
+/// 块体 packed : 每 doc：doc_delta varint | pos_count varint | width u8 | 打包 Δpositions
 /// </code>
+/// <para>O8：逐块比较 varint 与位打包的块体字节数，取较小者（相等保留 varint）。
+/// <c>width</c> 为 0..31（该 doc 最大 Δ 的位宽；只有单个位置 0 时才为 0），
+/// Δpositions 按 LSB-first 连续打包进 <c>ceil(tf*width/8)</c> 字节；
+/// <c>Δpos = pos[i] - pos[i-1]</c>，<c>pos[-1]=0</c>。doc / tf 仍用 varint。
+/// 两种块体的解码结果完全一致，不改变短语相邻语义。</para>
 /// CRC 均覆盖块头之后到块尾的全部字节；块内偏移是本块内相对量，跳块不依赖上一块。
 /// </summary>
 internal sealed class PostingsWriter
 {
     private const int BitmapSize = 16;
     private const byte FlagHasPositions = 0x01;
+    private const byte FlagPositionsPacked = 0x02;
+
+    /// <summary>
+    /// 测试接缝：<c>null</c> = 按块体大小自动选择；<c>false</c> = 强制 varint；
+    /// <c>true</c> = 强制位打包。生产路径不得设置。
+    /// </summary>
+    internal static bool? DebugForcePositionsPacked = null;
 
     /// <summary>块体复用缓冲：避免每 128 doc 新建两个 ByteWriter（构建期主要分配来源之一）。</summary>
     private readonly ByteWriter _postBody = new(512);
     private readonly ByteWriter _posBody = new(2_048);
+
+    /// <summary>位打包临时缓冲（O8）；按块内最大 doc 的打包字节数增长后复用。</summary>
+    private byte[] _posBits = new byte[256];
 
     /// <summary>
     /// 追加一条词条的倒排块序列（对象形式，合并 / 测试用），返回首个倒排块在
@@ -247,9 +264,43 @@ internal sealed class PostingsWriter
         int start,
         int count)
     {
+        // O8：先算两种块体大小，再按较小者写（相等保留 varint）。
+        // widths 供打包写出复用，避免第三次扫描位置。
+        Span<byte> widths = stackalloc byte[EraFormat.PostingsBlockDocs];
+        var varintBytes = 0;
+        var packedBytes = 0;
+        var prevDoc = 0;
+        for (var i = 0; i < count; i++)
+        {
+            var index = start + i;
+            var docDelta = docs[index] - prevDoc;
+            prevDoc = docs[index];
+            var tf = tfs[index];
+
+            var prefix = Varint.Size((ulong)docDelta) + Varint.Size((ulong)tf);
+            varintBytes += prefix;
+            packedBytes += prefix + 1; // width u8
+
+            var maxDelta = 0;
+            var prevPos = 0;
+            foreach (var pos in posFlat.Slice(posStart[index], posCount[index]))
+            {
+                var delta = pos - prevPos;
+                if (delta > maxDelta) maxDelta = delta;
+                varintBytes += Varint.Size((ulong)delta);
+                prevPos = pos;
+            }
+
+            var width = DeltaWidth(maxDelta);
+            widths[i] = (byte)width;
+            packedBytes += (int)(((long)tf * width + 7) / 8);
+        }
+
+        var packed = DebugForcePositionsPacked ?? (packedBytes < varintBytes);
+
         var body = _posBody;
         body.Reset();
-        var prevDoc = 0;
+        prevDoc = 0;
         for (var i = 0; i < count; i++)
         {
             var index = start + i;
@@ -257,20 +308,68 @@ internal sealed class PostingsWriter
             prevDoc = docs[index];
 
             body.WriteVarint((ulong)tfs[index]);
-            var prevPos = 0;
-            foreach (var pos in posFlat.Slice(posStart[index], posCount[index]))
+            var positions = posFlat.Slice(posStart[index], posCount[index]);
+            if (packed)
             {
-                body.WriteVarint((ulong)(pos - prevPos));
-                prevPos = pos;
+                body.WriteByte(widths[i]);
+                WritePackedPositions(body, positions, widths[i]);
+            }
+            else
+            {
+                var prevPos = 0;
+                foreach (var pos in positions)
+                {
+                    body.WriteVarint((ulong)(pos - prevPos));
+                    prevPos = pos;
+                }
             }
         }
 
         dst.WriteUInt16((ushort)count);
         dst.WriteUInt32((uint)docs[start + count - 1]);
-        dst.WriteByte(FlagHasPositions);
+        dst.WriteByte(packed ? (byte)(FlagHasPositions | FlagPositionsPacked) : FlagHasPositions);
         dst.WriteByte(0);
         dst.WriteUInt32(Crc32C.Compute(body.Span));
         dst.WriteBytes(body.Span);
+    }
+
+    /// <summary>最大 Δ 的位宽：0 只在单个位置为 0 时出现，其余 1..31。</summary>
+    private static int DeltaWidth(int maxDelta) =>
+        maxDelta == 0 ? 0 : 32 - System.Numerics.BitOperations.LeadingZeroCount((uint)maxDelta);
+
+    /// <summary>把 Δpositions 按 width 位 LSB-first 连续写入块体。</summary>
+    private void WritePackedPositions(ByteWriter body, ReadOnlySpan<int> positions, int width)
+    {
+        var byteCount = (int)(((long)positions.Length * width + 7) / 8);
+        EnsureBitCapacity(byteCount);
+
+        var bits = _posBits;
+        var outPos = 0;
+        var accBits = 0;
+        ulong acc = 0;
+        var prevPos = 0;
+        foreach (var pos in positions)
+        {
+            acc |= (ulong)(uint)(pos - prevPos) << accBits;
+            prevPos = pos;
+            accBits += width;
+            while (accBits >= 8)
+            {
+                bits[outPos++] = (byte)acc;
+                acc >>= 8;
+                accBits -= 8;
+            }
+        }
+        if (accBits > 0) bits[outPos++] = (byte)acc;
+        body.WriteBytes(bits.AsSpan(0, byteCount));
+    }
+
+    private void EnsureBitCapacity(int needed)
+    {
+        if (needed <= _posBits.Length) return;
+        var next = _posBits.Length;
+        while (next < needed) next = next >= int.MaxValue / 2 ? needed : next * 2;
+        Array.Resize(ref _posBits, next);
     }
 }
 
@@ -322,6 +421,8 @@ internal sealed class PostingsCursor
 {
     private const int PositionsHeaderSize = 12;
     private const byte FlagHasPositions = 0x01;
+    private const byte FlagPositionsPacked = 0x02;
+    private const byte PositionsFlagsMask = FlagHasPositions | FlagPositionsPacked;
 
     private readonly ReadOnlyMemory<byte> _postings;
     private readonly ReadOnlyMemory<byte> _positions;
@@ -576,8 +677,9 @@ internal sealed class PostingsCursor
 
         if (docCount != _docCount || lastDoc != (uint)_lastDoc)
             throw new InvalidDataException("位置块与倒排块 doc 序列不匹配");
-        if ((flags & FlagHasPositions) == 0 || (flags & ~FlagHasPositions) != 0 || reserved != 0)
+        if ((flags & FlagHasPositions) == 0 || (flags & ~PositionsFlagsMask) != 0 || reserved != 0)
             throw new InvalidDataException("位置块 flags / reserved 非法");
+        var packed = (flags & FlagPositionsPacked) != 0;
 
         var flat = 0;
         var prevDoc = 0;
@@ -598,17 +700,29 @@ internal sealed class PostingsCursor
             EnsurePosCapacity(flat + (int)count);
             _posStart[i] = flat;
             _posCounts[i] = (int)count;
-            var prevPos = 0;
-            for (var j = 0; j < (int)count; j++)
+            if (packed)
             {
-                var posDelta = reader.ReadVarint();
-                if (j > 0 && posDelta == 0)
-                    throw new InvalidDataException("位置未严格递增");
-                var pos = prevPos + (long)posDelta;
-                if (pos > int.MaxValue)
-                    throw new InvalidDataException("位置越界");
-                prevPos = (int)pos;
-                _posFlat[flat++] = prevPos;
+                var width = reader.ReadByte();
+                if (width > 31)
+                    throw new InvalidDataException("位置块打包位宽非法");
+                var byteCount = (int)(((long)count * width + 7) / 8);
+                DecodePackedPositions(reader.ReadBytes(byteCount), width, (int)count, flat);
+                flat += (int)count;
+            }
+            else
+            {
+                var prevPos = 0;
+                for (var j = 0; j < (int)count; j++)
+                {
+                    var posDelta = reader.ReadVarint();
+                    if (j > 0 && posDelta == 0)
+                        throw new InvalidDataException("位置未严格递增");
+                    var pos = prevPos + (long)posDelta;
+                    if (pos > int.MaxValue)
+                        throw new InvalidDataException("位置越界");
+                    prevPos = (int)pos;
+                    _posFlat[flat++] = prevPos;
+                }
             }
         }
 
@@ -617,6 +731,38 @@ internal sealed class PostingsCursor
             throw new InvalidDataException("位置块 CRC 不符");
 
         _positionsLoaded = true;
+    }
+
+    private void DecodePackedPositions(
+        ReadOnlySpan<byte> packed, int width, int count, int flatStart)
+    {
+        var mask = width == 0 ? 0UL : (1UL << width) - 1;
+        var flat = flatStart;
+        var prevPos = 0;
+        var byteIndex = 0;
+        var accBits = 0;
+        ulong acc = 0;
+        for (var j = 0; j < count; j++)
+        {
+            while (accBits < width)
+            {
+                if (byteIndex >= packed.Length)
+                    throw new InvalidDataException("位置打包字节截断");
+                acc |= (ulong)packed[byteIndex++] << accBits;
+                accBits += 8;
+            }
+
+            var delta = (long)(acc & mask);
+            acc >>= width;
+            accBits -= width;
+            if (j > 0 && delta == 0)
+                throw new InvalidDataException("位置未严格递增");
+            var pos = prevPos + delta;
+            if (pos > int.MaxValue)
+                throw new InvalidDataException("位置越界");
+            prevPos = (int)pos;
+            _posFlat[flat++] = prevPos;
+        }
     }
 
     private void EnsurePosCapacity(int needed)

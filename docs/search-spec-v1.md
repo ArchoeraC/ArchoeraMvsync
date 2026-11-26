@@ -76,14 +76,18 @@
 | `0x04` | filename 字面 | ✅ | 日文文件名读音另计 |
 | `0x05` | lyrics 原文 | ✅ | 行级去重后写 |
 | `0x06` | lyrics 译文 | ✅ | 无译文层则不写 |
-| `0x07` | lyrics 音译 | ✅ | 仅显式音译层 |
+| `0x07` | lyrics 音译 | ❌（S2 保留项） | 仅显式音译层 |
 | `0x11–0x13` | title / artist / album 拼音 | ✅ | 段内逐字对齐 |
 | `0x14–0x16` | title / artist / album 首字母 | ✅ | 只出 bigram |
 | `0x17` | 日 / 韩读音 | ✅ | 仅库画像命中时写 |
-| `0x21` | lyrics 拼音 | ✅（默认） | 保留短语能力；免位置是非默认 V2 |
+| `0x21` | lyrics 拼音 | ✅ | **必须保留位置**：5k eval 免位置 P@1 0.973→0.838 |
 | `0x22` | lyrics 首字母 | ✅ | 默认不写，设置项可开 |
 
-位置默认全字段写（EraStore 用 Δvarint 块压缩，RP §3.3.0.3）。**`seg_sep` 哨兵**：每字段 / 每段
+位置默认除 `0x07` 外全字段写（EraStore 逐块选择 Δvarint 或 O8 位打包，RP §3.3.0.3；
+S2 2026-11-26 只把可选音译层设为生产全量 / 增量默认免位置，歌词拼音保留位置，旧索引
+仍可照常读取。O8 只改位置块物理编码，解码后的位置数组与短语语义不变；新 reader 读旧
+varint 块，旧 reader 会拒绝带 `0x02` 标志的新 packed 块）。
+**`seg_sep` 哨兵**：每字段 / 每段
 之间写一个哨兵（建议 `zzsepzz`），阻断跨段短语；它 MUST 从 df 统计、纠错候选、模糊词表、
 前缀展开中排除，查询侧 MUST NOT 生成；位置差因此 ≥2（RP §3.3.2 / §3.3.3）。
 
@@ -277,8 +281,10 @@ est_typo   = est * variants(term)
 > 精确度来自 DocStore v3 的 `title_norm/artist_norm/album_norm`（Mixed/Meta 步、单步命中
 > ≤2048 才复核，空白不敏感、三列取最优并回传命中列作为 `field`）；邻近度对
 > 单 term=0、整短语=`token-1`、散落多 term 用元数据字段内的位置最小窗口，歌词 / 无位置 /
-> 超 cap 记 `int.MaxValue`（wire `-1`）。歌词族没有原文，`exactness` 恒 `none`（按本表
-> 「宁可把歌词命中排低」）。回放评审已随 T3.11 完成（30k / 5k 逐项对比）。
+> 超 cap 记 `int.MaxValue`（wire `-1`）。**Q1（2026-11-26）补齐歌词整行相等**：DocStore v5
+> 的 `lyrics_digest` 在字面主趟 / 歌词 scope / ≤cap 时二分查找，整行相等记 `equal`（字段仍是
+> 保守的 `Lyrics*`）；前缀 / 包含仍记 `none`（不存歌词原文）。回放评审已随 T3.11 完成
+> （30k / 5k 逐项对比）。
 
 `explain.bucket` 只序列化**前五键**（kind / coverage / field / exactness / proximity）；
 `bm25` 与 `docId` 不进数组（RP §3.6.4 / D.3.1）。
@@ -428,8 +434,11 @@ top-k 用固定大小堆，`effectiveLimit = min(limit, 10000)`，不排全命�
 ### 8.2 仍未决（不阻塞 S1）
 
 RP §7 原列：① `recall@1` 是否作为正式 UI 入口；② 同曲多版本（remaster / live）是否做
-`dedupe-versions@1`；③ S4 策展双语表许可证与词表来源；④ 是否接受 V2（歌词拼音免位置，
-需用户确认，默认不启用）。
+`dedupe-versions@1`；③ S4 策展双语表许可证与词表来源；④ ~~是否接受 V2（歌词拼音免位置）~~
+——**已决（2026-11-26）否**：5k qbench eval 证明歌词拼音免位置会让 ALL P@1 0.973→0.838、
+`woaini` / `woai` / 歌词行题 P@1 1→0；只保留可选音译层免位置，歌词拼音与元数据拼音 /
+首字母仍带位置。positions 体积已由 **O8 位置块位打包**压缩（5k Positions −4.16%，
+qbench eval 逐题与基线完全一致），查询语义不变。
 
 S0 复核另发现以下**规格内部待统一项**，同样不阻塞 S1，但 S1 MUST 定案：
 
@@ -477,7 +486,7 @@ S0 复核另发现以下**规格内部待统一项**，同样不阻塞 S1，但 
 | 项 | 状态 |
 |---|---|
 | 桶序唯一入口 | ✅ `SearchRanker.Compare`：kind → coverage → field → exactness → proximity → bm25 → docId；`Merge` 同 track 取最高 kind，不累加分数 |
-| 证据缺口（v7，已由 S3 补齐） | 原：field 只到字段族、exactness 仅读音趟、proximity 恒常量。现：字面步按 DocStore 归一列取真实 field、exactness（equal/prefix/contains/none）与 proximity 均生效；转写族仍按字段族保守归因，歌词族 exactness=none |
+| 证据缺口（v7，已由 S3 补齐） | 原：field 只到字段族、exactness 仅读音趟、proximity 恒常量。现：字面步按 DocStore 归一列取真实 field、exactness（equal/prefix/contains/none）与 proximity 均生效；转写族仍按字段族保守归因；歌词族自 Q1（DocStore v5 `lyrics_digest`）起支持**整行相等**=equal，前缀 / 包含仍 none |
 | 方案注册表 | ✅ fast/default/recall/minimal；未知 id → default；缺能力沿 degradeTo 下降；`minimal ⊆ fast ⊆ default ⊆ recall` |
 | 方案差异 | fast/minimal 共用 lexical（v7 的 exact+prefix 配对未拆）；recall 额外执行 `typo2@1`（Damerau ≤2、首字符不变、词长 ≥7、依赖词表） |
 | typo2 | `FuzzyVocabulary.WithinTwo` + `DistanceTwoCandidates`（首字符前缀区间、严格距离 2、扫描上限 20000）；真实库 `pikasonax` → default 0 / recall 3 |

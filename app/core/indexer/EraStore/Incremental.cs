@@ -32,6 +32,12 @@ internal sealed class IncrementalOptions
     /// <summary>一轮增量里花在合并上的总时间预算（秒）；超时保留当前索引，下次继续。</summary>
     public double MergeBudgetSeconds = 2.0;
 
+    /// <summary>
+    /// 新段不写位置块的字段族；默认空（与历史行为一致）。生产增量调用方传
+    /// <see cref="BuildDefaults.CreateNoPositionFields"/>，与全量构建保持同一布局。
+    /// </summary>
+    public HashSet<FieldId> NoPositionFields = new();
+
     /// <summary>本次构建的选项位（含语言画像）；null = 沿用旧 Manifest。</summary>
     public int? OptionsBits = null;
 
@@ -243,7 +249,7 @@ internal static class IncrementalUpdater
         var nextSegment = NextSegmentId(old);
         var (segmentsAdded, _) = IndexBuilder.WriteDocs(
             file, ordered, nextSegment, opt.DocsPerSegment, opt.MaxSegmentBytes,
-            new HashSet<FieldId>(), sections);
+            opt.NoPositionFields, sections);
 
         // 5) 写墓碑段（只对仍有活 doc 的段）；同一段先删旧墓碑引用，再追加新墓碑。
         var tombSections = new List<SectionRef>();

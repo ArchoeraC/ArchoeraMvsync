@@ -711,9 +711,11 @@ internal static class SearchPlanTests
             // T4.2：内嵌原文带 +3 基线后为「中置信」，仍参与 scope=all；
             // 低置信（损坏 / 可疑）才被歌词列掩码排除。bm25 因 layer_conf 参与 rev 与
             // df 口径变化而重排（重录于 v4 DocStore + 中置信基线的最终实现）。
+            // Q1：c1 / c3 的歌词有整行「我爱你」，拿 exact=equal；p1 只是行内包含，
+            // 同为 lyrics 字段桶时被压到 #3（bm25 只在前面的键相等时才生效）。
             new ExpectedHit("c1", "lexical", -1.5194613539697288),
-            new ExpectedHit("p1", "lexical", -1.4121169382316834),
             new ExpectedHit("c3", "lexical", -0.3891403477208586),
+            new ExpectedHit("p1", "lexical", -1.4121169382316834),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
         new("晴天", false, false, new[]
         {

@@ -59,7 +59,9 @@ public static class Program
         EraStoreFormatTests.Run();
         EraStoreDictTests.Run();
         EraStoreDocNormTests.Run();
+        EraStoreLyricDigestTests.Run();
         EraStorePostingsTests.Run();
+        EraStorePackedPositionsTests.Run();
         EraStoreIteratorsTests.Run();
         EraStorePhraseTests.Run();
         EraStoreManifestTests.Run();
@@ -67,6 +69,7 @@ public static class Program
         EraStoreCliTests.Run();
         EraStoreMergeTests.Run();
         EraStoreIncrementalTests.Run();
+        EraStoreMixedPositionsTests.Run();
         EraStoreBuildCompactionTests.Run();
         EraStoreDefragTests.Run();
         EraStoreDifferentialTests.Run();

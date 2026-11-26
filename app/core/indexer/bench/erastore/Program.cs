@@ -431,7 +431,7 @@ internal static class Program
             writer.WriteStartArray("noPositionFields");
             foreach (var (field, name) in FieldNames)
             {
-                if (Array.IndexOf(NoPositionFieldList, field) >= 0)
+                if (BuildDefaults.NoPositionFields.Contains(field))
                     writer.WriteStringValue(name);
             }
             writer.WriteEndArray();
@@ -883,9 +883,6 @@ internal static class Program
         return readers;
     }
 
-    private static readonly FieldId[] NoPositionFieldList =
-        { FieldId.LyricsRomanization, FieldId.PinyinLyrics };
-
     private static BuildOptions Options(int docsPerSegment) => new()
     {
         DocsPerSegment = docsPerSegment,
@@ -894,8 +891,8 @@ internal static class Program
         CreatedMs = FixedCreatedMs,
         NormalizerVersion = 1,
         TokenizerVersion = 2,
-        // V2：派生转写层只做文档级召回，不写位置块（当前体积与构建内存的主要杠杆）。
-        NoPositionFields = new HashSet<FieldId>(NoPositionFieldList),
+        // S2：与生产共用同一份默认清单，避免基准 / 生产漂移。
+        NoPositionFields = BuildDefaults.CreateNoPositionFields(),
     };
 
     /// <summary>从 Manifest 取（排序后的）段号；只看 DocStore 段。</summary>

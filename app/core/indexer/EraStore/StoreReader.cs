@@ -157,7 +157,7 @@ internal sealed class StoreReader : IDisposable
             var raw = new byte[EraFormat.CommitSlotCount * EraFormat.CommitSlotSize];
             stream.ReadExactly(raw);
 
-            CommitSlot best = default;
+            CommitSlot? best = null;
             Manifest? bestManifest = null;
             var hasBest = false;
 
@@ -181,7 +181,7 @@ internal sealed class StoreReader : IDisposable
                 catch (InvalidDataException) { continue; }
                 if (manifest.Gen != slot.Gen) continue;
 
-                if (!hasBest || slot.SlotSeq > best.SlotSeq)
+                if (!hasBest || slot.SlotSeq > best!.SlotSeq)
                 {
                     best = slot;
                     bestManifest = manifest;
@@ -262,6 +262,23 @@ internal sealed class StoreReader : IDisposable
     }
 
     /// <summary>
+    /// 可选段体：存在时返回切片，否则返回空。用于 <see cref="SectionKind.Positions"/>——
+    /// 一个段的所有词条都免位置时，Builder 不写 Positions 段（不是损坏）；
+    /// 空内存交给 <see cref="PostingsReader"/> 时按「该段没有任何位置块」处理。
+    /// </summary>
+    public bool TryGetSectionBody(
+        SectionKind kind, ushort segmentId, out ReadOnlyMemory<byte> body)
+    {
+        if (_sections.TryGetValue((kind, segmentId), out var section))
+        {
+            body = _file.Slice((int)section.Offset, (int)section.Length);
+            return true;
+        }
+        body = ReadOnlyMemory<byte>.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// 按 Manifest 里的段引用直接取段体（供去碎片等「逐引用原样复制」的路径使用：
     /// 不经过 <c>(kind, seg)</c> 字典，重复引用 / 未知顺序也能逐条复制）。
     /// </summary>
@@ -305,6 +322,10 @@ internal sealed class StoreReader : IDisposable
     {
         var list = new List<SegmentReaders>(_segmentIds.Length);
         foreach (var seg in _segmentIds)
+        {
+            // Positions 是可选段：整段所有词条免位置时不存在（Builder 只在非空时追加）。
+            // 空内存 = 该段没有位置块；DocStore / Dict / DictIndex / Postings 仍必须存在。
+            TryGetSectionBody(SectionKind.Positions, seg, out var positions);
             list.Add(new SegmentReaders(
                 seg,
                 new DocStoreReader(GetSectionBody(SectionKind.DocStore, seg)),
@@ -313,8 +334,9 @@ internal sealed class StoreReader : IDisposable
                     GetSectionBody(SectionKind.DictIndex, seg)),
                 new PostingsReader(
                     GetSectionBody(SectionKind.Postings, seg),
-                    GetSectionBody(SectionKind.Positions, seg)),
+                    positions),
                 _deadBySegment.TryGetValue(seg, out var dead) ? dead : null));
+        }
         return list;
     }
 
@@ -369,7 +391,7 @@ internal sealed class StoreReader : IDisposable
 
         ValidateHeader(_file.Span[..EraFormat.HeaderSize]);
 
-        CommitSlot best = default;
+        CommitSlot? best = null;
         Manifest? bestManifest = null;
         var hasBest = false;
 
@@ -382,7 +404,7 @@ internal sealed class StoreReader : IDisposable
             var manifest = TryReadManifest(slot);
             if (manifest is null || slot.Gen != manifest.Gen) continue;
 
-            if (!hasBest || slot.SlotSeq > best.SlotSeq)
+            if (!hasBest || slot.SlotSeq > best!.SlotSeq)
             {
                 best = slot;
                 bestManifest = manifest;

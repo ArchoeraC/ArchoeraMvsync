@@ -114,7 +114,7 @@ internal static class EraStorePostingsTests
             cursor.CurrentDoc.ToString());
     }
 
-    /// <summary>位置 Δ 编码往返 [0,2,5,9]。</summary>
+    /// <summary>位置 Δ 编码往返 [0,2,5,9]；O8 自动选位打包，强制 varint 时逐字节不变。</summary>
     private static void PositionDeltas()
     {
         var entries = new[] { new PostingEntry(7, 4, new[] { 0, 2, 5, 9 }) };
@@ -127,10 +127,24 @@ internal static class EraStorePostingsTests
             decoded.Count == 1 && decoded[0].Positions is not null
                 ? string.Join(',', decoded[0].Positions!)
                 : "miss");
+        Program.Check("位置 Δ: O8 自动选择位打包", (positions[6] & 0x02) != 0,
+            $"flags=0x{positions[6]:X2}");
 
-        // 位置块体：doc_delta=7 → 07；pos_count=4 → 04；位置 Δ = 0,2,3,4。
-        Program.Check("位置 Δ: 块体逐字节", Convert.ToHexString(positions.AsSpan(12)) == "070400020304",
+        // 强制 varint：位置块体：doc_delta=7 → 07；pos_count=4 → 04；位置 Δ = 0,2,3,4。
+        try
+        {
+            PostingsWriter.DebugForcePositionsPacked = false;
+            (postings, positions) = Write(entries);
+        }
+        finally
+        {
+            PostingsWriter.DebugForcePositionsPacked = null;
+        }
+        Program.Check("位置 Δ: varint 块体逐字节",
+            Convert.ToHexString(positions.AsSpan(12)) == "070400020304",
             Convert.ToHexString(positions.AsSpan(12)));
+        Program.Check("位置 Δ: varint flags 仅 bit0", positions[6] == 0x01,
+            $"flags=0x{positions[6]:X2}");
     }
 
     private static void PostingsCorruption()

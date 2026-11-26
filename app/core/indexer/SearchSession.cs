@@ -684,10 +684,12 @@ internal sealed class SearchSession : IDisposable
 
             // 字面精确度复核（T3.11）：表达式可能命中 title / artist / album 字面列、
             // 且搜索文本就是查询原文的步骤（Meta / scope=all 的 Mixed）才复核；
+            // 歌词整行相等复核（Q1）：字面主趟且 scope 覆盖歌词列（Lyrics / Mixed）时
+            // 读 DocStore v5 的 lyrics_digest，补上歌词族 exactness=none 的缺口。
             // 查询归一形每请求只算一次（惰性）。宽命中步由 ExecuteMatch 按 cap 跳过。
-            // 歌词 / 读音 / 拼音 / 首字母 / 跨语言 / 容错步保持「歌词 + exactness=none」的保守口径。
             var checkExactness = MayMatchMetadataLiteral(step, request);
-            if (checkExactness && !exactQueryComputed)
+            var checkLyricDigest = MayMatchLyricLiteral(step, request);
+            if ((checkExactness || checkLyricDigest) && !exactQueryComputed)
             {
                 exactQueryComputed = true;
                 exactQuery = SearchExactness.NormalizeQuery(request.Query);
@@ -695,7 +697,8 @@ internal sealed class SearchSession : IDisposable
 
             var matched = ExecuteMatch(
                 expression, take, step, evidence, step.ReadingSequences,
-                checkExactness ? exactQuery : null, confidencePolicy);
+                checkExactness ? exactQuery : null, checkLyricDigest ? exactQuery : null,
+                confidencePolicy);
             foreach (var candidate in matched)
             {
                 if (candidates.TryGetValue(candidate.TrackId, out var existing))
@@ -948,6 +951,23 @@ internal sealed class SearchSession : IDisposable
         => !request.Lyrics && step.Family is FieldFamily.Meta or FieldFamily.Mixed;
 
     /// <summary>
+    /// 该步是否值得做**歌词整行相等**复核（Q1）：
+    /// <list type="bullet">
+    ///   <item><c>scope=metadata</c> 不扫歌词列 → 永不复核；</item>
+    ///   <item>只复核字面主趟（<see cref="SearchPassNames.Lexical"/>）：丢词 / 拼音 / 读音 /
+    ///         跨语言 / 模糊 / 中文容错步搜索的是变体或转写，与「查询原文整行」不同源；</item>
+    ///   <item>字段族必须是 <see cref="FieldFamily.Lyrics"/>（scope=lyrics）或
+    ///         <see cref="FieldFamily.Mixed"/>（scope=all 主趟，含字面 + 拼音 / 首字母复合式），
+    ///         两者都可能命中 0x05–0x07 歌词列。</item>
+    /// </list>
+    /// 这是「非歌词步不读新列」的廉价门：只有这里为真才会把查询哈希传进 ExecuteMatch。
+    /// </summary>
+    private static bool MayMatchLyricLiteral(Step step, SearchRequest request)
+        => !request.Metadata
+            && step.Pass == SearchPassNames.Lexical
+            && step.Family is FieldFamily.Lyrics or FieldFamily.Mixed;
+
+    /// <summary>
     /// 该步的歌词层置信度过滤策略（T4.2 / §5.6.3）：
     /// <list type="bullet">
     ///   <item>跨语言步 → 只收高置信（中 / 低一律不参与，与 scope 无关）；</item>
@@ -982,10 +1002,15 @@ internal sealed class SearchSession : IDisposable
     /// 其余情况保持 <see cref="SearchExactness.None"/>——宽命中集不承担逐候选读取成本。
     /// 复核同时给出**产生最优档位的列**（title / artist / album），仅在真正命中某列时
     /// 覆盖字段族的保守映射；三列都不命中（doc 只命中歌词列）保留保守映射并记 none。</para>
+    ///
+    /// <para><paramref name="lyricExactQuery"/> 非 null 时做**歌词整行**复核（Q1）：
+    /// 同样受 cap 约束；元数据三列已命中真实字段时跳过（不重复读），否则二分查找该 doc 的
+    /// <c>lyrics_digest</c>；整行相等记 <see cref="SearchExactness.Equal"/>，字段保持原保守值。</para>
     /// </summary>
     private List<Candidate> ExecuteMatch(
         string expression, int take, Step step, Evidence evidence,
         IReadOnlyList<string[]>? readingSequences = null, byte[]? exactQuery = null,
+        byte[]? lyricExactQuery = null,
         EraStore.LyricsConfidencePolicy confidencePolicy = EraStore.LyricsConfidencePolicy.None)
     {
         // T3.0: 唯一召回路径是 EraStore；索引缺失时返回空（索引器会强制全量重建）。
@@ -1015,7 +1040,11 @@ internal sealed class SearchSession : IDisposable
         var exactness = exactQuery is { Length: > 0 } && hits.TotalHits <= SearchExactness.Cap
             ? exactQuery
             : null;
-        var segments = exactness is null ? null : NormSegments();
+        // Q1：歌词整行相等同样受 cap 约束；查询哈希与 DocStore v5 行哈希同一 FNV-1a 口径。
+        var lyricHash = lyricExactQuery is { Length: > 0 } && hits.TotalHits <= SearchExactness.Cap
+            ? SearchExactness.HashQuery(lyricExactQuery)
+            : null;
+        var segments = exactness is null && lyricHash is null ? null : NormSegments();
 
         // positioned 的唯一事实来源是引擎：短语 atom 因字段缺位置被降级成纯交集时为 false，
         // 本步没有短语 atom（或字段带位置）时为 true。
@@ -1036,21 +1065,40 @@ internal sealed class SearchSession : IDisposable
                 stepEvidence = stepEvidence with { Proximity = ec.Proximity };
             else if (proximityTerms.Count == 1)
                 stepEvidence = stepEvidence with { Proximity = 0 };
-            if (exactness is not null
-                && segments!.TryGetValue(ec.SegmentId, out var segment)
+            if (segments is not null
+                && segments.TryGetValue(ec.SegmentId, out var segment)
                 && (uint)ec.DocId < (uint)segment.Docs.Count)
             {
-                SearchExactness.CountDocRead();
-                var exact = SearchExactness.RankBest(
-                    exactness, segment.Docs.NormSpans(ec.DocId));
-                stepEvidence = stepEvidence with
+                var metadataMatched = false;
+                if (exactness is not null)
                 {
-                    Exactness = exact.Rank,
-                    // 真实字段只在「查询确实命中某列」时生效；否则保留字段族的保守映射
-                    // （Mixed → Lyrics），把只命中歌词列的 doc 排在标题 / 歌手 / 专辑后面。
-                    Field = exact.Matched ? exact.Field : stepEvidence.Field,
-                    ExactChecked = true,
-                };
+                    SearchExactness.CountDocRead();
+                    var exact = SearchExactness.RankBest(
+                        exactness, segment.Docs.NormSpans(ec.DocId));
+                    stepEvidence = stepEvidence with
+                    {
+                        Exactness = exact.Rank,
+                        // 真实字段只在「查询确实命中某列」时生效；否则保留字段族的保守映射
+                        // （Mixed → Lyrics），把只命中歌词列的 doc 排在标题 / 歌手 / 专辑后面。
+                        Field = exact.Matched ? exact.Field : stepEvidence.Field,
+                        ExactChecked = true,
+                    };
+                    metadataMatched = exact.Matched;
+                }
+
+                // Q1：元数据列都没命中时，再看歌词整行摘要。命中只改第 4 键（Equal），
+                // 字段仍是保守映射（Lyrics）——「宁可把歌词命中排低」的字段桶语义不变。
+                // 元数据命中已给出真实档位时不重复读摘要（metadataMatched = true）。
+                // 纯歌词步（未跑元数据复核）不置 ExactChecked：explain 仍可按命中列探测
+                // lyrics / lyricsTr / lyricsRom 的层归因；Mixed 步在上面的元数据块里已置位。
+                if (!metadataMatched && lyricHash is { } lineHash)
+                {
+                    SearchExactness.CountLyricDigestRead();
+                    if (segment.Docs.ContainsLyricLine(ec.DocId, lineHash))
+                    {
+                        stepEvidence = stepEvidence with { Exactness = SearchExactness.Equal };
+                    }
+                }
             }
             result.Add(new Candidate(virtualDocId, ec.TrackIdHex, stepEvidence, ec.Score, step.Pass));
         }

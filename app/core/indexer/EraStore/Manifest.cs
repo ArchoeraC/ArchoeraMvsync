@@ -95,12 +95,13 @@ internal sealed class Manifest
     ///
     /// <para>v2（T3.11）：DocStore 升到 v3，追加 <c>title_norm</c> / <c>artist_norm</c> /
     /// <c>album_norm</c> 三列。v3（T4.2）：DocStore 升到 v4，追加 <c>layer_conf</c> 列并写
-    /// 歌词层来源位（flags bit3–7）。这些都是查询结果会直接读取的元数据，旧文件
-    /// （metaVersion&lt;3）在三处被拒绝：<see cref="IndexerEngine.Run"/> 走全量重建、
-    /// FFI <c>era_search_open</c> 返回 <c>VersionMismatch</c>、健康检查回显
-    /// <c>schemaVersion=3</c>。物理层同时把 DocStore 段版本升到 4 并拒绝旧段体，双保险。</para>
+    /// 歌词层来源位（flags bit3–7）。v4（Q1）：DocStore 升到 v5，追加 <c>lyrics_digest</c>
+    /// 歌词行哈希列。这些都是查询结果会直接读取的元数据，旧文件（metaVersion&lt;4）在三处
+    /// 被拒绝：<see cref="IndexerEngine.Run"/> 走全量重建、FFI <c>era_search_open</c> 返回
+    /// <c>VersionMismatch</c>、健康检查回显 <c>schemaVersion=4</c>。物理层同时把 DocStore
+    /// 段版本升到 5 并拒绝旧段体，双保险；v4 及更早的索引必须全量重建。</para>
     /// </summary>
-    public const int CurrentMetaVersion = 3;
+    public const int CurrentMetaVersion = 4;
 
     /// <summary>世代号（单调递增，≥1）。</summary>
     public ulong Gen;
