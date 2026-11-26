@@ -37,7 +37,8 @@
 >
 > **SystemWindow（2026-09-10 新增；2026-11-26 ABI v10 补齐控制 / v11 补尺寸读取）**：`Stream<WindowState> state`
 > （minimized/focused/maximized/fullscreen/hidden 快照）+ `Stream<WindowCloseRequest> closeRequests`
-> + 尺寸/显隐/最大化/全屏/装饰/拖拽等控制。窗口事件与控制全部收进原生桥接
+> + 尺寸/显隐/最大化/全屏/装饰/拖拽等控制，以及 `size` / `position` 读写（ABI v11，
+> 用于窗口几何持久化与 macOS 自绘缩放的 Dart 回退）。窗口事件与控制全部收进原生桥接
 > （`platform-native-bridge.md` §3.4）：Linux GTK 信号 / Windows WndProc 子类化 /
 > macOS NSWindow 通知与 delegate；关闭请求（含 macOS ⌘Q）只上报，由 Dart 的托盘策略
 > 决定隐藏或退出。第三方窗口插件已移除；桥接不可用（纯 Wayland 等）时为 Noop，

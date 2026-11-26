@@ -559,7 +559,7 @@ int32_t apl_system_accent_set_events(int32_t on);
 | P3 Windows | ✅ | 休眠抑制 + 熄屏 + SMTC + WndProc 窗口状态 |
 | P4 macOS | ✅（交叉编译，待真机） | beginActivity + 熄屏 + Now Playing + NSWindow 状态 |
 | P5 Linux 窗口 | ✅ | GTK/GDK 统一模式（X11 / Wayland 全覆） |
-| 窗口控制 / 关闭（v9 / v10） | ✅（交叉编译，待真机） | 见 §3.4 与下文「第一批 / 第二批落地」 |
+| 窗口控制 / 关闭 / 尺寸读取（v9 / v10 / v11） | ✅（交叉编译，待真机） | 见 §3.4 与下文「第一批 / 第二批 / 第三批落地」 |
 
 > 2026-09-12 Zig → C++/ObjC++ 迁移后，Zig 期的逐项修复记录（7.2–7.10）归档到
 > [`archive/platform-native-bridge-history.md`](archive/platform-native-bridge-history.md)；
