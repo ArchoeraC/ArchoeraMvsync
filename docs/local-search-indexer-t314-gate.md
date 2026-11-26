@@ -596,6 +596,8 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 5. Q4 已改变默认方案的短路行为，建议用真实查询日志跑一轮 replay 对比；
    Q3 / Q8 用真实库分布校准后再决定是否改默认值。
 6. S4 段大小自适应、S5 LRC 分层语言信号：需要真机 / 真实多语 LRC 样本。
+7. 跨语言 T2-7（助词 は/へ/を 双写是否足够）：`query_log` / `query_log_file` 已就位，
+   等真实使用积累后按 `query` 聚合回填矩阵（`docs/cross-lingual-search-upgrade-plan.md`）。
 
 更细的可改进项（含改法与代价）见 §9。
 
@@ -603,6 +605,13 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 
 > 以下都不是 S3/S4 的未完成项（门禁与验收已过），而是**已知可继续优化**的点。
 > 每项都标了现状证据、改法与代价，供后续排期；不要在没有测量数据时一次改多项。
+>
+> **默认生效边界（2026-11-26 复核）**：本轮进入默认路径的只有 **Q2 / Q5 / S3 / S6 / S7 / E5**，
+> 以及 **Q4（仅 `default@1` / `fast@1`，属行为变化，见该行实测）**。
+> **Q3（拼音前缀门槛）与 Q8（df 预算）只交付机制 / 旋钮：默认值不变、且未接入任何运行配置
+> （UI、请求 JSON、方案注册表都读不到，只能改代码启用）——它们是「召回 / 延迟」换「噪声 / 体积」
+> 的实验项，不要当成已启用的优化。** 同理 S2 的「`PinyinLyrics` 免位置」已测量并**明确不采纳**
+> （5k P@1 0.973 → 0.838）。
 
 ### 9.1 排序与召回语义（质量收益优先）
 
@@ -610,12 +619,12 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 |---|---|---|---|
 | Q1 | ✅ **已实现（2026-11-26）**：DocStore v5 `lyrics_digest`（归一化歌词整行 FNV-1a 64 哈希，有序去重），字面主趟 / ≤cap 时二分查找 → `exactness = equal`。仍**只支持整行相等**，前缀 / 包含保持 `none`（哈希无法恢复原文，也不存原文）；体积 +0.68 KiB/曲（2k 抽样均值 86.6 行） | 后续若要前缀 / 包含：只能存有界行前缀原文（体积更高）或查询期读 `library.db`（会碰 `busy_timeout`）；歌词层内子列（原文 / 译文 / 音译）仍不细分，字段桶保持 Lyrics | 已完成；旧索引必须全量重建；64 位碰撞只影响第 4 键 |
 | Q2 | ✅ **已实现（2026-11-26）**：`EraProximity.FieldsFor(family)` 把邻近度扩到歌词原文 / 译文 / 音译、Mixed、Reading、Fuzzy；`Fill` 按族取字段集，仍按 `candidates ≤ Cap` + 单 term 位置上限护栏。5k qbench（3 次交错取中位）p50 1.80 → **1.77 ms**、p95 13.35 → **11.33 ms**，无回归。**仍算不出**：音译层生产默认免位置；Reading 的 `Step.Terms` 是字面词而列里存读音 bigram；拼音 / 首字母 / 跨语言族无映射 | 后续可通过计划把读音序列 / 叠词位置传给引擎，或对单短语步跳过重复位置读取 | phrase 步仍会读一次位置（通常复现 tokens-1）；跨列窗口不跨越字段（符合 spec） |
-| Q3 | ✅ **已交付旋钮（2026-11-26）**：`MinPinyinPrefixTokenLength`（只作用于单音节拼音支，字面 / 模糊门槛不变），默认保持 **3**。5k 实测临时 `N=4`：`pinyin_initials` found@50 4→3、R@50 0.0052→0.0039、NDCG@10 0.1795→0.1834，聚合 P@1/NDCG 几乎不变；同一门槛也是「边打边搜」3 字符部分拼音（`zho`→`zhong`）的召回来源。词典 df 证据：`wan*` = `wan`+`wang`（df 9,863 vs 4,915 exact）、`nia`→`nian/niao`。**真实库 3–4 字符分布仍缺**，待真实曲库校准后再决定是否抬默认值 | 抬高门槛会牺牲部分前缀召回（尤其输入过程中）；需要真实库回放 | 本轮只交付机制与合成语料证据，不改产品默认 |
-| Q4 | ✅ **已实现（2026-11-26，`default@1` / `fast@1`）**：`RequireStrongKindForShortCircuit` —— 主趟命中数达到 `MinExact` 但只有 `Partial`（散落 AND）时继续跑拼音 / 丢词 / 读音兜底；出现强证据（Exact / Phrase / Prefix / PinyinExact / PinyinPhrase / Initials）才恢复短路。`recall@1` / `minimal@1` 保持旧门。5k eval `query_set.hash = 981bcfaa…` **逐题指标完全不变**（只有 `fallback_passes` 增加：latin_phrase 0→3、line_head/mid/tail 0→1） | 弱证据多词查询会把单 term 丢词证据并进字面候选（`proximity=0` 覆盖真实跨度）；5k 排名未受影响，需真实多词查询回放 | `strong` 与 `KindRank` 无关（Partial 排名更高但仍是弱证据）；邻近度用例固定 fast@1 以隔离该副作用 |
+| Q3 | ✅ **已交付旋钮（2026-11-26）**：`MinPinyinPrefixTokenLength`（只作用于单音节拼音支，字面 / 模糊门槛不变），默认保持 **3**。5k 实测临时 `N=4`：`pinyin_initials` found@50 4→3、R@50 0.0052→0.0039、NDCG@10 0.1795→0.1834，聚合 P@1/NDCG 几乎不变；同一门槛也是「边打边搜」3 字符部分拼音（`zho`→`zhong`）的召回来源。词典 df 证据：`wan*` = `wan`+`wang`（df 9,863 vs 4,915 exact）、`nia`→`nian/niao`。**真实库 3–4 字符分布仍缺**，待真实曲库校准后再决定是否抬默认值 | 抬高门槛会牺牲部分前缀召回（尤其输入过程中）；需要真实库回放 | 本轮只交付机制与合成语料证据，不改产品默认；**旋钮未接入 UI / 请求 JSON / 方案注册表，只能改代码启用** |
+| Q4 | ✅ **已实现（2026-11-26，`default@1` / `fast@1`）**：`RequireStrongKindForShortCircuit` —— 主趟命中数达到 `MinExact` 但只有 `Partial`（散落 AND）时继续跑拼音 / 丢词 / 读音兜底；出现强证据（Exact / Phrase / Prefix / PinyinExact / PinyinPhrase / Initials）才恢复短路。`recall@1` / `minimal@1` 保持旧门。5k eval `query_set.hash = 981bcfaa…` **逐题指标完全不变**（只有 `fallback_passes` 增加：latin_phrase 0→3、line_head/mid/tail 0→1） | 弱证据多词查询会把单 term 丢词证据并进字面候选（`proximity=0` 覆盖真实跨度）；5k 排名未受影响，需真实多词查询回放 | `strong` 与 `KindRank` 无关（Partial 排名更高但仍是弱证据）；邻近度用例固定 fast@1 以隔离该副作用。**400 曲派生集 A/B（`queries-derived.jsonl`，64 题）**：Q4 让 25/64 题结果集变化（多数是原先只有 1 条命中 → 追加兜底结果），仅 5 处名次变化、1 题 top-1 互换（强证据胜出）；其余 top-1 不变。若产品更看重「少而准」，把方案策略换回 `SearchPolicy.Default` 即可（一行） |
 | Q5 | ✅ **已实现（2026-11-26）**：方案不含 `prefix` matcher 时 `includePrefix=false`，主表达式**不含任何** `*`（末词前缀 / 独立单字 `字*` 改写 / 单音节拼音前缀 / 模糊变体前缀全部关闭），`minimal@1` 只生成 Exact / 真多词 AND；`fast@1` / `default@1` / `recall@1` 表达式字节不变（golden + scheme 向量断言） | 真多词 AND（Partial）仍可能出现，属词法本身而非前缀 | 降级链终点行为变化，默认方案不受影响 |
 | Q6 | N10 纯汉字日文标题按中文拼音（`米津玄師 → mi jin xuan shi`） | per-track 语言画像（标题/歌手含假名、日文汉字表、曲目来源）写入 DocStore，查询按画像选读音表 | 新存储列 + 重建；需要真实日文库校准 |
 | Q7 | N11 单字 CJK 歌词不可召回（`RequireMetadataForSingleChar`） | 按 §3.5 决策放宽单字歌词（配合置信度/桶序避免噪声） | 产品语义决策；回归面大 |
-| Q8 | ✅ **机制落地（2026-11-26，默认关闭）**：`StoreReader` 新增 `TermDf` / `AtomDf` / `EstimateDf`（逐字段取词条 df 最小值 / OR 求和 / 作用域收窄，前缀展开上限 4,096 后饱和为 `TotalDocs`，带缓存）；`SearchSession` 在 `DfBudgetFactor > 0` 时按 `est > factor × cap × 4` 跳过步骤，`explain` 记 `df_budget`。`DfBudgetFactor` 默认 **0**，召回不变 | 估算墓碑无关、且是字段相加的近似；阈值必须用真实库 df 分布回放校准后再默认开启 | 只有合成预算单测覆盖；生产未启用 |
+| Q8 | ✅ **机制落地（2026-11-26，默认关闭）**：`StoreReader` 新增 `TermDf` / `AtomDf` / `EstimateDf`（逐字段取词条 df 最小值 / OR 求和 / 作用域收窄，前缀展开上限 4,096 后饱和为 `TotalDocs`，带缓存）；`SearchSession` 在 `DfBudgetFactor > 0` 时按 `est > factor × cap × 4` 跳过步骤，`explain` 记 `df_budget`。`DfBudgetFactor` 默认 **0**，召回不变 | 估算墓碑无关、且是字段相加的近似；阈值必须用真实库 df 分布回放校准后再默认开启 | 只有合成预算单测覆盖；**`DfBudgetFactor` 未接入任何运行配置，只能改代码启用**，生产未启用 |
 
 ### 9.2 索引与存储
 

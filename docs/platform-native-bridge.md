@@ -996,6 +996,27 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
   `app/tool/verify_windows.sh`（msvc-wine + MSVC cl）编译 + 链接通过；
   `flutter test test/native_platform_abi_test.dart`（backend.h 契约符号
   无条件性守卫）通过。
+- **覆盖矩阵（2026-11-26 复核）**：
+
+  | 能力 | ABI | Windows | Linux（GTK/GDK） | macOS | 验证级别 |
+  |---|---|---|---|---|---|
+  | 状态事件（min/focus/max/full/hidden） | v9 `apl_window_set_events` + `u.window.flags` | `WndProc` 子类化 | GTK 信号（取代 500ms 轮询，保留兜底） | `NSWindow` 通知 | Windows 早前 WSL 真机；本轮代码未回归真机 |
+  | 显示 / 隐藏 / 最小化 / 还原 | v10 `show/hide/minimize/restore` | 全部 | 全部 | 全部 | 交叉编译 + Linux 启动 |
+  | 最大化 / 全屏 | v10 `set_maximized/set_fullscreen` | 样式 + `WINDOWPLACEMENT` 快照 | maximize / fullscreen 提示 | zoom / toggleFullScreen | 交叉编译 |
+  | 置顶 / 可缩放 | v10 `set_always_on_top/set_resizable` | 全部 | keep-above / resizable | `level` / `styleMask` | 交叉编译 |
+  | 装饰三档 | v10 `set_decor` | system / caption / borderless | **caption 降级为无装饰**（GTK 无原生档位） | caption = FullSizeContentView + 隐藏标题 | 交叉编译 |
+  | 尺寸 / 最小尺寸 / 居中 | v10 | `GetDpiForWindow` DIP↔px + `WM_GETMINMAXINFO` | `set_geometry_hints` | `setContentSize` | 交叉编译 |
+  | 位置读写 | v10 `get/set_position` | DIP↔px | 原子缓存 + idle move | AppKit 左下↔左上坐标换算 | 交叉编译 |
+  | 标题栏拖拽 | v10 `start_drag` | `ReleaseCapture` + `WM_NCLBUTTONDOWN(HTCAPTION)` | `begin_move_drag`（Wayland 用按下 serial） | `performWindowDragWithEvent` | 交叉编译 |
+  | 边缘缩放 | v10 `start_resize` | 8 个 `HT*` 命中码 | `begin_resize_drag` | **`APL_ERR_UNSUPPORTED`（系统边缘负责）** | 交叉编译 |
+  | 关闭 / 退出请求 | v10 事件 14 | `WM_CLOSE` 只上报 | `delete-event` 返回 `TRUE` | delegate `windowShouldClose:` + `terminate:` swizzle | **仅交叉编译，需真机 ×20 验收** |
+  | `request_close` / `stop_events` | v10 | 全部 | 全部 | 全部 | 交叉编译 |
+  | 版本 / 能力位 | `apl_abi_version = 10` / `APL_CAP_WINDOW_CONTROL(1<<16)` | 置位 | `display + libgtk-3` 均可用才置位 | 置位 | `native_platform_abi_test` 常量守卫 |
+
+- **Dart 侧接入**：`PlatformBindings.tryLoad()` 要求 `apl_abi_version == 10`（不等直接
+  Noop）；工厂在 `WINDOW_STATE | WINDOW_CONTROL` 任一存在时注入 `FfiSystemWindow`。
+  `FfiSystemWindow.setEvents` 是**引用计数**的（power_saver / 托盘 / 全屏 / 窗口按钮 /
+  彩蛋共用单例），任一方退订不会关掉全局原生监听与关闭拦截。
 - **尚未迁 / 剩余风险**：macOS 自绘缩放热区仍依赖系统边缘（`start_resize`
   返回 `APL_ERR_UNSUPPORTED`）；Linux 没有「仅隐藏标题栏、保留系统按钮」的 GTK
   原生档位，`caption` 降级为无装饰（窗口按钮需自绘）；真正关窗 / 退出仍由 Dart

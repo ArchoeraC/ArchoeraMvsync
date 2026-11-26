@@ -93,6 +93,10 @@ internal sealed record SearchPolicy
     /// <summary>
     /// 单音节拼音前缀的最小长度（Q3）：对应 <see cref="SearchQuery.MinPinyinPrefixTokenLength"/>。
     /// 只作用于拼音支，不动字面 / 模糊前缀门槛（<see cref="MinPrefixTokenLength"/>）。
+    ///
+    /// <para><b>实验旋钮（未接入运行配置）</b>：UI / 请求 JSON / 方案注册表都不读它，
+    /// 只能改代码。默认保持 3；抬高会牺牲「边打边搜」的部分拼音召回，属召回 / 延迟取舍，
+    /// 需真实库分布校准后再决定。</para>
     /// </summary>
     public int MinPinyinPrefixTokenLength { get; init; } = SearchQuery.MinPinyinPrefixTokenLength;
 
@@ -109,6 +113,10 @@ internal sealed record SearchPolicy
     /// <c>DfBudgetFactor × step.Cap × DfBudgetCapMultiplier</c> 的步骤跳过并记
     /// <c>df_budget</c>；默认 0 关闭，召回不变。估算为墓碑无关的近似（见
     /// <see cref="EraStore.StoreReader.EstimateDf"/>）。
+    ///
+    /// <para><b>实验旋钮（未接入运行配置）</b>：UI / 请求 JSON / 方案注册表都不读它，
+    /// 只能改代码。启用会跳过「必然宽命中」的步骤，属召回换延迟；阈值需真实库 df
+    /// 分布回放校准后再讨论默认值。</para>
     /// </summary>
     public double DfBudgetFactor { get; init; } = 0;
 

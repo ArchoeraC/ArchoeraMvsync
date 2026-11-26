@@ -328,8 +328,10 @@ internal static class NegativeBaselineTests
             + "且 scope=all 混合步复核生效后字段桶只到 lyrics（DocStore 只有 title/artist/album"
             + " 归一列，歌词子列不再可归因），缺 §3.5 单字歌词语义决策 / S3 歌词列精确度");
         Program.Blocked("N18 高频词受预算裁剪",
-            "单字高频词已限定可见文本列、不生成 prefix / phonetic 步；仍缺计划期 df 预算"
-            + "（est > 4×cap 不生成 step），需回放校准且编译器要读存储");
+            "单字高频词已限定可见文本列、不生成 prefix / phonetic 步；Q8 已落地执行期 df 预算"
+            + "（StoreReader.TermDf/EstimateDf + DfBudgetFactor，explain 记 df_budget），"
+            + "但默认 0 关闭且未接入运行配置（只能改代码），阈值需真实库回放校准；"
+            + "默认开启后本项才可转为 Check");
     }
 
     /* ------------------------------------------------------------------ */
