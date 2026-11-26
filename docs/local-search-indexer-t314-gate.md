@@ -4,8 +4,9 @@
 > 代码：`main` 工作区（EraStore 增量 + 只读 mmap + 生产路径去 FTS）
 > 关联：`docs/local-search-indexer-rewrite-plan.md` §5.4 / §8
 >
-> **最终状态（2026-11-25）**：S0–S4 已全部实施；本文件记录 T3.10 / T3.13 / T3.14 / T3.15
-> 的门禁过程与后续各轮实测。最新数字见文末「第九轮」，剩余项见「下一步」。
+> **最终状态（2026-11-26）**：S0–S4 已全部实施；本文件记录 T3.10 / T3.13 / T3.14 / T3.15
+> 的门禁过程与后续各轮实测。§9 的可本地完成项（Q2 / Q3 / Q4 / Q5 / Q8 / S3 / S6 / S7 / E5）
+> 已在「第十一轮」落地或交付默认关闭的机制；最新数字见该轮，剩余项见「下一步」。
 >
 > **结论先行**：T3.10 的功能已落地（增量 + 墓碑 + 分层合并），T3.13 的生产查询路径已
 > 零 v7/FTS5，T3.15 的切换逻辑已可复现；**T3.14 七项门禁 7/7 通过**（30k，空闲
@@ -549,14 +550,52 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
     width）需要更复杂编码，本轮不做。
 
 
-**下一步（2026-11-25 收尾后的真实剩余）**：
+- **第十一轮（2026-11-26，§9 剩余可本地完成项：Q2 / Q3 / Q4 / Q5 / Q8 / S3 / S6 / S7 / E5）**：
+  - **Q5**：`includePrefix` 由方案是否声明 `prefix` matcher 派生；`minimal@1` 主表达式不含
+    任何 `*`（末词前缀 / 单字 `字*` / 拼音前缀 / fuzzy 前缀全部关闭），只做精确匹配。
+    `fast@1` / `default@1` / `recall@1` 表达式字节不变。
+  - **Q4**：`default@1` / `fast@1` 的 `MinExact` 短路改为「出现强证据才关」——只有
+    `Partial`（散落 AND）时继续跑拼音 / 丢词 / 读音兜底。5k eval 逐题指标不变，
+    `fallback_passes` 增加。**这是默认方案的行为变化**（结果集可能多兜底候选，排序桶序不变）。
+  - **Q3**：新增 `MinPinyinPrefixTokenLength`（只作用单音节拼音支），默认保持 3；
+    合成库证据见 §9.1 Q3，真实库分布仍待校准。
+  - **Q8**：`StoreReader` 新增 `TermDf` / `AtomDf` / `EstimateDf`（带缓存、前缀展开上限
+    4,096 后饱和）；`SearchSession` 在 `DfBudgetFactor > 0` 时按 `est > 4×cap` 跳过并记
+    `explain.reason=df_budget`。**默认 0，召回不变**。
+  - **Q2**：`EraProximity.FieldsFor(family)` 把真实邻近度扩到歌词原文 / 译文 / 音译、
+    Mixed、Reading、Fuzzy；仍按候选 ≤ `SearchExactness.Cap` 才读位置块。5k qbench
+    p50 1.80 → **1.77 ms**、p95 13.35 → **11.33 ms**（子代理 A/B，3 次交错中位）。
+  - **S3**：`EraStore/TermCodec` 统一超长词条 → `0x01 + MD5 hex`（33B）；索引 / 查询 /
+    词表三侧同源，`oversizeTokens` 恒为 0，超长词精确可检索；不升格式版本、旧索引可读。
+  - **S6**：DocStore **v6** 追加 `meta_hash[u64×N]`（原始 `title \0 artists \0 album` 的
+    FNV-1a 64），阶段一探测同源计算 → 直接改 `library.db` 元数据（不碰音频）也会重索引。
+    `Manifest.CurrentMetaVersion 4 → 5`，**旧 v1–v5 索引必须全量重建**；体积 +8 B/曲。
+  - **S7**：无脏曲 / 删除时仍调用 `IncrementalUpdater.Maintain`（`AutoMaintain` 默认开）；
+    死行 ≥20% 或段数 ≥24 才合并，未达阈值零写入。
+  - **E5**：设置页展示 `gen / schemaVersion / analyzerVersion`、数据包 id（前 12 hex）/
+    同源 / 存在 / 基础表 / 降级能力数、歌词置信度分布；`refreshHealth()` 走后台 isolate，
+    UI 线程只读缓存。
+  - **验证**：C# **PASS 4273 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**；Flutter
+    **1225 passed / 42 skipped / 0 failed**；`dart analyze lib` 0 issue；
+    NativeAOT `indexer-ffi.so` 重建后 FFI 冒烟 14/14。5k 最终（同一语料 seed `20261013`）：
+    `fileBytes 25,603,565`（**5,120.7 B/曲 = 5.00 KiB**；其中 S6 +8 B/曲）、
+    `liveBytes 25,602,633`、positions 16,207,455（与 O8 相同）、1 段、
+    `verify ok`；qbench eval `query_set.hash = 981bcfaa…`，ALL **P@1 0.973 /
+    P@5 0.9135 / P@10 0.9054 / R@50 0.1469 / MRR@10 0.982 / NDCG@10 0.9778**（与基线逐项相同）；
+    延迟 3 次 pooled p50 **1.10–1.11 ms** / p95 **19.3–20.0 ms**（5k，Q4 默认开启）。
+  - **未做**：S4（段大小自适应）——需要真机 / 真实曲库多档校准，本轮按「无测量不改默认」保留；
+    Q3 / Q8 的默认阈值、Q4 的真实多词回放仍待真实数据。
+
+**下一步（2026-11-26 收尾后的真实剩余）**：
 
 1. Windows / macOS 实机跑 §7.1 的占用 / 中断场景（T3.15 收尾）——本机只能覆盖 Linux。
 2. T4.1 词表的人工复核：§5.5.4 要求 ≥10% 抽样 + 第二名评审签字（当前标 `seed`）。
-3. N10 / N11 / N18 三项 BLOCKED：per-track 语言画像 / 单字歌词召回语义 / 计划期 df 预算，
-   均为产品决策。
-4. S2 已于 2026-11-26 收口（音译层免位置 + O8 位置块位打包）；剩余只有
-   `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
+3. N10 / N11 两项仍 BLOCKED（per-track 语言画像 / 单字歌词召回语义），均为产品决策；
+   N18（df 预算）机制已落地但默认关闭，阈值需真实库回放。
+4. `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
+5. Q4 已改变默认方案的短路行为，建议用真实查询日志跑一轮 replay 对比；
+   Q3 / Q8 用真实库分布校准后再决定是否改默认值。
+6. S4 段大小自适应、S5 LRC 分层语言信号：需要真机 / 真实多语 LRC 样本。
 
 更细的可改进项（含改法与代价）见 §9。
 
@@ -570,13 +609,13 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | # | 现状 / 证据 | 可改进方向 | 代价 / 风险 |
 |---|---|---|---|
 | Q1 | ✅ **已实现（2026-11-26）**：DocStore v5 `lyrics_digest`（归一化歌词整行 FNV-1a 64 哈希，有序去重），字面主趟 / ≤cap 时二分查找 → `exactness = equal`。仍**只支持整行相等**，前缀 / 包含保持 `none`（哈希无法恢复原文，也不存原文）；体积 +0.68 KiB/曲（2k 抽样均值 86.6 行） | 后续若要前缀 / 包含：只能存有界行前缀原文（体积更高）或查询期读 `library.db`（会碰 `busy_timeout`）；歌词层内子列（原文 / 译文 / 音译）仍不细分，字段桶保持 Lyrics | 已完成；旧索引必须全量重建；64 位碰撞只影响第 4 键 |
-| Q2 | proximity 只有元数据字段的真实值；散落多 term 的歌词/转写/模糊仍 `int.MaxValue` | 把 term 位置暴露到候选侧（`PostingsCursor` 已在用），对 ≤cap 的步骤做歌词段最小窗口 | 需要第二遍位置扫描；p50 预算只剩 ~2 ms，可能超门禁 |
-| Q3 | 短拼音前缀无长度门控：3–4 字符拼音（如 `hen*`）会扩到 `henry` 类无关词 | 按真实库统计 3–4 字符拼音命中分布，定「最短前缀 / 命中上限」 | 需要真实库数据；改门控会牺牲部分召回 |
-| Q4 | `MinExact` 仍是「首趟命中即停」：宽查询可能掩盖后面更精确的趟 | 改成「主趟命中数未达阈值时继续跑更高精度趟」，或按 kind 合并后再判短路 | 影响 UI 结果数与延迟；需要产品确认 |
-| Q5 | `fast@1` / `minimal@1` 共用 lexical（`exact + prefix` 仍配对） | 拆出独立 exact / prefix 表达式，让 `minimal@1` 真正「只 exact」 | 改表达式生成 + 方案向量；收益只在降级链 |
+| Q2 | ✅ **已实现（2026-11-26）**：`EraProximity.FieldsFor(family)` 把邻近度扩到歌词原文 / 译文 / 音译、Mixed、Reading、Fuzzy；`Fill` 按族取字段集，仍按 `candidates ≤ Cap` + 单 term 位置上限护栏。5k qbench（3 次交错取中位）p50 1.80 → **1.77 ms**、p95 13.35 → **11.33 ms**，无回归。**仍算不出**：音译层生产默认免位置；Reading 的 `Step.Terms` 是字面词而列里存读音 bigram；拼音 / 首字母 / 跨语言族无映射 | 后续可通过计划把读音序列 / 叠词位置传给引擎，或对单短语步跳过重复位置读取 | phrase 步仍会读一次位置（通常复现 tokens-1）；跨列窗口不跨越字段（符合 spec） |
+| Q3 | ✅ **已交付旋钮（2026-11-26）**：`MinPinyinPrefixTokenLength`（只作用于单音节拼音支，字面 / 模糊门槛不变），默认保持 **3**。5k 实测临时 `N=4`：`pinyin_initials` found@50 4→3、R@50 0.0052→0.0039、NDCG@10 0.1795→0.1834，聚合 P@1/NDCG 几乎不变；同一门槛也是「边打边搜」3 字符部分拼音（`zho`→`zhong`）的召回来源。词典 df 证据：`wan*` = `wan`+`wang`（df 9,863 vs 4,915 exact）、`nia`→`nian/niao`。**真实库 3–4 字符分布仍缺**，待真实曲库校准后再决定是否抬默认值 | 抬高门槛会牺牲部分前缀召回（尤其输入过程中）；需要真实库回放 | 本轮只交付机制与合成语料证据，不改产品默认 |
+| Q4 | ✅ **已实现（2026-11-26，`default@1` / `fast@1`）**：`RequireStrongKindForShortCircuit` —— 主趟命中数达到 `MinExact` 但只有 `Partial`（散落 AND）时继续跑拼音 / 丢词 / 读音兜底；出现强证据（Exact / Phrase / Prefix / PinyinExact / PinyinPhrase / Initials）才恢复短路。`recall@1` / `minimal@1` 保持旧门。5k eval `query_set.hash = 981bcfaa…` **逐题指标完全不变**（只有 `fallback_passes` 增加：latin_phrase 0→3、line_head/mid/tail 0→1） | 弱证据多词查询会把单 term 丢词证据并进字面候选（`proximity=0` 覆盖真实跨度）；5k 排名未受影响，需真实多词查询回放 | `strong` 与 `KindRank` 无关（Partial 排名更高但仍是弱证据）；邻近度用例固定 fast@1 以隔离该副作用 |
+| Q5 | ✅ **已实现（2026-11-26）**：方案不含 `prefix` matcher 时 `includePrefix=false`，主表达式**不含任何** `*`（末词前缀 / 独立单字 `字*` 改写 / 单音节拼音前缀 / 模糊变体前缀全部关闭），`minimal@1` 只生成 Exact / 真多词 AND；`fast@1` / `default@1` / `recall@1` 表达式字节不变（golden + scheme 向量断言） | 真多词 AND（Partial）仍可能出现，属词法本身而非前缀 | 降级链终点行为变化，默认方案不受影响 |
 | Q6 | N10 纯汉字日文标题按中文拼音（`米津玄師 → mi jin xuan shi`） | per-track 语言画像（标题/歌手含假名、日文汉字表、曲目来源）写入 DocStore，查询按画像选读音表 | 新存储列 + 重建；需要真实日文库校准 |
 | Q7 | N11 单字 CJK 歌词不可召回（`RequireMetadataForSingleChar`） | 按 §3.5 决策放宽单字歌词（配合置信度/桶序避免噪声） | 产品语义决策；回归面大 |
-| Q8 | N18 无计划期 df 预算：高频词仍可能生成宽步骤 | 计划编译器读 `StoreReader` 的 df 快照，`est > 4×cap` 不生成步骤 | 编译器从纯函数变为可读存储；阈值需回放校准 |
+| Q8 | ✅ **机制落地（2026-11-26，默认关闭）**：`StoreReader` 新增 `TermDf` / `AtomDf` / `EstimateDf`（逐字段取词条 df 最小值 / OR 求和 / 作用域收窄，前缀展开上限 4,096 后饱和为 `TotalDocs`，带缓存）；`SearchSession` 在 `DfBudgetFactor > 0` 时按 `est > factor × cap × 4` 跳过步骤，`explain` 记 `df_budget`。`DfBudgetFactor` 默认 **0**，召回不变 | 估算墓碑无关、且是字段相加的近似；阈值必须用真实库 df 分布回放校准后再默认开启 | 只有合成预算单测覆盖；生产未启用 |
 
 ### 9.2 索引与存储
 
@@ -584,11 +623,11 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 |---|---|---|---|
 | S1 | ~~`compact` 把归并结果 append 到同一 generation，随后 `defrag` 再整文件复制一遍（构建期峰值 2× 磁盘、耗 0.2–0.3 s）~~ **已实现（2026-11-26）**：全量构建收尾压缩走 `Merger.MergeToNewGeneration`，直接写只含活段体的新世代并原子切换 `CURRENT`，成功后跳过 defrag；增量合并仍保持同文件追加 | 后续只需观察真实曲库的峰值磁盘 / 收尾耗时（长基准未重跑） | 已完成；格式锚与既有索引不变，无需重建 |
 | S2 | **已实现（2026-11-26 收口）**：两段路线。① 可选音译层 `LyricsRomanization` 默认免位置；`PinyinLyrics` 必须保留位置（两条一起免位置的 2k 体积收益 -34.7%，但 5k qbench eval 把 ALL P@1 从 **0.973 打到 0.838**、NDCG@10 0.978 → 0.854）。② **O8 位置块位打包**（第十轮）：位置块 flags 新增 `0x02`，逐块比较 varint / packed 块体取较小者；5k `fileBytes` 26,266,248 → **25,563,565**（−2.68%），Positions 16,910,138 → **16,207,455**（−4.16%），qbench eval 逐题与基线完全一致；旧索引可读、无需重建 | 进一步压缩可做 PForDelta 例外帧 / 跨 doc 共享 width，但复杂度更高、本轮不做 | 已完成；`PinyinLyrics` / `PinyinMeta` 免位置仍不采纳（短语精度），`initialsLyrics` 同理 |
-| S3 | 超过 255 B 的词条被丢弃（`oversizeTokens`），该词不可检索 | 对超长词做分段 / 哈希词条 + 原文旁路，保留可检索性 | 词典格式与查询 IR 改动；真实库中极罕见 |
-| S4 | 段大小固定 4 MB 估算（RSS ↔ 查询延迟的核心矛盾） | 按平台 / 曲库规模 / 内存自适应段大小，或构建后按段数二次合并 | 需要多档实测（5k/30k/48.7k 已有基线） |
+| S3 | ✅ **已实现（2026-11-26）**：`EraStore/TermCodec.cs` 统一规范化——UTF-8 ≤255B 原样，超长单 token → `0x01 + 小写 MD5 hex`（33B，确定性、跨平台稳定；含空白短语不哈希）。索引侧 `SplitTok` 不再丢词，`oversizeTokens` 恒为 0；查询侧 `Quote` / `PrefixTerm` 同源规范化，拼音 / 首字母 / 模糊 / 词表枚举把哈希词条当精确词条（不加 `*`、不做编辑距离）；`LoadEraVocabulary` 跳过 `0x01` 词条。**不升格式版本**：哈希词条是普通 ≤255B 词典键，旧索引照常可读；旧索引里被丢掉的超长词需该曲重索引后才会出现 | 若将来要支持超长词的前缀 / 包含，需要额外旁路（本轮只保证精确命中） | MD5 只做键空间映射；碰撞只会合并两个不透明词条（实际不可达） |
+| S4 | 段大小固定 4 MB 估算（RSS ↔ 查询延迟的核心矛盾） | **本轮未改**：S1 已覆盖「构建后按段数二次合并」；段大小自适应需要真机 / 多档真实曲库（5k/30k/48.7k 只是合成语料）校准，当前环境没有真实 `library.db`，按 AGENTS「无测量不改默认」暂留 | 下一轮在真机上按平台内存 + 曲库规模做分段实验，再改默认 |
 | S5 | LRC 分层仍按「同时间戳第 1/2/3 行」猜（D-1）；无时间轴的内嵌歌词靠 +3 基线兜底 | 用语言识别 / 翻译对齐信号替代行位置猜测；分层置信度阈值回放校准 | 需要真实多语 LRC 样本 |
-| S6 | 脏集只认 `file_mtime` + `.lrc` mtime/size（D-3）：直接改 `library.db` 不改文件会漏更新 | DocStore 增加「元数据内容哈希」列，脏集比较 mtime **或** 哈希 | DocStore v6 + 全量重建（v5 已被 Q1 用掉）；增量期多一次哈希计算 |
-| S7 | v7 索引只能整库重建；无「按曲目墓碑回收」的轻量压缩 | 已有 `IncrementalUpdater.Maintain`，可加「死行 >X% 自动后台压缩」策略 | 已有实现，主要是策略调参 |
+| S6 | ✅ **已实现（2026-11-26）**：DocStore **v6** 段尾追加定长 `meta_hash[u64×N]`，值为 `title \0 artistsRaw \0 album` 的 UTF-8 FNV-1a 64（原始 DB 文本，不做归一；NULL 折叠空串）。阶段一探测多读 `title/artists/album` 三小列并同源算哈希，脏集规则变为 `mtime || lrc(mtime,size) || meta_hash`。`Merger` 原样搬运、不重算；`Manifest.CurrentMetaVersion 4 → 5`，**旧 v1–v5 索引必须全量重建**（实测 v5 段体被拒并提示重建）。新增 35 项用例：哈希往返 / 合并逐字节 / 只改 title/artists/album（mtime 不变）也会重索引 / 无变更零脏曲 | **仍未覆盖**：直接改 `tracks.lyrics` / `lyrics_lrc*` 文本且不动 mtime 的编辑（本轮按文档只做元数据）；空白 / 大小写差异会保守多重建一次 | 阶段一固定成本多读三小列；大库增量耗时未跑长基准 |
+| S7 | ✅ **已实现（2026-11-26）**：`IndexerEngine` 在**没有任何脏曲 / 删除**时仍调用 `IncrementalUpdater.Maintain`（`IndexerOptions.AutoMaintain` 默认开）。死行 ≥20% 或段数 ≥24 才真正合并；未达阈值只读 Manifest、不写文件，干净索引重复运行仍零写入。端到端夹具：制造 33% 死行 → 无脏曲运行回收 → 再次运行 `eraWritten=false` | 后台调度仍由调用方触发（Dart 的按需构建 / 启动检查），没有新增定时器 | 与 S1 的全量收尾压缩共用 `Merger` 阈值 |
 
 ### 9.3 工程与验证
 
@@ -598,8 +637,10 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 | E2 | T4.1 词表是 `seed`，未做人工复核签字 | 按 §5.5.4 抽样 ≥10%，第二人签字后去掉 `seed` 标记 |
 | E3 | `bench/REPORT.md` 是 pre-EraStore 历史报告 | 空闲机跑一次长基准（`ALLOW_LONG_BENCH=1`）重渲染；`run_bench.py` 叙述段仍是 v7 措辞 |
 | E4 | `SearchApi.Busy` 是协议预留，当前不会返回 | 保留（写任务 API 尚未需要）；若做后台压缩任务可启用 |
-| E5 | health `schemaVersion` / `gen` 的 Dart 消费方为空 | 设置页可展示 `dataPack`/confidence 分布，便于用户自查 |
+| E5 | ✅ **已实现（2026-11-26）**：`SearchIndexDiagnostics`（纯解析）+ `SearchService.healthSnapshot/refreshHealth()`（后台 isolate 读 `era_search_health`，UI 线程只读缓存）；设置页在索引就绪时显示「世代 / 格式 / 分析器」「数据包 id（前 12 hex）/ 同源 / 存在 / 基础表 / 降级能力数」「歌词置信度 high·medium·low·none」三行，载荷缺失或未就绪时整块省略。9 个 locale 已补键，`flutter gen-l10n` 与 `dart run tool/gen_settings_search_index.dart` 重新生成 | 没有独立「刷新诊断」按钮（跟随开启 / 重建动作刷新）；旧原生库无 `dataPack` 字段时只显示版本行 | 测试：13 项格式化 / 区块渲染 / 服务缓存 |
 
 > 建议顺序：~~Q1（歌词精确度）~~（2026-11-26 已完成，仅整行相等）→ ~~S2（体积）~~
-> （2026-11-26 已收口：音译层免位置 + O8 位打包）→ Q3/Q4（门禁词与短路）；
-> S1 已于 2026-11-26 完成；Q6/Q7/Q8 属产品决策，单独评审；其余按真机/工具改进排期。
+> （2026-11-26 已收口：音译层免位置 + O8 位打包）→ ~~Q2 / Q3 / Q4 / Q5 / Q8 / S1 / S3 / S6 / S7 / E5~~
+> （2026-11-26 已全部落地或交付默认关闭的机制，见文末「第十一轮」）→
+> **剩余**：Q3 / Q8 的真实库阈值校准、Q4 真实多词查询回放、Q6 / Q7 产品决策、
+> S4 真机分段实验、S5 真实多语 LRC 样本、E1 / E2 / E3 真机与人工；E4 保持预留。
