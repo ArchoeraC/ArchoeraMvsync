@@ -2071,6 +2071,37 @@ int32_t windowSetDecor(int32_t mode) {
     return OK;
 }
 
+// 位置越界矫正：目标矩形与「最近显示器」的工作区相交就原样应用（多屏 / 负坐标
+// 布局不受影响——MonitorFromPoint 在点落在某块屏上时返回那块屏），只有完全越界
+// （拔掉外接屏 / 分辨率变小 / 旧偏好来自另一套布局）才把原点拉回该工作区内。
+POINT clampOriginToWorkArea(HWND hwnd, POINT want) {
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    HMONITOR mon = ::MonitorFromPoint(want, MONITOR_DEFAULTTONEAREST);
+    if (mon == nullptr || ::GetMonitorInfoW(mon, &mi) == 0) return want;
+    const RECT work = mi.rcWork;
+    RECT wr{};
+    int w = 0;
+    int h = 0;
+    if (::GetWindowRect(hwnd, &wr) != 0) {
+        w = static_cast<int>(wr.right - wr.left);
+        h = static_cast<int>(wr.bottom - wr.top);
+    }
+    RECT target{want.x, want.y, want.x + w, want.y + h};
+    RECT inter{};
+    if (::IntersectRect(&inter, &target, &work) != 0 && !::IsRectEmpty(&inter)) {
+        return want;
+    }
+    POINT out = want;
+    const int max_x = static_cast<int>(work.right) - w;
+    const int max_y = static_cast<int>(work.bottom) - h;
+    if (out.x > max_x) out.x = max_x > work.left ? max_x : work.left;
+    if (out.x < work.left) out.x = work.left;
+    if (out.y > max_y) out.y = max_y > work.top ? max_y : work.top;
+    if (out.y < work.top) out.y = work.top;
+    return out;
+}
+
 int32_t windowGetPosition(int32_t* x, int32_t* y) {
     if (x == nullptr || y == nullptr) return ERR_STATE;
     HWND hwnd = windowHandle();
@@ -2087,7 +2118,11 @@ int32_t windowSetPosition(int32_t x, int32_t y) {
     HWND hwnd = windowHandle();
     if (hwnd == nullptr) return ERR_BACKEND;
     const UINT dpi = windowDpi(hwnd);
-    if (!::SetWindowPos(hwnd, nullptr, dipToPx(x, dpi), dipToPx(y, dpi), 0, 0,
+    POINT want{};
+    want.x = dipToPx(x, dpi);
+    want.y = dipToPx(y, dpi);
+    const POINT at = clampOriginToWorkArea(hwnd, want);
+    if (!::SetWindowPos(hwnd, nullptr, at.x, at.y, 0, 0,
                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
         return ERR_BACKEND;
     }

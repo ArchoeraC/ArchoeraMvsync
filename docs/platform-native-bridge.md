@@ -737,7 +737,7 @@ int32_t apl_system_accent_set_events(int32_t on);
   | 置顶 / 可缩放 | v10 `set_always_on_top/set_resizable` | 全部 | keep-above / resizable | `level` / `styleMask` | 交叉编译 |
   | 装饰三档 | v10 `set_decor` | system / caption / borderless | **caption 降级为无装饰**（GTK 无原生档位） | caption = FullSizeContentView + 隐藏标题 | 交叉编译 |
   | 尺寸 / 最小尺寸 / 居中 | v10 | `GetDpiForWindow` DIP↔px + `WM_GETMINMAXINFO` | `set_geometry_hints` | `setContentSize` | 交叉编译 |
-  | 位置 / 尺寸读写 | v10 `get/set_position` + v11 `get_size` | DIP↔px | 原子缓存 + idle move | AppKit 左下↔左上坐标换算 + 内容区尺寸 | 交叉编译 |
+  | 位置 / 尺寸读写 | v10 `get/set_position` + v11 `get_size` | DIP↔px；越界拉回 `rcWork` | 原子缓存 + idle move；越界拉回最近屏 | AppKit 左下↔左上换算 + 内容区尺寸；越界拉回 `visibleFrame` | 交叉编译（**多屏矫正未真机验证**） |
   | 标题栏拖拽 | v10 `start_drag` | `ReleaseCapture` + `WM_NCLBUTTONDOWN(HTCAPTION)` | `begin_move_drag`（Wayland 用按下 serial） | `performWindowDragWithEvent` | 交叉编译 |
   | 边缘缩放 | v10 `start_resize` | 8 个 `HT*` 命中码 | `begin_resize_drag` | 原生不支持 → **Dart 回退**（`get_size`/`set_position` 手势缩放） | 交叉编译 |
   | 关闭 / 退出请求 | v10 事件 14 | `WM_CLOSE` 只上报 | `delete-event` 返回 `TRUE` | delegate `windowShouldClose:` + `terminate:` swizzle | **仅交叉编译，需真机 ×20 验收** |
@@ -762,9 +762,10 @@ int32_t apl_system_accent_set_events(int32_t on);
   自绘边缘热区整块不渲染**（否则 8px 边缘带能命中却无法缩放，白吞点击），只保留
   **关闭**按钮（走 Dart 的关闭策略 → 托盘常驻 / 退出，不依赖窗口控制能力）；
   `WindowCaptionBar` / `WindowMoveArea` 的拖拽仍会静默 no-op（拖动失败不改布局）。
-  窗口几何由 Dart 偏好持久化（`prefs.json` 的 `appearance.windowGeometry`，退出时经
-  `get_size` / `get_position` 写入，启动恢复；最大化 / 全屏退出不写）；多显示器越界
-  位置暂不钳制，需要后续加显示器工作区 API。
+  窗口几何由 Dart 偏好持久化（`prefs.json` 的 `appearance.windowGeometry`，退出 /
+  关闭到托盘时经 `get_size` / `get_position` 写入，启动恢复；最大化 / 全屏退出不写）；
+  越界位置由原生 `set_position` 拉回最近的显示器，但**多屏 / 拔屏 / 分辨率变化的真机
+  矩阵尚未验证**（代码只有编译级校验 + 纯几何单测）。
 - **验证覆盖边界**：`native_platform_abi_test.dart`（契约符号 + ABI 常量）是纯静态
   Dart 测试，`flutter test` 会跑，但 **CI 的 `build-all.yml` 只做原生构建 + `dart analyze`，
   不跑 `flutter test`**；`app/tool/verify_macos.sh` / `verify_windows.sh` 也未接入 CI。
@@ -788,6 +789,12 @@ int32_t apl_system_accent_set_events(int32_t on);
 - **持久化时机**：统一退出（`quitApplicationWith`）与**关闭到托盘**（`_hideToTray`，常驻进程
   可能被系统直接杀掉）各写一次；判定统一走 `window_geometry.dart` 的
   `windowGeometryToPersist`（最大化 / 全屏 / 无尺寸 → 不写），单测覆盖判定矩阵。
+- **越界矫正**（同一批）：`apl_window_set_position` 三端都先看「窗口矩形是否与任一显示器
+  可用区相交」——相交即原样应用（多屏 / 负坐标布局不受影响），只有**完全越界**（拔掉外接
+  屏、分辨率变小、偏好来自另一套布局）才把原点拉回「中心最近」的那块屏内。Windows 用
+  `MonitorFromPoint + MONITORINFO.rcWork`（物理↔DIP 换算），macOS 用
+  `NSScreen.visibleFrame`，Linux 用 `gdk_screen_get_n_monitors/get_monitor_geometry`
+  （符号缺失静默跳过；Wayland 的 `gtk_window_move` 本就由合成器忽略）。
 - **验证**：Linux CMake 构建通过，`nm` 可见 21 个 `apl_window_*` 与 `apl_abi_version=11`；
   macOS arm64/x86_64 交叉编译 + 链接通过；**Windows 用 `verify_windows.sh` 的 zig 降级路径
   编译 + 链接 + 导出表校验通过**（21 个 `apl_window_*` 齐、含 `get_size`）；

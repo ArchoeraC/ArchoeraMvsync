@@ -1036,7 +1036,47 @@ int32_t windowSetPosition(int32_t x, int32_t y) {
       // Dart 用「主屏左上角」为原点；AppKit 是左下角 → 换算 origin.y。
       const CGFloat origin_y =
           screen_h - static_cast<CGFloat>(py) - frame.size.height;
-      [win setFrameOrigin:NSMakePoint(static_cast<CGFloat>(px), origin_y)];
+      NSRect target = NSMakeRect(static_cast<CGFloat>(px), origin_y,
+                                 frame.size.width, frame.size.height);
+      // 越界矫正：与任一屏的 visibleFrame 相交就原样应用（多屏 / 负坐标布局
+      // 不受影响）；只有完全越界（拔屏 / 分辨率变小 / 旧偏好来自另一套布局）
+      // 才把窗口拉回「中心最近」的那块屏。
+      BOOL visible = NO;
+      for (NSScreen* s in [NSScreen screens]) {
+        if (NSIntersectsRect(target, s.visibleFrame)) {
+          visible = YES;
+          break;
+        }
+      }
+      if (!visible) {
+        NSScreen* best = [NSScreen mainScreen];
+        CGFloat best_d = -1;
+        for (NSScreen* s in [NSScreen screens]) {
+          const NSRect vf = s.visibleFrame;
+          const CGFloat dx = NSMidX(target) - NSMidX(vf);
+          const CGFloat dy = NSMidY(target) - NSMidY(vf);
+          const CGFloat d = dx * dx + dy * dy;
+          if (best_d < 0 || d < best_d) {
+            best_d = d;
+            best = s;
+          }
+        }
+        if (best != nil) {
+          const NSRect vf = best.visibleFrame;
+          CGFloat ox = target.origin.x;
+          CGFloat oy = target.origin.y;
+          if (ox + target.size.width > NSMaxX(vf)) {
+            ox = NSMaxX(vf) - target.size.width;
+          }
+          if (ox < NSMinX(vf)) ox = NSMinX(vf);
+          if (oy + target.size.height > NSMaxY(vf)) {
+            oy = NSMaxY(vf) - target.size.height;
+          }
+          if (oy < NSMinY(vf)) oy = NSMinY(vf);
+          target.origin = NSMakePoint(ox, oy);
+        }
+      }
+      [win setFrameOrigin:target.origin];
     });
     return OK;
 }

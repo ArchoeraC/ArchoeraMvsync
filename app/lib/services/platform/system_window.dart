@@ -162,6 +162,8 @@ abstract interface class SystemWindow {
   /// 当前窗口位置（逻辑像素；桥接不可用/查询失败返回 null）。
   ({int x, int y})? get position;
 
+  /// 移动窗口到逻辑坐标。原生侧会做越界矫正：与任一显示器可用区相交即原样
+  /// 应用（多屏 / 负坐标布局不受影响），完全越界时才拉回最近的那块屏。
   bool setPosition(int x, int y);
 
   /// 当前窗口尺寸（ABI v11；与 [setSize] 同口径，失败 / 不可用返回 null）。
