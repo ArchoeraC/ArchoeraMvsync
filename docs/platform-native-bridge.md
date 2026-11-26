@@ -1024,3 +1024,14 @@ APL_API int32_t apl_window_stop_events(void);         /* 退出前显式摘观�
   或 Win32 `DestroyWindow`）。macOS 的 delegate 代理与 terminate swizzle 仅做了
   交叉编译验证，仍需真机跑「关闭按钮 / ⌘Q / 托盘退出 ×20 无崩溃 + 落盘完整」
   的运行时验收。
+- **降级与未接入项**：版本不等于 10、或纯 Wayland 且 `libgtk-3` 不可用 → 工厂注入
+  `NoopSystemWindow`，窗口按钮 / 自绘缩放 / 装饰全部**静默 no-op**（仅 debug 日志）；
+  `PlatformCapabilities.windowControlAvailable` 已暴露但**尚未被 UI 消费**，可作为
+  「隐藏自绘按钮 / 提示」的后续接入点。窗口几何（尺寸 / 位置）**没有持久化**，每次启动
+  回到 runner 默认值（Windows 1280×720），如产品需要记忆位置需另做 Dart 偏好存储 +
+  `getPosition/setPosition` 往返。
+- **验证覆盖边界**：`native_platform_abi_test.dart`（契约符号 + ABI 常量）是纯静态
+  Dart 测试，`flutter test` 会跑，但 **CI 的 `build-all.yml` 只做原生构建 + `dart analyze`，
+  不跑 `flutter test`**；`app/tool/verify_macos.sh` / `verify_windows.sh` 也未接入 CI。
+  因此「交叉编译通过」目前靠提交前本地脚本 + PR 清单，真机运行矩阵（关闭 / ⌘Q ×20、
+  多显示器位置往返、DPI 缩放、全屏恢复）仍是待办。
