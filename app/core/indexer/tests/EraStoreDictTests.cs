@@ -213,8 +213,8 @@ internal static class EraStoreDictTests
         Program.Check("DocStore 布局: 头字段",
             count == 1 && version == DocStoreWriter.Version && cols == DocStoreWriter.TextColumns,
             $"{count}/{version}/{cols}");
-        Program.Check("DocStore 布局: 版本 v5 / 六列",
-            DocStoreWriter.Version == 5 && DocStoreWriter.TextColumns == 6,
+        Program.Check("DocStore 布局: 版本 v6 / 六列",
+            DocStoreWriter.Version == 6 && DocStoreWriter.TextColumns == 6,
             $"{DocStoreWriter.Version}/{DocStoreWriter.TextColumns}");
 
         // 头(8) + track(16) + rev(16) + script(2) + flags(1) + layer_conf(1) + state(24) + doclen(24) = 92。

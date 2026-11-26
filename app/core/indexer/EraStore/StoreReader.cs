@@ -311,6 +311,7 @@ internal sealed class StoreReader : IDisposable
                     Mtime = seg.Docs.Mtime(doc),
                     LrcMtime = seg.Docs.LrcMtime(doc),
                     LrcSize = seg.Docs.LrcSize(doc),
+                    MetaHash = seg.Docs.MetaHash(doc),
                 };
             }
         }
@@ -498,12 +499,15 @@ internal sealed unsafe class MappedMemoryManager : MemoryManager<byte>
     }
 }
 
-/// <summary>一条活文档的增量状态（DocStore v2 状态列）。</summary>
+/// <summary>一条活文档的增量状态（DocStore v2 状态列 + v6 元数据哈希）。</summary>
 internal sealed class EraTrackState
 {
     public long Mtime { get; set; }
     public long LrcMtime { get; set; }
     public long LrcSize { get; set; }
+
+    /// <summary>元数据内容哈希（DocStore v6）；0 = 旧夹具 / 未提供。</summary>
+    public ulong MetaHash { get; set; }
 }
 
 /// <summary>一段 EraStore 的三元组（DocStore + TermDict + Postings）。</summary>

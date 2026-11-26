@@ -45,6 +45,13 @@ internal sealed class DocRecord
     /// <summary>侧车聚合字节（DocStore v2）。</summary>
     public long LrcSize { get; set; }
 
+    /// <summary>
+    /// 元数据内容哈希（DocStore v6，S6 脏集判定）：<c>title \0 artistsRaw \0 album</c>
+    /// 的 UTF-8 FNV-1a 64（见 <see cref="MetaHash"/>）。由 <see cref="IndexBuilder"/> 原样写入；
+    /// <see cref="Merger"/> 从旧段拷贝，不重新计算。0 = 未提供（旧夹具 / 手工构造）。
+    /// </summary>
+    public ulong MetaHash { get; set; }
+
     public string Title { get; set; } = string.Empty;
     public string Artist { get; set; } = string.Empty;
     public string Album { get; set; } = string.Empty;
@@ -77,7 +84,7 @@ internal sealed class DocRecord
 ///
 /// 段体布局（全部小端、无对齐填充）：
 /// <code>
-/// u32 doc_count | u16 version(=5) | u16 text_columns(=6)
+/// u32 doc_count | u16 version(=6) | u16 text_columns(=6)
 /// track[16×N] | rev[16×N] | script_bits[u16×N] | flags[u8×N]
 /// layer_conf[u8×N]                      # v4 三层置信度（每层 2 bit，T4.2）
 /// mtime[u64×N] | lrc_mtime[u64×N] | lrc_size[u64×N]     # v2 增量状态
@@ -89,19 +96,22 @@ internal sealed class DocRecord
 /// artist_norm
 /// album_norm
 /// lyrics_digest: u32 offsets[N+1] + u64 sorted hashes   # v5（Q1；LyricDigest）
+/// meta_hash[u64×N]                      # v6 元数据内容哈希（S6；MetaHash）
 /// </code>
 /// 文本偏移相对各自 blob 起点；空串长度为 0。v4 在 flags 后追加一列 <c>layer_conf</c>；
-/// v5 在最后一列追加 <c>lyrics_digest</c>（每 doc 的行哈希偏移 + 有序哈希 blob）。
-/// 其余列语义 / 顺序不变；旧 v1 / v2 / v3 / v4 布局不同，读取侧一律拒绝并提示全量重建。
+/// v5 在最后一列追加 <c>lyrics_digest</c>（每 doc 的行哈希偏移 + 有序哈希 blob）；
+/// v6 在段尾追加定长列 <c>meta_hash</c>（每 doc 8 B，无偏移表）。
+/// 其余列语义 / 顺序不变；旧 v1 / v2 / v3 / v4 / v5 布局不同，读取侧一律拒绝并提示全量重建。
 /// </summary>
 internal static class DocStoreWriter
 {
     /// <summary>
     /// 段体版本（v2 增加增量状态列；v3 追加三列元数据归一形；v4 追加 <c>layer_conf</c>；
-    /// v5 追加 <c>lyrics_digest</c> 歌词行哈希列，Q1）。
+    /// v5 追加 <c>lyrics_digest</c> 歌词行哈希列（Q1）；v6 追加 <c>meta_hash</c>
+    /// 元数据内容哈希列（S6））。
     /// 读取侧只接受本版本：旧索引必须全量重建，绝不按新布局误读。
     /// </summary>
-    public const ushort Version = 5;
+    public const ushort Version = 6;
 
     /// <summary>文本列数：raw title / artist / album + 归一 title_norm / artist_norm / album_norm。</summary>
     public const ushort TextColumns = 6;
@@ -140,6 +150,8 @@ internal static class DocStoreWriter
         WriteTextColumn(w, docs, static d => d.ArtistNorm);
         WriteTextColumn(w, docs, static d => d.AlbumNorm);
         WriteDigestColumn(w, docs);
+        // v6：定长元数据哈希列（每 doc 一个小端 u64，无偏移表）。
+        foreach (var d in docs) w.WriteUInt64(d.MetaHash);
 
         return w.ToArray();
     }
@@ -241,6 +253,7 @@ internal sealed class DocStoreReader
     private readonly int _artistNormOff;
     private readonly int _albumNormOff;
     private readonly int _lyricsDigestOff;
+    private readonly int _metaHashOff;
 
     public DocStoreReader(ReadOnlyMemory<byte> body)
     {
@@ -255,7 +268,7 @@ internal sealed class DocStoreReader
         if (version != DocStoreWriter.Version)
             throw new InvalidDataException(
                 $"DocStore 版本 {version} 不支持（当前 {DocStoreWriter.Version}）；"
-                + "旧 v1/v2/v3/v4 索引必须全量重建");
+                + "旧 v1/v2/v3/v4/v5 索引必须全量重建");
         if (textColumns != DocStoreWriter.TextColumns)
             throw new InvalidDataException(
                 $"DocStore 文本列数 {textColumns} 不支持（当前 {DocStoreWriter.TextColumns}）；旧索引必须全量重建");
@@ -272,7 +285,8 @@ internal sealed class DocStoreReader
             + stateBytes
             + (long)_count * 2 * 12
             + (long)_count * 4 * DocStoreWriter.TextColumns // 每列 N+1 个偏移（末项由 blob 长度校验）
-            + (long)_count * 4; // v5 lyrics_digest 偏移表（哈希 blob 由末项校验）
+            + (long)_count * 4 // v5 lyrics_digest 偏移表（哈希 blob 由末项校验）
+            + (long)_count * 8; // v6 meta_hash 定长列
         if (need > body.Length) throw new InvalidDataException("DocStore 段长不足");
 
         _trackOff = 8;
@@ -293,7 +307,9 @@ internal sealed class DocStoreReader
         var end = ReadColumnEnd(_albumNormOff, _count, "album_norm");
         _lyricsDigestOff = end;
         var digestEnd = ReadBinaryColumnEnd(_lyricsDigestOff, _count, "lyrics_digest");
-        if (digestEnd != body.Length) throw new InvalidDataException("DocStore 段长与内容不符");
+        _metaHashOff = digestEnd;
+        if ((long)_metaHashOff + (long)_count * 8 != body.Length)
+            throw new InvalidDataException("DocStore 段长与内容不符");
     }
 
     /// <summary>文档数。</summary>
@@ -373,6 +389,10 @@ internal sealed class DocStoreReader
 
     /// <summary>侧车聚合字节。</summary>
     public long LrcSize(int doc) => ReadState(_stateOff + _count * 16 + doc * 8);
+
+    /// <summary>元数据内容哈希（DocStore v6，S6；构建期算定，合并期原样搬运）。</summary>
+    public ulong MetaHash(int doc) => BinaryPrimitives.ReadUInt64LittleEndian(
+        Slice(_metaHashOff + doc * 8, 8));
 
     private long ReadState(int offset) =>
         unchecked((long)BinaryPrimitives.ReadUInt64LittleEndian(Slice(offset, 8)));

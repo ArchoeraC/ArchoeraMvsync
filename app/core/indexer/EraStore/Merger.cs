@@ -506,6 +506,8 @@ internal static class Merger
             ArtistNorm = Encoding.UTF8.GetString(norm.Artist),
             AlbumNorm = Encoding.UTF8.GetString(norm.Album),
             LyricDigests = store.LyricDigestArray(doc),
+            // v6 元数据内容哈希：从旧段原样搬运，绝不在合并期重算。
+            MetaHash = store.MetaHash(doc),
             Mtime = store.Mtime(doc),
             LrcMtime = store.LrcMtime(doc),
             LrcSize = store.LrcSize(doc),

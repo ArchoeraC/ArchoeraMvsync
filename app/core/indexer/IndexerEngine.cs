@@ -11,7 +11,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Archoera.Indexer;
 
-/// <summary>阶段一（脏集探测）轻量行：仅 <c>id/path/file_mtime</c>，**不含歌词 / 元数据大列**。</summary>
+/// <summary>
+/// 阶段一（脏集探测）轻量行：<c>id/path/file_mtime</c> + 元数据三列（算内容哈希用），
+/// **不含歌词大列**。
+/// </summary>
 internal sealed class TrackProbe
 {
     public string Id { get; init; } = "";
@@ -23,6 +26,21 @@ internal sealed class TrackProbe
 
     /// <summary><c>tracks.lrc_size</c>（scanner 写入的侧车聚合字节；0 = 无侧车 / 未探测）。</summary>
     public long LrcSize { get; init; }
+
+    /// <summary><c>tracks.title</c> 原始文本（S6 元数据哈希原料）。</summary>
+    public string TitleRaw { get; init; } = "";
+
+    /// <summary><c>tracks.artists</c> 原始 JSON 文本（S6 元数据哈希原料，不解析）。</summary>
+    public string ArtistsRaw { get; init; } = "";
+
+    /// <summary><c>tracks.album</c> 原始文本（S6 元数据哈希原料，不解析）。</summary>
+    public string AlbumRaw { get; init; } = "";
+
+    /// <summary>
+    /// 由三段原始文本算出的元数据内容哈希（<see cref="EraStore.MetaHash"/>，S6）。
+    /// 与 DocStore v6 的 <c>meta_hash</c> 同一定义；不符即判脏。
+    /// </summary>
+    public ulong MetaHash { get; init; }
 }
 
 /// <summary>曲库 <c>tracks</c> 行的分析期只读投影（阶段二按脏 id 取内容）。</summary>
@@ -33,6 +51,13 @@ internal sealed class TrackRecord
     public string Title { get; init; } = "";
     public string ArtistText { get; init; } = "";
     public string AlbumText { get; init; } = "";
+
+    /// <summary><c>tracks.artists</c> 原始 JSON 文本（S6 哈希原料；与 <see cref="ArtistText"/> 并存）。</summary>
+    public string ArtistsRaw { get; init; } = "";
+
+    /// <summary><c>tracks.album</c> 原始文本（S6 哈希原料；与 <see cref="AlbumText"/> 并存）。</summary>
+    public string AlbumRaw { get; init; } = "";
+
     public string Lyrics { get; init; } = "";
     public long Mtime { get; init; }
 
@@ -60,7 +85,8 @@ internal sealed class TrackRecord
 ///
 /// **两阶段**（设计文档 §2.2「增量 ≈ K 成正比」）：
 /// <list type="number">
-///   <item><b>脏集探测</b>：只读轻量列 <c>id/path/file_mtime</c>（不含 lyrics/title/artists/album），
+///   <item><b>脏集探测</b>：只读轻量列 <c>id/path/file_mtime</c> + 元数据三列
+///         <c>title/artists/album</c>（只为算内容哈希，不读歌词大列），
 ///         结合既有 DocStore 状态与 <c>.lrc</c> <c>(mtime,size)</c> 判定脏 <c>track_id</c>；
 ///         全量模式所有 id 皆脏。</item>
 ///   <item><b>取内容 + 分析</b>：仅按脏 id 分块取完整列（<c>WHERE id IN (…)</c>，块大小
@@ -70,6 +96,7 @@ internal sealed class TrackRecord
 /// 脏集规则（确定性，无 sleep / 轮询）：
 /// <list type="bullet">
 ///   <item>新增/变更 = <c>track_id</c> 不在索引，或 <c>file_mtime ≠ indexed_mtime</c>；</item>
+///   <item>元数据内容哈希（S6）与已索引不符：直接改 <c>title/artists/album</c> 而不碰音频文件也能发现；</item>
 ///   <item><c>.lrc</c> 侧车 <c>(mtime,size)</c> 与已索引不符（含子开关关→开 / 开→关的清理）；</item>
 ///   <item>Manifest 元数据版本 / analyzer 锚 / 拼音开关不一致 → 强制全量。</item>
 /// </list>
@@ -246,7 +273,9 @@ public sealed class IndexerEngine
                     isDirty = existing.Mtime != probe.Mtime
                         || (options.IndexLrc
                             ? existing.LrcMtime != probe.LrcMtime || existing.LrcSize != probe.LrcSize
-                            : existing.LrcMtime != 0 || existing.LrcSize != 0);
+                            : existing.LrcMtime != 0 || existing.LrcSize != 0)
+                        // S6：直接改 library.db 的元数据（不碰音频）时 file_mtime 不变，靠内容哈希发现。
+                        || existing.MetaHash != probe.MetaHash;
                 }
             }
 
@@ -937,6 +966,11 @@ public sealed class IndexerEngine
             + "|" + tokens.LayerSourceBits + "|" + tokens.LayerConf);
         var rev = System.Security.Cryptography.MD5.HashData(revInput);
 
+        // v6 元数据内容哈希（S6）：必须与阶段一探测用**同一份原始 DB 文本**（title 原文 /
+        // artists JSON 原文 / album 原文），绝不能拿解析后的 ArtistText / AlbumText，
+        // 否则构建值与探测值会漂移。NULL 已在读取侧折叠为空串。
+        var metaHash = EraStore.MetaHash.Compute(track.Title, track.ArtistsRaw, track.AlbumRaw);
+
         byte flags = 0;
         if (tokens.LyricsTrTok.Length > 0) flags |= 1;
         if (tokens.LyricsRomTok.Length > 0) flags |= 2;
@@ -950,7 +984,7 @@ public sealed class IndexerEngine
             trackBytes, rev, 0, flags, fields,
             track.Title, track.ArtistText, track.AlbumText,
             tokens.IndexedMtime, tokens.IndexedLrcMtime, tokens.IndexedLrcSize,
-            tokens.LayerConf, lyricLines), oversize);
+            tokens.LayerConf, lyricLines, metaHash), oversize);
     }
 
     /// <summary>
@@ -1076,7 +1110,10 @@ public sealed class IndexerEngine
         }
     }
 
-    /// <summary>阶段一：流式读取轻量列（<c>id/path/file_mtime</c>），不含歌词 / 元数据大列。</summary>
+    /// <summary>
+    /// 阶段一：流式读取轻量列（<c>id/path/file_mtime</c> + <c>title/artists/album</c>），
+    /// 不含歌词大列。<c>.lrc</c> 状态列按旧库能力条件选择（无侧车列的库自动降级）。
+    /// </summary>
     private static IEnumerable<TrackProbe> ReadTrackProbes(string libraryPath, CancellationToken ct)
     {
         using var conn = OpenLibraryReadOnly(libraryPath);
@@ -1085,21 +1122,30 @@ public sealed class IndexerEngine
         //   lyrics_lrc / lyrics_lrc_trans / lyrics_lrc_romaji 存**原始文本**（保时间轴给播放侧），
         //   lrc_mtime / lrc_size 供脏集判定，lrc_checked 标识「本轮扫描已探测过侧车」。
         // 旧库（无这些列）自动降级为「无侧车」，不报错。
+        // S6：元数据三列只用于内容哈希（原始 DB 文本，不做 JSON 解析）。
         var hasLrc = HasLrcColumns(conn);
         cmd.CommandText = hasLrc
-            ? "SELECT id, path, file_mtime, lrc_mtime, lrc_size FROM tracks ORDER BY id"
-            : "SELECT id, path, file_mtime FROM tracks ORDER BY id";
+            ? "SELECT id, path, file_mtime, title, artists, album, lrc_mtime, lrc_size "
+              + "FROM tracks ORDER BY id"
+            : "SELECT id, path, file_mtime, title, artists, album FROM tracks ORDER BY id";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
             ct.ThrowIfCancellationRequested();
+            var title = reader.IsDBNull(3) ? "" : reader.GetString(3);
+            var artists = reader.IsDBNull(4) ? "" : reader.GetString(4);
+            var album = reader.IsDBNull(5) ? "" : reader.GetString(5);
             yield return new TrackProbe
             {
                 Id = reader.IsDBNull(0) ? "" : reader.GetString(0),
                 Path = reader.IsDBNull(1) ? "" : reader.GetString(1),
                 Mtime = reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
-                LrcMtime = hasLrc && !reader.IsDBNull(3) ? reader.GetInt64(3) : 0,
-                LrcSize = hasLrc && !reader.IsDBNull(4) ? reader.GetInt64(4) : 0,
+                TitleRaw = title,
+                ArtistsRaw = artists,
+                AlbumRaw = album,
+                MetaHash = EraStore.MetaHash.Compute(title, artists, album),
+                LrcMtime = hasLrc && !reader.IsDBNull(6) ? reader.GetInt64(6) : 0,
+                LrcSize = hasLrc && !reader.IsDBNull(7) ? reader.GetInt64(7) : 0,
             };
         }
     }
@@ -1167,7 +1213,9 @@ public sealed class IndexerEngine
                 Id = reader.IsDBNull(0) ? "" : reader.GetString(0),
                 Path = reader.IsDBNull(1) ? "" : reader.GetString(1),
                 Title = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                ArtistsRaw = reader.IsDBNull(3) ? "" : reader.GetString(3),
                 ArtistText = ParseArtists(reader.IsDBNull(3) ? null : reader.GetString(3)),
+                AlbumRaw = reader.IsDBNull(4) ? "" : reader.GetString(4),
                 AlbumText = ParseAlbum(reader.IsDBNull(4) ? null : reader.GetString(4)),
                 Lyrics = reader.IsDBNull(5) ? "" : reader.GetString(5),
                 Mtime = reader.IsDBNull(6) ? 0 : reader.GetInt64(6),
