@@ -419,6 +419,12 @@ internal sealed class SearchSession : IDisposable
         Interlocked.Exchange(ref _cacheMisses, 0);
     }
 
+    /// <summary>
+    /// 测试接缝：临时覆盖方案的策略快照（<c>null</c> = 用方案自带策略）。
+    /// Q4 / Q8 的开关效应只能靠它验证（生产方案注册表固定）。
+    /// </summary>
+    internal static SearchPolicy? DebugPolicyOverride = null;
+
     /// <summary>执行一次查询；索引路径或源曲库路径变化时自动切换会话。</summary>
     public static SearchResult Run(string path, SearchRequest request, string? libraryDbPath = null)
     {
@@ -563,6 +569,10 @@ internal sealed class SearchSession : IDisposable
         var result = new SearchResult();
         var tokens = Analyzer.AnalyzeQuery(request.Query);
         var resolved = SchemeRegistry.Resolve(request.Scheme, _capabilities);
+        // 测试接缝：策略覆盖只换 policy，方案 id / 能力协商结果保持不变。
+        var scheme = DebugPolicyOverride is { } overridePolicy
+            ? resolved.Scheme with { Policy = overridePolicy }
+            : resolved.Scheme;
         result.SchemeId = resolved.Scheme.Id;
         // explain / 健康页的 `missing`：方案协商缺的能力 + 数据包降级的能力（§5.5.6）。
         var missing = resolved.Missing;
@@ -575,7 +585,7 @@ internal sealed class SearchSession : IDisposable
                 .ToArray();
         }
         result.MissingCaps = missing;
-        var plan = SearchPlanCompiler.Compile(request, tokens, _meta, resolved.Scheme);
+        var plan = SearchPlanCompiler.Compile(request, tokens, _meta, scheme);
         // N15 / RP §3.5.7：计划期收缩只在超长查询上触发，记一条 debug 便于回放核对。
         if (tokens.VisibleCharCount >= plan.Policy.MaxPlanQueryCodePoints)
         {
@@ -632,10 +642,15 @@ internal sealed class SearchSession : IDisposable
         var dropsOrdered = false;
         byte[]? exactQuery = null;
         var exactQueryComputed = false;
+        // Q4：主趟的「强证据」候选数。只有弱证据（Partial）时按策略继续跑兜底趟，
+        // 强证据出现即恢复旧的 MinExact 短路。合并可能把强 kind 降级成 Partial
+        // （Partial 的 kind 序在拼音之前），所以合并后要双向更新计数。
+        var strongCandidates = 0;
         for (var index = 0; index < steps.Count; index++)
         {
             var step = steps[index];
-            if (step.Gate.RequiresMainMiss && candidates.Count >= request.MinExact)
+            if (step.Gate.RequiresMainMiss && candidates.Count >= request.MinExact
+                && (!plan.Policy.RequireStrongKindForShortCircuit || strongCandidates > 0))
             {
                 Trace(step, 0, "skipped", "min_exact", 0);
                 continue;
@@ -659,17 +674,30 @@ internal sealed class SearchSession : IDisposable
 
             var expression = SearchPlanCompiler.ResolveDeferredExpression(
                 step, tokens, request.Metadata, request.Lyrics, _meta.InitialsLyrics,
-                LoadEraVocabulary);
+                LoadEraVocabulary, plan.IncludePrefix, plan.Policy.MinPinyinPrefixTokenLength);
 
-            // 旧 pass 计数：字面 / 丢词 / 拼音 / 读音 / 跨语言只在表达式非空时计；
-            // 模糊趟只要执行就计（表达式由词表延迟生成）；中文容错按 step 声明计。
-            if (step.NeedsFuzzyVocabulary || expression is not null || step.CountPassOnNullExpression)
-                CountPass(result.Passes, step.Pass);
             if (expression is null)
             {
+                // 旧 pass 计数：字面 / 丢词 / 拼音 / 读音 / 跨语言只在表达式非空时计；
+                // 模糊趟只要执行就计（表达式由词表延迟生成）；中文容错按 step 声明计。
+                if (step.NeedsFuzzyVocabulary || step.CountPassOnNullExpression)
+                    CountPass(result.Passes, step.Pass);
                 Trace(step, 0, "skipped", "empty_expression", 0);
                 continue;
             }
+
+            // Q8：计划 / 执行的 df 预算（默认关闭）。估算为墓碑无关近似，只用于跳过
+            // 「必然宽命中」的步骤；阈值 = factor × cap × capMultiplier（默认 4×cap）。
+            if (plan.Policy.DfBudgetFactor > 0
+                && _era is not null
+                && _era.EstimateDf(expression) > plan.Policy.DfBudgetFactor
+                    * step.Cap * plan.Policy.DfBudgetCapMultiplier)
+            {
+                Trace(step, 0, "skipped", "df_budget", 0);
+                continue;
+            }
+
+            CountPass(result.Passes, step.Pass);
 
             if (probesByPass is not null)
             {
@@ -702,9 +730,19 @@ internal sealed class SearchSession : IDisposable
             foreach (var candidate in matched)
             {
                 if (candidates.TryGetValue(candidate.TrackId, out var existing))
+                {
+                    var wasStrong = SearchRanker.IsStrongKind(existing.Evidence.Kind);
                     SearchRanker.Merge(existing, candidate);
+                    var nowStrong = SearchRanker.IsStrongKind(existing.Evidence.Kind);
+                    if (!wasStrong && nowStrong) strongCandidates++;
+                    else if (wasStrong && !nowStrong) strongCandidates--;
+                }
                 else
+                {
                     candidates.Add(candidate.TrackId, candidate);
+                    if (SearchRanker.IsStrongKind(candidate.Evidence.Kind))
+                        strongCandidates++;
+                }
             }
             watch?.Stop();
             Trace(step, matched.Count, "ran", null, watch?.Elapsed.TotalMilliseconds ?? 0);

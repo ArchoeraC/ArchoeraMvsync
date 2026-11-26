@@ -152,7 +152,10 @@ internal static class SearchKindProximityTests
     private static void Proximity(string index)
     {
         // 两曲 bm25 相同：近对（alpha x beta z → 跨度 2）必须排在远对（alpha x y beta → 跨度 3）前。
-        var result = Query(index, "alpha beta", metadata: true, explain: true);
+        // 只跑 lexical（fast@1）：邻近度是字面步的第 5 键，不应被 Q4 追加的
+        // 丢词证据（单 term、proximity 0）覆盖。
+        var result = Query(index, "alpha beta", metadata: true, explain: true,
+            scheme: SchemeIds.Fast);
         if (!result.Explanations.TryGetValue("p1", out var near)
             || !result.Explanations.TryGetValue("p2", out var far))
         {
@@ -195,7 +198,8 @@ internal static class SearchKindProximityTests
         SearchExactness.DebugCapOverride = 1;
         try
         {
-            var capped = Query(index, "alpha beta", metadata: true, explain: true);
+            var capped = Query(index, "alpha beta", metadata: true, explain: true,
+                scheme: SchemeIds.Fast);
             Program.Check("proximity: 超 Cap = 算不出（-1）",
                 capped.Explanations.TryGetValue("p1", out var capped2) && capped2.Proximity == -1,
                 capped.Explanations.TryGetValue("p1", out var capped3)
@@ -309,10 +313,12 @@ internal static class SearchKindProximityTests
     /* ------------------------------------------------------------------ */
 
     private static SearchResult Query(
-        string index, string query, bool metadata, bool lyrics = false, bool explain = false)
+        string index, string query, bool metadata, bool lyrics = false, bool explain = false,
+        string? scheme = null)
         => SearchSession.Run(index, new SearchRequest
         {
             Query = query,
+            Scheme = scheme,
             Metadata = metadata,
             Lyrics = lyrics && !metadata,
             Fuzzy = false,
