@@ -35,7 +35,7 @@
 > **SystemMedia 的蓝牙语义**：播放器不直连耳机。耳机 AVRCP → OS 媒体会话 → 统一命令派发到
 > `commands`；「蓝牙耳机兼容」= 正确注册 OS 媒体会话并消费一套统一命令语义，各平台回调语法藏在实现里。
 >
-> **SystemWindow（2026-09-10 新增；2026-11-26 ABI v10 补齐控制）**：`Stream<WindowState> state`
+> **SystemWindow（2026-09-10 新增；2026-11-26 ABI v10 补齐控制 / v11 补尺寸读取）**：`Stream<WindowState> state`
 > （minimized/focused/maximized/fullscreen/hidden 快照）+ `Stream<WindowCloseRequest> closeRequests`
 > + 尺寸/显隐/最大化/全屏/装饰/拖拽等控制。窗口事件与控制全部收进原生桥接
 > （`platform-native-bridge.md` §3.4）：Linux GTK 信号 / Windows WndProc 子类化 /
@@ -145,7 +145,7 @@ abstract interface class SystemPower {
 
 | power_saver 职责 | 归属 | 说明 |
 |---|---|---|
-| 窗口事件降帧（minimize/blur/hide → 帧率上限） | → `SystemWindow`（桥接事件 + 控制） | 2026-09-10 决策：探测收进原生桥接（X11/WndProc/NSWindow）；2026-11-26 ABI v10 把控制与关闭请求也收进桥接，第三方窗口插件已移除；桥接未置能力位（纯 Wayland）时 Noop 静默降级 |
+| 窗口事件降帧（minimize/blur/hide → 帧率上限） | → `SystemWindow`（桥接事件 + 控制） | 2026-09-10 决策：探测收进原生桥接（X11/WndProc/NSWindow）；2026-11-26 ABI v10 把控制与关闭请求、v11 把尺寸读取也收进桥接，第三方窗口插件已移除；桥接未置能力位（纯 Wayland）时 Noop 静默降级 |
 | 引擎事件降频协商（50/500/1000ms） | 留在 power_saver | engine-event-push-plan §4.1 |
 | **熄屏检测**（Linux D-Bus `ActiveChanged`） | ✅ → `SystemPower.screenState`（P1 已落地） | Linux 经自研 D-Bus；Win/macOS 待 P3/P4（bridge §7.1） |
 | 唤醒锁（`wakelock_plus`） | ✅ Linux → `SystemPower.setSleepInhibit`（原生）；Win/macOS 暂 `WakelockSystemPower` 兜底 | Linux P1 已切原生；P3/P4 后移除 wakelock_plus（bridge §7.1） |
