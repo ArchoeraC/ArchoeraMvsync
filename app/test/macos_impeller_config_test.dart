@@ -160,6 +160,20 @@ void main() {
     final bridging = File('macos/Runner/Runner-Bridging-Header.h')
         .readAsStringSync();
     expect(bridging, contains('ArchoeraMacOSGPUModeDescription'));
+    expect(
+      bridging,
+      contains('const char *'),
+      reason:
+          '桥接头会被 Swift 预编译，不能依赖 Foundation'
+          '（否则 `unknown type name NSString`，CI 已踩过）',
+    );
+
+    final runner = File('macos/Runner/MainFlutterWindow.swift')
+        .readAsStringSync();
+    expect(
+      runner,
+      contains('String(cString: ArchoeraMacOSGPUModeDescription())'),
+    );
   });
 
   test('独显读回全 0（AMD 已知问题）有三处兜底', () {

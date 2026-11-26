@@ -49,7 +49,7 @@
 #import <dlfcn.h>
 
 /// 供 Swift Runner 读取当前档位（`auto` / `discrete` / `integrated`）。
-NSString *ArchoeraMacOSGPUModeDescription(void);
+const char *ArchoeraMacOSGPUModeDescription(void);
 
 typedef NSArray<id<MTLDevice>> *_Nonnull (*ArchoeraCopyAllDevicesFn)(void);
 typedef id<MTLDevice> _Nullable (*ArchoeraCreateDefaultDeviceFn)(void);
@@ -260,8 +260,18 @@ static ArchoeraGPUMode ArchoeraGPUModeCached(void) {
 }
 
 /// 供 Swift Runner 读取当前档位（日志 / 自检）。
-NSString *ArchoeraMacOSGPUModeDescription(void) {
-  return ArchoeraGPUModeName(ArchoeraGPUModeCached());
+///
+/// 返回静态字面量（无需释放、跨线程安全）；桥接头保持纯 C，不依赖 Foundation。
+const char *ArchoeraMacOSGPUModeDescription(void) {
+  switch (ArchoeraGPUModeCached()) {
+    case ArchoeraGPUModeDiscrete:
+      return "discrete";
+    case ArchoeraGPUModeIntegrated:
+      return "integrated";
+    case ArchoeraGPUModeAuto:
+    default:
+      return "auto";
+  }
 }
 
 /// 独显是否具备集显的**全部** Metal family（`auto` 档的门槛）。

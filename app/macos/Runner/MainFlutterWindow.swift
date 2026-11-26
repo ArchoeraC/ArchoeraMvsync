@@ -52,7 +52,7 @@ class MainFlutterWindow: NSWindow {
       return "\(dev.name)[\(kind)]"
     }.joined(separator: ", ")
     let discreteCount = allDevices.filter { !$0.isLowPower && !$0.isRemovable }.count
-    let gpuMode = ArchoeraMacOSGPUModeDescription()
+    let gpuMode = String(cString: ArchoeraMacOSGPUModeDescription())
 
     guard let device = MTLCreateSystemDefaultDevice() else {
       NSLog(

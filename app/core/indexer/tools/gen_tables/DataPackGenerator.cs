@@ -81,6 +81,9 @@ internal static class DataPackGenerator
             .Append("const String dataPackId = '")
             .Append(dataPackId)
             .AppendLine("';")
-            .ToString();
+            .ToString()
+            // StringBuilder.AppendLine 用 Environment.NewLine：Windows 上会写成
+            // CRLF，导致 `--check` 在 Windows 误报 STALE。统一成 LF。
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 }

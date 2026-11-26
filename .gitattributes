@@ -1,0 +1,12 @@
+# 索引器数据包（T4.3）：manifest / data_pack_id 按**字节**计算 sha256，
+# 跨平台 checkout 必须保持原样。否则 Windows（core.autocrlf=true）会把
+# app/core/indexer/data/*.tsv 转成 CRLF，`build_windows.bat` 里的
+# `dotnet run --project tools/gen_tables -- --manifest-only --check`
+# 会算出不同的 data_pack_id 并误报 STALE。
+#
+# -text：不做任何换行转换（仍保留 diff，不用 binary 标记）。
+app/core/indexer/data/** -text
+
+# 同源 Dart 常量由生成器显式写 LF（DataPackGenerator.RenderDartConstant），
+# checkout 同样不允许转换，保证 `--check` 的字节比较在 Windows 上成立。
+app/lib/services/search/data_pack.g.dart text eol=lf
