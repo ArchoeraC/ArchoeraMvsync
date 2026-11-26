@@ -129,6 +129,10 @@ internal static class EraStorePostingsTests
                 : "miss");
         Program.Check("位置 Δ: O8 自动选择位打包", (positions[6] & 0x02) != 0,
             $"flags=0x{positions[6]:X2}");
+        // doc_delta=7 / pos_count=4 / width=3 / Δ[0,2,3,4] LSB-first → D0 08。
+        Program.Check("位置 Δ: packed 块体逐字节（LSB-first）",
+            Convert.ToHexString(positions.AsSpan(12)) == "070403D008",
+            Convert.ToHexString(positions.AsSpan(12)));
 
         // 强制 varint：位置块体：doc_delta=7 → 07；pos_count=4 → 04；位置 Δ = 0,2,3,4。
         try

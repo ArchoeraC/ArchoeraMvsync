@@ -532,8 +532,9 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
 
   - **兼容 / 重建**：新 reader 同时接受旧 varint 块与新 packed 块；用 O8 二进制对
     **旧格式基线索引**执行 `verify` 与 qbench eval 均通过（旧索引无需重建即可读）。
-    旧 reader 会在位置块 flags 看到未知位 `0x02` 并拒绝——因此**新构建的索引不能被
-    旧二进制读取**；索引由同一 App 本地重建 / 新增量段写入，这个代价可接受。
+    旧 reader 会在位置块 flags 看到未知位 `0x02` 并拒绝——实测旧二进制对 packed 索引
+    `verify` 返回 `位置块 flags / reserved 非法`，因此**新构建的索引不能被旧二进制读取**；
+    索引由同一 App 本地重建 / 新增量段写入，这个代价可接受。
     `index_format` 仍为 **1**（不升版）：升版会让旧索引不可读，而 flags 位扩展已经
     提供「新读旧、旧拒绝新」的清晰边界。
   - **测试**：新增 `EraStorePackedPositionsTests`，覆盖密集（Δ=1）/ 稀疏 / 单点 0 /
@@ -542,7 +543,7 @@ ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
     块体 / width=32 / 打包字节截断 / 非首 Δ=0 / 未知 flags / CRC 不符 /
     `IndexVerifier` 接受 packed 且检出位置段损坏。`EraStorePostingsTests.PositionDeltas`
     改为「自动选 packed + 强制 varint 逐字节」双断言。C# 回归
-    **PASS 4117 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**。
+    **PASS 4118 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**。
   - **S2 收口**：`PinyinLyrics` 必须保留位置（5k 质量门），音译层仍默认免位置；
     positions 体积改由 O8 无损压缩承担。进一步收益（PForDelta 例外帧 / 跨 doc 共享
     width）需要更复杂编码，本轮不做。
