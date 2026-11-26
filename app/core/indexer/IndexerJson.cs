@@ -145,8 +145,10 @@ public sealed class IndexerResult
     public int LyricsTruncatedTracks { get; set; }
 
     /// <summary>
-    /// 因超过 EraFormat.MaxTermBytes（255B）被跳过的词条数（超长无分隔拉丁词 / 首字母串）。
-    /// 只跳过该词条，不影响其余字段与整库构建；Dart 目前不消费，仅诊断。
+    /// 历史字段：旧实现因词条超过 <see cref="EraStore.EraFormat.MaxTermBytes"/>（255B）
+    /// 丢弃词条时记录数量。S3 起超长词条由 <see cref="EraStore.TermCodec"/> 规范化为
+    /// 不透明哈希词条（<c>0x01 + MD5 hex</c>，33B）后正常入库，不再丢弃，因此恒为 0；
+    /// 字段名保留以维持 JSON / ABI 兼容（Dart 目前不消费，仅诊断）。
     /// </summary>
     public int OversizeTokens { get; set; }
 }

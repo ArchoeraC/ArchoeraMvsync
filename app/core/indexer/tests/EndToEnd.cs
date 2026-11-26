@@ -789,9 +789,9 @@ internal static class EndToEnd
     /// </list>
     /// </summary>
     /// <summary>
-    /// 超长词条（&gt; <see cref="EraStore.EraFormat.MaxTermBytes"/>）必须被跳过而不是让整库构建
-    /// 失败：30k 语料里混入一个 300B 拉丁词即触发旧实现的 <c>TermDict</c> 异常。
-    /// 断言：构建成功、计数正确、同曲其余字段仍可检索。
+    /// 超长词条（&gt; <see cref="EraStore.EraFormat.MaxTermBytes"/>）不再丢弃，而是经
+    /// <see cref="EraStore.TermCodec"/> 换成 <c>0x01 + MD5 hex</c> 的不透明词条后入库（S3）：
+    /// 构建成功、计数为 0、同曲其余字段仍可检索，且**原长词本身仍能被查询命中**。
     ///
     /// v15（T3.9）：单行 300 字不再产出 300B 的首字母串——首字母列改为 2 字节 bigram，
     /// 超长只来自拉丁长词；用例同时锁住「bigram 化顺带消除了首字母超长风险」。
@@ -817,15 +817,27 @@ internal static class EndToEnd
         }
 
         var result = RunEngine(db, index, full: true, lrc: false);
+        var canonical = EraStore.TermCodec.Canonicalize(longWord);
         Program.Check("超长词条: 构建成功且两首全部索引", result.Indexed == 2, result.Indexed.ToString());
-        Program.Check("超长词条: 计数 == 2（同一 300B 拉丁词进词法 / 拼音两列；首字母已 bigram 化）",
-            result.OversizeTokens == 2, result.OversizeTokens.ToString());
+        Program.Check("超长词条: oversizeTokens == 0（改为哈希词条而非丢弃）",
+            result.OversizeTokens == 0, result.OversizeTokens.ToString());
+        Program.Check("超长词条: 规范化词条已入歌词词典",
+            MatchContainsTrack(index, "{lyrics_tok} : " + SearchQuery.Quote(canonical), "longWord"),
+            canonical);
+        // 直接拼原始词条（绕过 Quote 的规范化）验证词典里**没有** 300B 原文键。
+        Program.Check("超长词条: 词典里没有原始 300B 词条",
+            !MatchContainsTrack(index, "{lyrics_tok} : \"" + longWord + "\"", "longWord"),
+            "raw 300B term found");
+        Program.Check("超长词条: 查询原始 300B 词命中该曲（生产查询路径）",
+            SessionHit(index, db, longWord, "longWord"));
         Program.Check("超长词条: 长首字母曲的首字母 bigram 正常入库",
             MatchContainsTrack(index, "{initials_lyrics_tok} : \"aa\"", "longInitials"),
             "aa not found");
         Program.Check("超长词条: 同曲其余词仍可检索",
             MatchContainsTrack(index, "{lyrics_tok} : \"晴天\"", "longWord"),
             "晴天 not found");
+        Program.Check("超长词条: 普通查询仍命中同曲（生产查询路径）",
+            SessionHit(index, db, "晴天", "longWord"));
         Program.Check("超长词条: 结果 JSON additive 字段",
             IndexerJson.Result(result).Contains("\"oversizeTokens\":", StringComparison.Ordinal),
             IndexerJson.Result(result));

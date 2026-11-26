@@ -212,8 +212,15 @@ internal static class SearchQuery
         ("ing", "in"),
     };
 
-    /// <summary>把单个词元转义为 FTS5 双引号字符串（内部 <c>"</c> 翻倍）。</summary>
-    public static string Quote(string token) => "\"" + token.Replace("\"", "\"\"") + "\"";
+    /// <summary>
+    /// 把单个词元转义为 FTS5 双引号字符串（内部 <c>"</c> 翻倍）。
+    ///
+    /// <para>超长单 token 先经 <see cref="EraStore.TermCodec.Canonicalize"/> 换成与索引侧同源的
+    /// 不透明词条（<c>0x01 + MD5 hex</c>），表达式解析器因而只会看到词典里真实存在的词条；
+    /// 含空白的短语字符串（多个词条拼接）原样保留。</para>
+    /// </summary>
+    public static string Quote(string token)
+        => "\"" + EraStore.TermCodec.Canonicalize(token).Replace("\"", "\"\"") + "\"";
 
     /// <summary>编译主趟表达式；无可匹配内容返回 <c>null</c>。</summary>
     /// <param name="lyricsInitials">
@@ -776,6 +783,7 @@ internal static class SearchQuery
     private static bool IsInitialsShaped(string token)
     {
         if (!IsAsciiLowerWord(token) || token.Length < MinInitialsBranchLength) return false;
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return false;
         if (Analyzer.InitialsToBigrams(token).Length == 0) return false;
         var vowels = 0;
         foreach (var ch in token)
@@ -823,6 +831,8 @@ internal static class SearchQuery
         foreach (var token in tokens.Lexical)
         {
             if (token.Length < MinInitialsBranchLength || !IsAsciiLowerWord(token)) continue;
+            // 超长词条是精确哈希词条：不按首字母 bigram 展开（不会命中，且表达式巨大）。
+            if (EraStore.TermCodec.NeedsCanonicalization(token)) continue;
             runs.Add(token);
         }
         return InitialsExpression(runs, lyricsInitials);
@@ -1132,10 +1142,17 @@ internal static class SearchQuery
     }
 
     /// <summary>末词编译为 <c>("tok" OR "tok"*)</c>，或纯前缀 <c>"tok"*</c>。</summary>
+    /// <remarks>
+    /// 超长词条规范化后是**精确**哈希词条：哈希没有词法前缀语义，不加 <c>*</c>
+    /// （对哈希做前缀扫描无害但纯属浪费，见 <see cref="IsPrefixable"/>）。
+    /// </remarks>
     private static string PrefixTerm(string token)
-        => PairExactWithPrefix
+    {
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return Quote(token);
+        return PairExactWithPrefix
             ? "(" + Quote(token) + " OR " + Quote(token) + "*)"
             : Quote(token) + "*";
+    }
 
     /// <summary>整串是否只由索引脚本（汉字 / 假名 / 谚文）构成（跨语言候选归属判定用）。</summary>
     private static bool IsCjkText(string text)
@@ -1242,14 +1259,20 @@ internal static class SearchQuery
             && runes.All(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
     }
 
-    /// <summary>拉丁 / 数字词元可加前缀：不含子串脚本字符即为真。</summary>
+    /// <summary>
+    /// 拉丁 / 数字词元可加前缀：不含子串脚本字符，且未超长（超长词条规范化后是精确的哈希
+    /// 词条，前缀没有意义，见 <see cref="EraStore.TermCodec"/>）。
+    /// </summary>
     private static bool IsPrefixable(string token)
-        => !token.EnumerateRunes().Any(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
+        => !EraStore.TermCodec.NeedsCanonicalization(token)
+            && !token.EnumerateRunes().Any(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
 
     /// <summary>纯小写拉丁 / 数字词元（可做编辑距离扩展）；过短词不扩展，避免高频噪声。</summary>
+    /// <remarks>超长词条是精确的哈希词条：不做编辑距离扩展（否则要为 300+ 字节枚举数百个变体）。</remarks>
     private static bool IsFuzzyEligible(string token)
     {
         if (token.Length < MinFuzzyWordLength) return false;
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return false;
         foreach (var rune in token.EnumerateRunes())
         {
             var isLower = rune.Value >= 0x61 && rune.Value <= 0x7A;

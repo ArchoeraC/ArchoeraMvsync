@@ -58,6 +58,7 @@ public static class Program
         LayerConfidenceTests.Run();
         EraStoreFormatTests.Run();
         EraStoreDictTests.Run();
+        TermCodecTests.Run();
         EraStoreDocNormTests.Run();
         EraStoreLyricDigestTests.Run();
         EraStorePostingsTests.Run();
