@@ -5333,6 +5333,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsEqReset => 'Reset equalizer';
 
   @override
+  String get equalizerQuickDesc =>
+      '플레이어에서 빠르게 조정: 프리셋, 프리앰프, 10밴드. 변경 사항은 즉시 적용됩니다.';
+
+  @override
   String get settingsEqPresetFlat => 'Flat';
 
   @override

@@ -5588,6 +5588,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsEqReset => 'Reset equalizer';
 
   @override
+  String get equalizerQuickDesc =>
+      'Réglages rapides depuis le lecteur : préréglage, préamplification et 10 bandes. Les modifications s\'appliquent immédiatement.';
+
+  @override
   String get settingsEqPresetFlat => 'Flat';
 
   @override

@@ -5243,6 +5243,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsEqReset => '重置均衡器';
 
   @override
+  String get equalizerQuickDesc => '播放页快速调整：预设、预增益与 10 段增益，改动即时生效。';
+
+  @override
   String get settingsEqPresetFlat => '平坦';
 
   @override
@@ -11510,6 +11513,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsEqReset => '重置均衡器';
+
+  @override
+  String get equalizerQuickDesc => '播放页快速调整：预设、预增益与 10 段增益，改动即时生效。';
 
   @override
   String get settingsEqPresetFlat => '平坦';
@@ -17780,6 +17786,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsEqReset => '重置均衡器';
+
+  @override
+  String get equalizerQuickDesc => '播放頁快速調整：預設、預增益與 10 段增益，改動即時生效。';
 
   @override
   String get settingsEqPresetFlat => '平坦';

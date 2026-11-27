@@ -5329,6 +5329,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsEqReset => 'Reset equalizer';
 
   @override
+  String get equalizerQuickDesc =>
+      'プレイヤーからすばやく調整：プリセット、プリアンプ、10 バンド。変更はすぐに反映されます。';
+
+  @override
   String get settingsEqPresetFlat => 'Flat';
 
   @override

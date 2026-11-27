@@ -1621,6 +1621,7 @@
   "settingsEqLimiter": "限幅器",
   "settingsEqLimiterDesc": "防止削波失真",
   "settingsEqReset": "重置均衡器",
+  "equalizerQuickDesc": "播放頁快速調整：預設、預增益與 10 段增益，改動即時生效。",
   "settingsEqPresetFlat": "平坦",
   "settingsEqPresetPop": "流行",
   "settingsEqPresetRock": "摇滚",

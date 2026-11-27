@@ -9740,6 +9740,12 @@ abstract class AppLocalizations {
   /// **'重置均衡器'**
   String get settingsEqReset;
 
+  /// No description provided for @equalizerQuickDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'播放页快速调整：预设、预增益与 10 段增益，改动即时生效。'**
+  String get equalizerQuickDesc;
+
   /// No description provided for @settingsEqPresetFlat.
   ///
   /// In zh_CN, this message translates to:

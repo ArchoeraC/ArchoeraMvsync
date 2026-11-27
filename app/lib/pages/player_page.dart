@@ -31,6 +31,7 @@ import '../widgets/player/playback_progress_slider.dart';
 import '../widgets/player/player_controls_row.dart';
 import '../widgets/player/player_layout_switcher.dart';
 import '../widgets/player/player_shared_elements.dart';
+import '../widgets/player/equalizer_quick_panel.dart';
 import '../widgets/player/background/player_background.dart';
 import '../widgets/player/quality_menu.dart';
 import '../widgets/player/spectrum_view.dart';

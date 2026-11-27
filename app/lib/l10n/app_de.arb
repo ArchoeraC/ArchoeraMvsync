@@ -1621,6 +1621,7 @@
   "settingsEqLimiter": "Limiter",
   "settingsEqLimiterDesc": "Prevent clipping distortion",
   "settingsEqReset": "Reset equalizer",
+  "equalizerQuickDesc": "Schnelle Anpassung im Player: Preset, Vorverstärkung und 10 Bänder. Änderungen wirken sofort.",
   "settingsEqPresetFlat": "Flat",
   "settingsEqPresetPop": "Pop",
   "settingsEqPresetRock": "Rock",

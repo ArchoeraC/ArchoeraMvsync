@@ -376,6 +376,8 @@ class _PlayerTopBar extends StatelessWidget {
         ),
         const Spacer(),
         const _SleepTimerButton(),
+        // 均衡器快捷面板（与设置页共用同一份偏好，改动即时生效）。
+        const EqualizerQuickButton(),
         // 当前曲目可切音质档位。
         if (current != null)
           QualityMenu(

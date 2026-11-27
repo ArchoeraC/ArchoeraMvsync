@@ -1621,6 +1621,7 @@
   "settingsEqLimiter": "Limiter",
   "settingsEqLimiterDesc": "Prevent clipping distortion",
   "settingsEqReset": "Reset equalizer",
+  "equalizerQuickDesc": "プレイヤーからすばやく調整：プリセット、プリアンプ、10 バンド。変更はすぐに反映されます。",
   "settingsEqPresetFlat": "Flat",
   "settingsEqPresetPop": "Pop",
   "settingsEqPresetRock": "Rock",

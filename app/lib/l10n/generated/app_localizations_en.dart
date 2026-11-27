@@ -5497,6 +5497,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsEqReset => 'Reset equalizer';
 
   @override
+  String get equalizerQuickDesc =>
+      'Quick adjustments from the player: preset, preamp and 10 bands. Changes apply immediately.';
+
+  @override
   String get settingsEqPresetFlat => 'Flat';
 
   @override

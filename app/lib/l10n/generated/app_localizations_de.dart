@@ -5553,6 +5553,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsEqReset => 'Reset equalizer';
 
   @override
+  String get equalizerQuickDesc =>
+      'Schnelle Anpassung im Player: Preset, Vorverstärkung und 10 Bänder. Änderungen wirken sofort.';
+
+  @override
   String get settingsEqPresetFlat => 'Flat';
 
   @override
