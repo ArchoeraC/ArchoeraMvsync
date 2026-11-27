@@ -115,7 +115,7 @@ bash app/tool/verify_release.sh /tmp/rel
 
 ## Git 与仓库保护
 - `origin` 用 SSH，提交/标签用 GPG 签名（`user.signingkey`、`commit.gpgsign true`、`tag.gpgsign true`）。发现仍在用 PAT 时，主动建议换成密钥方案。
-- `main`：必须 PR，禁止强推/删除；Code Owners 覆盖 CI/签名/打包/水印。维护者是 bypass actor，可自建 PR 自合并。
+- `main`：必须 PR，禁止强推/删除；Code Owners 覆盖 CI/签名/打包/水印；PR 作者必须评论 `/confirm`（`author-confirm` 必需检查），Code Owner 批准不能替代。维护者是 bypass actor，可自建 PR 自合并；bypass 仅用于紧急 / 故障场景。
 - `ArchoeraOS`：长期发行版分支，禁止删除/强推，不要求 PR，也不得并入 `main` 后删除。
 - `v*` tag：禁止更新/删除。
 

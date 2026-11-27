@@ -17,6 +17,7 @@
 | SEC-27 | CI 跑**完整 `flutter test`**（不再只跑 widget 冒烟）+ vault 用例（指向测试二进制）+ subsonic 的 `go test` | `actions/build-linux/action.yml` |
 | SEC-28 | **发布依赖门禁**：Linux 打包前逐 ELF 校验 NEEDED / `$ORIGIN` / 内嵌库实际解析位置，未登记的系统依赖与 `libssl/libcrypto` 直接依赖直接失败；随后在 Xvfb + 临时 HOME/XDG 下真实启动发布包（`LD_BIND_NOW`）做存活冒烟；报告随包写入 `ARCHOERA-DEPENDENCIES.txt` | `packaging/linux/build-release.sh`（`guard`/`verify`）、`packaging/macos/build-release.sh`（`verify`）、`packaging/windows/build-release.ps1`（`verify`）、`actions/build-linux/action.yml`、`packaging/linux/package.sh`、[依赖门禁文档](release-dependency-guard.md) |
 | SEC-08 | release 作业对目录型产物的 `ARCHOERA-NATIVE-MANIFEST.txt` 做 **key1 ECDSA/SHA-256 分离签名**（`.sig1`），运行期内嵌公钥验签 + 摘要 | `build-all.yml` release 作业 + `app/tool/sign_native_manifest.sh` |
+| 作者确认 | `protect-main` 要求 **`author-confirm` 必需检查**：PR 作者本人评论 `/confirm` 后，工作流在最新 head commit 写入成功检查；Code Owner 批准不能替代，新提交需重新确认；维护者保留 ruleset bypass | `.github/workflows/pr-author-confirm.yml` + GitHub ruleset |
 
 ## 2. 信任根：应用层 key1 清单 + 分发渠道（2026-10 定稿）
 
@@ -78,6 +79,11 @@
   都以它为准；依赖变更后随 PR 一起更新。
 - `release` 作业的 Environment 人工审批（`release`）是签名的最后一道人工门；SEC-23 的
   tag 祖先校验在其之前拦截「tag 指向未评审提交」。
+- **PR 作者确认（2026-11-27）**：`protect-main` 的 `author-confirm` 必需检查由
+  `.github/workflows/pr-author-confirm.yml` 产生。工作流只接受 PR 作者本人的 `/confirm`
+  评论，不 checkout PR 代码；新提交不会继承旧确认，需作者重新评论。维护者 bypass
+  仅用于紧急 / 故障场景；修改 workflow 名称或检查上下文时必须同步 ruleset，否则会
+  永久阻塞合并。
 - **漏洞处置**：`security-audit.yml` 每周对各 Rust crate（vault-rs / shell /
   subsonic/transcoder / tempo-rs）跑 `cargo audit`。确属**不适用**的公告才可经
   `ignore` 放行，且须在 workflow 注释写明理由（如 RUSTSEC-2023-0071：`rsa`
