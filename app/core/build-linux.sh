@@ -50,13 +50,17 @@ fi
 # 内嵌进 native/（实测 +126MB，deb 膨胀到数百 MB），必须避免。
 FFMPEG_PREFIX="${FFMPEG_PREFIX:-$HOME/.local/ffmpeg-minimal}"
 # 需同时具备共享库与 TLS 标记（旧的无 TLS / 未含系统 CA 回退补丁的前缀要重建）。
-if [[ ! -f "$FFMPEG_PREFIX/lib/libavformat.so" || ! -f "$FFMPEG_PREFIX/.mbedtls-system-ca" ]]; then
+# 标记内容 = 构建时的 FFmpeg 版本：与 build-ffmpeg-minimal.sh 的默认版本不一致即重建
+# （单一事实来源在该脚本；解析失败时退化为「总是重建」，不会复用错版本前缀）。
+FFMPEG_VER="${FFMPEG_VERSION:-$(sed -n 's/^VER="\${FFMPEG_VERSION:-\([0-9.]*\)}".*/\1/p' "$ROOT/build-ffmpeg-minimal.sh" 2>/dev/null)}"
+if [[ ! -f "$FFMPEG_PREFIX/lib/libavformat.so" \
+      || "$(cat "$FFMPEG_PREFIX/.mbedtls-system-ca" 2>/dev/null)" != "$FFMPEG_VER" ]]; then
   echo "[build-linux] ===== 构建最小 FFmpeg（纯 LGPL·仅音频·自包含 TLS + 系统 CA 回退）====="
   bash "$ROOT/build-ffmpeg-minimal.sh"
 fi
 export PKG_CONFIG_PATH="$FFMPEG_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 export LD_LIBRARY_PATH="$FFMPEG_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-echo "[build-linux] 使用自建 FFmpeg: $FFMPEG_PREFIX"
+echo "[build-linux] 使用自建 FFmpeg: $FFMPEG_PREFIX（版本 ${FFMPEG_VER:-?}）"
 
 echo "[build-linux] ===== audio-engine ====="
 cmake -S "$ROOT/audio-engine" -B "$ROOT/audio-engine/build" -DCMAKE_BUILD_TYPE=Release

@@ -631,7 +631,7 @@ pub const Reader = struct {
 >   `pubspec.yaml` 读取，**不硬编码**）。旧库缺 `_with_headers` 符号时自动回退。
 > - FFmpeg 在线 TLS：Linux/macOS 由 `build-ffmpeg-minimal.sh` 构建**自包含 mbedTLS**
 >   （`--enable-mbedtls`、`https,tls` 协议、静态链接；旧前缀经 `.mbedtls-system-ca`
->   标记重建，并应用 `patches/ffmpeg-9.0.1-mbedtls-system-ca.patch` 让其回退系统信任库）；
+>   标记重建，并应用 `patches/ffmpeg-9.0.2-mbedtls-system-ca.patch` 让其回退系统信任库）；
 >   Windows 经 vcpkg ffmpeg 端口的 **Schannel**（未启用 `openssl` 特性时自动
 >   `--enable-schannel`，无额外 DLL，保持 LGPL-2.1+）。
 > - 验收：`kernel/net.zig` 新增「自定义请求头随请求发送」用例，`zig build test` 731 项全绿；

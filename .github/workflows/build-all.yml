@@ -540,7 +540,17 @@ jobs:
           # 下载类失败（GitHub 504 / 限流）是瞬时的：重试一次，仍失败才判死。
           for attempt in 1 2; do
             if vcpkg install --triplet x64-windows-release > vcpkg-install.log 2>&1; then
-              echo "vcpkg install 完成"; tail -20 vcpkg-install.log; exit 0
+              echo "vcpkg install 完成"; tail -20 vcpkg-install.log
+              # 三端 FFmpeg 统一目标 9.0.2（Linux/macOS 由 build-ffmpeg-minimal.sh 钉定）；
+              # Windows 跟随 runner 镜像端口树，漂移在这里显式告警（不致命）。
+              expected="9.0.2"
+              line="$(vcpkg list ffmpeg 2>/dev/null | grep -m1 '^ffmpeg:' || true)"
+              echo "vcpkg ffmpeg: ${line:-<未解析到>}"
+              ver="$(printf '%s' "$line" | awk '{print $2}' | cut -d'#' -f1)"
+              if [ -n "$ver" ] && [ "$ver" != "$expected" ]; then
+                echo "::warning::FFmpeg 解析为 $ver，与三端统一目标 $expected 不一致（runner 镜像端口树漂移）；确认行为差异后同步 build-ffmpeg-minimal.sh 与文档，或给 Windows 钉端口版本。"
+              fi
+              exit 0
             fi
             echo "::warning::vcpkg install 第 $attempt 次失败，尾部日志："; tail -60 vcpkg-install.log
             if [ "$attempt" = "1" ]; then sleep 20; fi
@@ -644,7 +654,7 @@ jobs:
         with:
           path: ~/.local/ffmpeg-minimal
           # tls 段：自包含 mbedTLS 引入后旧缓存（无 .mbedtls-tls 标记）必须失效重建。
-          key: ffmpeg-minimal-9.0.1-tls-${{ runner.os }}-${{ matrix.arch }}
+          key: ffmpeg-minimal-9.0.2-tls-${{ runner.os }}-${{ matrix.arch }}
 
       - name: Build minimal FFmpeg (macOS, LGPL)
         if: matrix.os == 'macos' && steps.ffmpeg-cache-macos.outputs.cache-hit != 'true'
