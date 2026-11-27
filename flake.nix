@@ -493,9 +493,11 @@ NUGETCFG
         src = src;
 
         nativeBuildInputs = with pkgs; [
-          # nixpkgs 的 Flutter 仍是 3.47（Dart 3.13），而本地/CI 已升 3.50（Dart 3.14）。
-          # `window_manager` 因此用区间约束 `>=0.6.0 <0.8.0`：这里是 Dart 3.13 →
-          # pub 解析到 0.6.x；本地/CI（3.50）解析到 0.7.x。见 app/pubspec.yaml 注释。
+          # nixpkgs 的 `flutter` 取「最新 stable」（当前 3.50.1 / Dart 3.14.0），与
+          # 本地/CI 固定的 3.50.1 一致。app/pubspec.yaml 的 SDK 下限已提到
+          # `^3.14.0` / `>=3.50.0`，故 flake.lock 必须锁在含 flutter 3.50 的 nixpkgs
+          # （nixpkgs 的 `.../compilers/flutter/versions/3_50` 自 2026-11 起存在），
+          # 否则这里的 `flutter pub get` 会因 SDK 版本不足直接失败。
           flutter
           clang
           cmake
