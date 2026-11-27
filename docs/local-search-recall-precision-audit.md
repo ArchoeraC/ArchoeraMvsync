@@ -312,7 +312,7 @@ Solr 的 `3<90%` 这种**分段条件**正好表达我们需要的策略：
 
 | ID | 问题 | 位置 | 机制 | 验证方式 |
 |---|---|---|---|---|
-| **D-1** | LRC 分层**按行位置猜** | `app/core/shared/lyrics/LrcReader.cs:390-445`（`SplitLayers` / `ClassifyGroup`） | 同一时间戳的第 1 行=原文、第 2 行=译文、第 3 行=音译；仅用「是否纯拉丁」做一次对调修正 | 取一份真实多语 LRC，打印三层输出对照原文 |
+| **D-1** | LRC 分层**按行位置猜** | `app/core/shared/lyrics/LrcReader.cs`（`SplitDetailed` / `ClassifyGroup`） | 同一时间戳的第 1 行=原文、第 2 行=译文、第 3 行=音译；仅用「是否纯拉丁」做一次对调修正。**2026-11-28 已改为按文字脚本判定**：含假名 / 谚文的行优先当原文，译文排在前面时中文不再被当成主歌词；播放侧（LRC / TTML）同步修复 | 取一份真实多语 LRC，打印三层输出对照原文 |
 | **D-2** | 内嵌 + 侧车**并集** | `IndexerEngine.cs:392-398`（`JoinLayers`） | **完全相同**才去重；部分重叠（旧版歌词 + 新版侧车）两份都入索引 | 构造「内嵌=旧版、侧车=新版」的曲目，搜旧版独有词应**不命中**却命中 |
 | **D-3** | 脏集只认 `file_mtime` + lrc `mtime/size` | `IndexerEngine.cs:188-191` | 标题/歌手/歌词被改写但 mtime 未变（或 mtime 精度/时区导致相等）→ 旧词元永久保留 | 直接改 `library.db` 的 `tracks.title`（不动文件），增量后搜新标题应命中却未命中 |
 | **D-4** | **文件名混入拼音/首字母列** | `IndexerEngine.cs:365`、`:369`（`CombinePinyin(title, artist, album, filename)` / `CombineInitials(...)`） | 文件名已被独立索引到 `filename_tok`，却又进 `pinyin_meta_tok` / `initials_meta_tok` | 看 §7 的 `fts5vocab` 输出：`initials_meta_tok` 里出现 `t` / `164` 之类即中 |

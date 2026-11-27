@@ -66,4 +66,20 @@ public static class ScriptRanges
         }
         return hasLatin;
     }
+
+    /// <summary>
+    /// 是否含假名 / 谚文（日文 / 韩文原文的可靠信号）。
+    ///
+    /// 同时间戳多行歌词里，含假名 / 谚文的行优先当原文：部分下载站把中文译文
+    /// 排在原文前面，只按「第一行 = 原文」会把中文译文当成主歌词（播放页与
+    /// 检索都受影响）。
+    /// </summary>
+    public static bool HasKanaOrHangul(string text)
+    {
+        foreach (var ch in text)
+        {
+            if (IsKana(ch) || IsHangul(ch)) return true;
+        }
+        return false;
+    }
 }

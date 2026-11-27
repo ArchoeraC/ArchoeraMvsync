@@ -25,11 +25,53 @@ internal static class LayerConfidenceTests
     public static void Run()
     {
         ScoringMatrix();
+        SameTimeLanguageOrder();
         Packing();
         StorageLayout();
         QueryFiltering();
         SameLayerOnlyOnce();
         StorageSurvival();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 1b. 同时间戳多行的原文 / 译文归位（按文字脚本）                     */
+    /* ------------------------------------------------------------------ */
+
+    private static void SameTimeLanguageOrder()
+    {
+        // 译文在前：中文不再被当成原文（含假名的行才是日文原文）。
+        var transFirst = LrcReader.SplitText(
+            "[00:01.00]我要变强\n[00:01.00]僕は強く\n[00:02.00]空を見上げた\n");
+        Program.Check("T4.2 分层: 译文在前时含假名的行当原文",
+            transFirst.Original.Contains("僕は強く")
+            && !transFirst.Original.Contains("我要变强")
+            && transFirst.Translation.Contains("我要变强"),
+            $"{transFirst.Original} | {transFirst.Translation}");
+
+        // 韩文原文 + 中文译文（译文在前）同样按谚文归位。
+        var korean = LrcReader.SplitText("[00:01.00]你好\n[00:01.00]안녕하세요\n");
+        Program.Check("T4.2 分层: 谚文行当原文",
+            korean.Original.Contains("안녕하세요")
+            && korean.Translation.Contains("你好"),
+            $"{korean.Original} | {korean.Translation}");
+
+        // 中文歌 + 英文译文：没有假名 / 谚文对照，中文仍按位置当原文。
+        var chinese = LrcReader.SplitText("[00:01.00]你好世界\n[00:01.00]hello world\n");
+        Program.Check("T4.2 分层: 中文歌 + 英文译文保持中文原文",
+            chinese.Original.Contains("你好世界")
+            && chinese.Translation.Contains("hello world")
+            && !chinese.Romaji.Contains("hello world"),
+            $"{chinese.Original} | {chinese.Translation} | {chinese.Romaji}");
+
+        // 日文原文 + 英文译文 + 罗马音：拉丁行全部进音译，不再抢原文 / 译文。
+        var japanese = LrcReader.SplitText(
+            "[00:01.00]僕は強く\n[00:01.00]I must become stronger\n"
+            + "[00:01.00]boku wa tsuyoku\n");
+        Program.Check("T4.2 分层: 日文原文 + 英文译文 + 罗马音",
+            japanese.Original.Contains("僕は強く")
+            && japanese.Translation.Contains("I must become stronger")
+            && japanese.Romaji.Contains("boku wa tsuyoku"),
+            $"{japanese.Original} | {japanese.Translation} | {japanese.Romaji}");
     }
 
     /* ------------------------------------------------------------------ */

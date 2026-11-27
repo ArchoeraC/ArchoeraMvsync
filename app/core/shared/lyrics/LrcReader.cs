@@ -761,22 +761,61 @@ public static class LrcReader
     }
 
     /// <summary>
-    /// 单条时间戳分组 → 层：第 1 行原文；后两行按位置 第 2 行译文 / 第 3 行音译。
-    /// 修正：若第 2 行为纯拉丁且第 3 行非拉丁，则二者对调（纯拉丁更可能是音译）。
-    /// 组内仅 1 行时按纯拉丁否判为音译 / 译文。
+    /// 单条时间戳分组 → 层：含假名 / 谚文的行优先当原文（日文 / 韩文歌），
+    /// 其余行按位置 第 1 行译文 / 第 2 行音译；若第 1 行纯拉丁且第 2 行非拉丁
+    /// 则二者对调（纯拉丁更可能是音译）。组内仅 1 行时按纯拉丁否判为音译 / 译文。
+    ///
+    /// <para>原文不再固定取第 1 行：部分下载站 / 流媒体把中文译文排在原文前面，
+    /// 旧规则会把译文当主歌词（播放页与检索同受影响）。中文歌 + 英文译文没有
+    /// 假名 / 谚文对照，仍按位置保留中文原文。</para>
     /// </summary>
     private static void ClassifyGroup(
         List<string> group, long? ms,
         List<LrcLine> originals, List<LrcLine> trans, List<LrcLine> romaji)
     {
-        originals.Add(new LrcLine(group[0], ms));
+        var originalIndex = 0;
+        for (var i = 0; i < group.Count; i++)
+        {
+            if (!ScriptRanges.HasKanaOrHangul(group[i])) continue;
+            originalIndex = i;
+            break;
+        }
+
+        originals.Add(new LrcLine(group[originalIndex], ms));
         if (group.Count < 2) return;
 
-        var rest = group.GetRange(1, group.Count - 1);
+        var rest = new List<string>(group.Count - 1);
+        for (var i = 0; i < group.Count; i++)
+        {
+            if (i != originalIndex) rest.Add(group[i]);
+        }
+        var originalIsCjk = ScriptRanges.HasKanaOrHangul(group[originalIndex]);
         if (rest.Count == 1)
         {
-            if (IsLatinLine(rest[0])) romaji.Add(new LrcLine(rest[0], ms));
+            // 原文是日韩文时纯拉丁行按罗马音；中文原文 + 英文译文时英文是译文。
+            if (originalIsCjk && IsLatinLine(rest[0])) romaji.Add(new LrcLine(rest[0], ms));
             else trans.Add(new LrcLine(rest[0], ms));
+            return;
+        }
+
+        if (originalIsCjk)
+        {
+            if (rest.Exists(IsLatinLine) && !rest.TrueForAll(IsLatinLine))
+            {
+                foreach (var line in rest)
+                {
+                    if (IsLatinLine(line)) romaji.Add(new LrcLine(line, ms));
+                    else trans.Add(new LrcLine(line, ms));
+                }
+                return;
+            }
+            // 全部是拉丁行：只有一行按罗马音（日文歌单行拉丁多为音译）；
+            // 多行时按位置 第 1 行译文、其后音译（原文 / 译文 / 罗马音结构）。
+            for (var i = 0; i < rest.Count; i++)
+            {
+                if (i == 0 && rest.Count > 1) trans.Add(new LrcLine(rest[i], ms));
+                else romaji.Add(new LrcLine(rest[i], ms));
+            }
             return;
         }
 

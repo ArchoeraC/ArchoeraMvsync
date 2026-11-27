@@ -22,6 +22,7 @@
 library;
 
 import 'lyric_line.dart';
+import 'lyric_script.dart';
 
 /// 解析 TTML 时间串为毫秒。
 ///
@@ -84,24 +85,98 @@ List<LyricGroup> parseTtmlLyrics(String ttml, {String preferredLang = 'zh-CN'}) 
     _collectParagraphs(root, pNodes);
     if (pNodes.isEmpty) return const [];
 
-    final mainLines = [
-      for (final p in pNodes) _parseLineNode(p, preferredLang, isBg: false),
-    ];
+    // 段落级 role：Apple TTML 的译文 / 音译 / 背景人声偶尔直接挂在 <p> 上
+    // （而非行内 <span>）。译文 / 音译先按时间收集，再挂到同一时间的正文行；
+    // 背景行按普通行输出（渲染端按 isBG 区分字号）。
+    final translationP = <int, String>{};
+    final romajiP = <int, String>{};
+    final parsed = <_ParsedLine>[];
+    for (final p in pNodes) {
+      final role = _attrLocal(p, 'role');
+      final line = _parseLineNode(p, preferredLang, isBg: role == 'x-bg');
+      if (role == 'x-translation' || role == 'x-roman') {
+        if (line.text.trim().isNotEmpty) {
+          final bucket = role == 'x-translation' ? translationP : romajiP;
+          bucket.putIfAbsent(line.beginMs, () => line.text);
+        }
+        continue;
+      }
+      // 只含 x-translation / x-roman 子 span 的 <p>：正文为空，但其译文 /
+      // 音译仍要挂到同时间的正文行上。
+      if (line.text.trim().isEmpty) {
+        final trans = line.translation?.trim() ?? '';
+        final roma = line.romaji?.trim() ?? '';
+        if (trans.isNotEmpty) {
+          translationP.putIfAbsent(line.beginMs, () => trans);
+        }
+        if (roma.isNotEmpty) romajiP.putIfAbsent(line.beginMs, () => roma);
+        for (final bg in line.backgrounds) {
+          parsed.add(bg);
+        }
+        continue;
+      }
+      parsed.add(line);
+    }
+    if (parsed.isEmpty) return const [];
+
     // 稳定排序：时间相同则保持文档顺序（Dart 的 List.sort 不保证稳定）。
-    final order = List<int>.generate(mainLines.length, (i) => i)
+    final order = List<int>.generate(parsed.length, (i) => i)
       ..sort((a, b) {
-        final c = mainLines[a].beginMs.compareTo(mainLines[b].beginMs);
+        final c = parsed[a].beginMs.compareTo(parsed[b].beginMs);
         return c != 0 ? c : a.compareTo(b);
       });
 
     final out = <LyricGroup>[];
-    for (final i in order) {
-      final line = mainLines[i];
-      out.add(_toGroup(line));
-      // 背景人声行紧跟主行（不按时间轴单独排序）。
-      for (final bg in line.backgrounds) {
-        out.add(_toGroup(bg));
+    var i = 0;
+    while (i < order.length) {
+      final timeMs = parsed[order[i]].beginMs;
+      var j = i;
+      while (j < order.length && parsed[order[j]].beginMs == timeMs) {
+        j++;
       }
+      final mains = <_ParsedLine>[];
+      final backgrounds = <_ParsedLine>[];
+      for (var k = i; k < j; k++) {
+        final line = parsed[order[k]];
+        if (line.isBg) {
+          backgrounds.add(line);
+        } else {
+          mains.add(line);
+        }
+      }
+      if (mains.isNotEmpty) {
+        // 同一时间戳多个 <p>（部分库把译文 / 音译写成独立段落）按文字脚本
+        // 归位：含假名 / 谚文的行为原文，纯汉字行在有对照时判为译文。
+        final resolved = classifySameTimeLyricLines(
+          [for (final line in mains) line.text],
+          providedTranslation: translationP[timeMs],
+          providedRomaji: romajiP[timeMs],
+        );
+        final main = mains[resolved.originalIndex];
+        out.add(
+          _toGroup(
+            main,
+            translation: resolved.translation ?? main.translation,
+            romaji: resolved.romaji ?? main.romaji,
+          ),
+        );
+        // 背景人声行紧跟主行（不按时间轴单独排序）。
+        for (final bg in main.backgrounds) {
+          out.add(_toGroup(bg));
+        }
+        // 同一时刻的多句日 / 韩文原文（对唱等）按独立主行输出。
+        for (final index in resolved.separateIndices) {
+          out.add(_toGroup(mains[index]));
+        }
+      }
+      // 段落级 x-bg：紧跟在同时间主行之后。
+      for (final bg in backgrounds) {
+        out.add(_toGroup(bg));
+        for (final sub in bg.backgrounds) {
+          out.add(_toGroup(sub));
+        }
+      }
+      i = j;
     }
     return out;
   } catch (_) {
@@ -295,7 +370,10 @@ _ParsedLine _parseLineNode(
 }
 
 /// 组装 [LyricGroup]：仅当存在计时词时给出 `fragments`。
-LyricGroup _toGroup(_ParsedLine line) {
+///
+/// [translation] / [romaji] 用于覆盖归属判定结果（同一时间戳多段落时由
+/// [classifySameTimeLyricLines] 选出原文与译文 / 音译）。
+LyricGroup _toGroup(_ParsedLine line, {String? translation, String? romaji}) {
   List<LyricFragment>? fragments;
   if (line.hasTimedWords) {
     fragments = [
@@ -310,8 +388,8 @@ LyricGroup _toGroup(_ParsedLine line) {
   }
   return LyricGroup(
     original: LyricLine(timeMs: line.beginMs, text: line.text),
-    translation: line.translation,
-    romaji: line.romaji,
+    translation: translation ?? line.translation,
+    romaji: romaji ?? line.romaji,
     fragments: fragments,
     endMs: line.endMs,
     isBG: line.isBg,
