@@ -13,7 +13,8 @@
 #  - 由 issue_comment 触发，workflow 取自默认分支，贡献者无法在 PR 里改它；
 #  - 不 checkout 任何 PR 代码、不执行 PR 内容，只用事件元数据 + REST API；
 #  - 只接受 PR 作者本人的评论，其他评论直接退出；
-#  - 权限最小化：pull-requests: read + checks: write。
+#  - 权限最小化：pull-requests: read + checks: write；
+#  - 不设 concurrency：避免作者的 /confirm 被紧随其后的普通评论取消。
 # =====================================================================
 name: PR author confirmation
 
@@ -25,10 +26,6 @@ permissions:
   contents: read
   pull-requests: read
   checks: write
-
-concurrency:
-  group: pr-author-confirm-${{ github.event.issue.number }}
-  cancel-in-progress: true
 
 jobs:
   author-confirm:
