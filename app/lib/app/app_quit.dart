@@ -13,6 +13,7 @@ import '../../apis/runtime.dart';
 import '../services/playback/playback_notifier.dart';
 import '../services/log/log.dart';
 import '../services/platform/platform_capabilities.dart';
+import '../services/platform/window_geometry.dart';
 import '../stores/vault_session_store.dart';
 
 /// 退出应用（所有退出路径统一走此入口）。
@@ -50,6 +51,9 @@ Future<void> quitApplicationWith(
   if (store is VaultSessionStore) {
     await store.flush();
   }
+  // 窗口几何（ABI v11 `get_size` / `get_position`）：最大化 / 全屏退出不写，
+  // 保留上次普通窗口的尺寸与位置；桥接不可用 / 查询失败忽略。
+  saveWindowGeometry(container);
   // 平台桥接收尾：停 inhibit 线程 / 关单实例互斥体 / SMTC(WinRT) deinit。
   // 必须在 exit(0) 前（此时 COM 仍初始化），否则 WinRT 对象会在进程退出时
   // 晚于 COM uninit 释放 → 崩溃；同时避免内存泄漏。

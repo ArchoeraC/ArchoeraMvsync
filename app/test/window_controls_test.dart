@@ -244,4 +244,70 @@ void main() {
       isFalse,
     );
   });
+
+  // 单测环境恒无桥接窗口控制（见 `windowControlAvailable`），正好覆盖降级路径。
+  testWidgets('无窗口控制能力：只保留关闭按钮，最小化/最大化不渲染', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appPrefsProvider.overrideWith(
+            () => _PrefsNotifier({windowDecorKey: 'borderless'}),
+          ),
+        ],
+        child: _app(const NavHeader()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(windowControlAvailable, isFalse, reason: 'FLUTTER_TEST 下恒为降级态');
+    final buttons = find.descendant(
+      of: find.byType(WindowControls),
+      matching: find.byType(SButton),
+    );
+    expect(buttons, findsOneWidget, reason: '只剩关闭按钮');
+    expect(
+      find.descendant(
+        of: find.byType(WindowControls),
+        matching: find.byIcon(Icons.close),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(WindowControls),
+        matching: find.byIcon(Icons.remove),
+      ),
+      findsNothing,
+      reason: '最小化纯原生操作，能力缺失时不应提供死按钮',
+    );
+  });
+
+  testWidgets('无窗口控制能力：边缘缩放热区整块不渲染（不吞点击）', (tester) async {
+    var tapped = 0;
+    await tester.pumpWidget(
+      _app(
+        WindowResizeArea(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => tapped++,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(WindowResizeArea), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(WindowResizeArea),
+        matching: find.byType(MouseRegion),
+      ),
+      findsNothing,
+      reason: '热区缺失时不应留下可命中的 MouseRegion/GestureDetector',
+    );
+    // 左上角（原本的热区位置）点击必须穿透到内容。
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pump();
+    expect(tapped, 1);
+  });
 }

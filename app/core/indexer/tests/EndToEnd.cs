@@ -41,6 +41,7 @@ internal static class EndToEnd
             ProductionRomanizationNoPositions(root);
             RepeatedFullBuild(root);
             EraIncremental(root);
+            AutoMaintainWithoutDirty(root);
             FullBuildCompactionWritesFreshGeneration(root);
         }
         finally
@@ -792,9 +793,9 @@ internal static class EndToEnd
     /// </list>
     /// </summary>
     /// <summary>
-    /// 超长词条（&gt; <see cref="EraStore.EraFormat.MaxTermBytes"/>）必须被跳过而不是让整库构建
-    /// 失败：30k 语料里混入一个 300B 拉丁词即触发旧实现的 <c>TermDict</c> 异常。
-    /// 断言：构建成功、计数正确、同曲其余字段仍可检索。
+    /// 超长词条（&gt; <see cref="EraStore.EraFormat.MaxTermBytes"/>）不再丢弃，而是经
+    /// <see cref="EraStore.TermCodec"/> 换成 <c>0x01 + MD5 hex</c> 的不透明词条后入库（S3）：
+    /// 构建成功、计数为 0、同曲其余字段仍可检索，且**原长词本身仍能被查询命中**。
     ///
     /// v15（T3.9）：单行 300 字不再产出 300B 的首字母串——首字母列改为 2 字节 bigram，
     /// 超长只来自拉丁长词；用例同时锁住「bigram 化顺带消除了首字母超长风险」。
@@ -820,15 +821,27 @@ internal static class EndToEnd
         }
 
         var result = RunEngine(db, index, full: true, lrc: false);
+        var canonical = EraStore.TermCodec.Canonicalize(longWord);
         Program.Check("超长词条: 构建成功且两首全部索引", result.Indexed == 2, result.Indexed.ToString());
-        Program.Check("超长词条: 计数 == 2（同一 300B 拉丁词进词法 / 拼音两列；首字母已 bigram 化）",
-            result.OversizeTokens == 2, result.OversizeTokens.ToString());
+        Program.Check("超长词条: oversizeTokens == 0（改为哈希词条而非丢弃）",
+            result.OversizeTokens == 0, result.OversizeTokens.ToString());
+        Program.Check("超长词条: 规范化词条已入歌词词典",
+            MatchContainsTrack(index, "{lyrics_tok} : " + SearchQuery.Quote(canonical), "longWord"),
+            canonical);
+        // 直接拼原始词条（绕过 Quote 的规范化）验证词典里**没有** 300B 原文键。
+        Program.Check("超长词条: 词典里没有原始 300B 词条",
+            !MatchContainsTrack(index, "{lyrics_tok} : \"" + longWord + "\"", "longWord"),
+            "raw 300B term found");
+        Program.Check("超长词条: 查询原始 300B 词命中该曲（生产查询路径）",
+            SessionHit(index, db, longWord, "longWord"));
         Program.Check("超长词条: 长首字母曲的首字母 bigram 正常入库",
             MatchContainsTrack(index, "{initials_lyrics_tok} : \"aa\"", "longInitials"),
             "aa not found");
         Program.Check("超长词条: 同曲其余词仍可检索",
             MatchContainsTrack(index, "{lyrics_tok} : \"晴天\"", "longWord"),
             "晴天 not found");
+        Program.Check("超长词条: 普通查询仍命中同曲（生产查询路径）",
+            SessionHit(index, db, "晴天", "longWord"));
         Program.Check("超长词条: 结果 JSON additive 字段",
             IndexerJson.Result(result).Contains("\"oversizeTokens\":", StringComparison.Ordinal),
             IndexerJson.Result(result));
@@ -1372,10 +1385,87 @@ internal static class EndToEnd
             !SessionHit(index, db, "nz", "ib4"));
     }
 
+    /// <summary>
+    /// S7：没有脏曲时仍按阈值做有界维护（回收墓碑行 / 小段），达标后重复运行零写入。
+    /// </summary>
+    private static void AutoMaintainWithoutDirty(string root)
+    {
+        var work = Path.Combine(root, "auto-maintain");
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            for (var i = 1; i <= 4; i++)
+            {
+                InsertTrack(conn, HexId(i), Path.Combine(dir, $"m{i}.mp3"), $"维护歌{i}",
+                    "[]", null, $"歌词行{i}", i);
+            }
+        }
+
+        var full = RunEngine(db, index, full: true, lrc: false);
+        Program.Check("维护: 全量构建压缩到 1 段", full.EraSegments == 1, full.EraSegments.ToString());
+
+        var eraDir = EraDir(index);
+        var current = EraStore.CurrentPointer.Read(eraDir);
+        Program.Check("维护: CURRENT 可解析", current is not null, eraDir);
+        var eraPath = Path.Combine(eraDir, current!);
+
+        // 直接改写 2 首（同 track / 同 mtime，引擎不会判脏）并关闭合并：
+        // 制造 2/6 = 33% 死行，超过 Merger.DeadRatioTrigger 的 20%。
+        var upserts = new[]
+        {
+            MaintainDoc(1, "标题1", 1),
+            MaintainDoc(2, "标题2", 2),
+        };
+        var applied = EraStore.IncrementalUpdater.Apply(
+            eraPath, upserts, Array.Empty<byte[]>(), new EraStore.IncrementalOptions
+            {
+                Merge = false,
+                DocsPerSegment = 100,
+            });
+        Program.Check("维护: 构造 2 段 + 2 死行",
+            applied.SegmentCount == 2 && applied.DeadDocs == 2,
+            $"{applied.SegmentCount}/{applied.DeadDocs}");
+
+        // 无脏曲运行：Maintain 看到死行比例过阈值 → 合并回收。
+        var maintained = RunEngine(db, index, full: false, lrc: false);
+        var stats = EraStore.IndexStats.Collect(eraPath);
+        Program.Check("维护: 无脏曲也触发合并", maintained.EraMerged && maintained.EraWritten,
+            $"{maintained.EraMerged}/{maintained.EraWritten}");
+        Program.Check("维护: 合并后回到 1 段 / 0 死行",
+            maintained.EraSegments == 1 && stats.DeadDocs == 0,
+            $"{maintained.EraSegments}/{stats.DeadDocs}");
+        Program.Check("维护: 活 doc 仍为 4", stats.Docs == 4, stats.Docs.ToString());
+
+        // 达标后再次运行：Maintain 只读 Manifest，不写文件。
+        var clean = RunEngine(db, index, full: false, lrc: false);
+        Program.Check("维护: 达标后重复运行零写入", !clean.EraWritten && clean.EraSegments == 1,
+            $"{clean.EraWritten}/{clean.EraSegments}");
+    }
+
+    private static string HexId(int n) => n.ToString("x32");
+
+    private static EraStore.AnalyzedDoc MaintainDoc(int n, string title, long mtime)
+    {
+        var track = Convert.FromHexString(HexId(n));
+        var tokens = new Dictionary<EraStore.FieldId, string[]>
+        {
+            [EraStore.FieldId.Title] = new[] { "维护词" + n },
+        };
+        // S6：手工构造的 AnalyzedDoc 必须带与 DB 原始列一致的元数据哈希，
+        // 否则引擎会把它判成脏曲，走不到「无脏曲维护」分支。
+        var metaHash = EraStore.MetaHash.Compute("维护歌" + n, "[]", "");
+        return new EraStore.AnalyzedDoc(
+            track, new byte[16], 0, 0, tokens, title, "", "", mtime, MetaHash: metaHash);
+    }
+
     /* ------------------------------------------------------------------ */
     /* 引擎 / fixture 辅助                                                 */
     /* ------------------------------------------------------------------ */
-
     internal static IndexerResult RunEngine(string db, string index, bool full, bool lrc)
         => RunEngineDetailed(db, index, full, lrc).Result;
 

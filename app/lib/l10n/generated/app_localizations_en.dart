@@ -4769,6 +4769,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSearchIndexRebuildStarted => 'Rebuilding index…';
 
   @override
+  String get settingsSearchIndexDiagVersions => 'Index generation & versions';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return 'Gen $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'Schema $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'Analyzer $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => 'Search data pack';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'Pack $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'matches index';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => 'built by another pack';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => 'present';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => 'missing';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => 'foundation ok';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => 'foundation missing';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '$count degraded capabilities';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => 'Lyrics confidence';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return 'High $high · Medium $medium · Low $low · None $none';
+  }
+
+  @override
   String get libraryFullScan => 'Full Scan';
 
   @override

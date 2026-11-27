@@ -169,6 +169,20 @@ class FfiSystemWindow implements SystemWindow {
   }
 
   @override
+  WindowSize? get size {
+    final w = calloc<Int32>();
+    final h = calloc<Int32>();
+    try {
+      if (_b.windowGetSize(w, h) != aplOk) return null;
+      if (w.value <= 0 || h.value <= 0) return null;
+      return WindowSize(w.value, h.value);
+    } finally {
+      calloc.free(w);
+      calloc.free(h);
+    }
+  }
+
+  @override
   bool setPosition(int x, int y) => _b.windowSetPosition(x, y) == aplOk;
 
   @override
@@ -190,9 +204,7 @@ class FfiSystemWindow implements SystemWindow {
   }
 
   @override
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close}) =>
-      // 原生 ABI 无 reason 参数：桥接自行投递关闭请求，Dart 侧只表达意图。
-      _b.windowRequestClose() == aplOk;
+  bool requestClose() => _b.windowRequestClose() == aplOk;
 
   @override
   Future<void> dispose() async {

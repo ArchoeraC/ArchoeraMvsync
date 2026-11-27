@@ -62,9 +62,18 @@ internal static class SearchPlanTests
             && policy.MaxPinyinVariantsPerSyllable == SearchQuery.MaxPinyinVariantsPerSyllable
             && policy.ReadingBranchMinCjkLength == SearchQuery.ReadingBranchMinCjkLength
             && policy.MinPrefixTokenLength == SearchQuery.MinPrefixTokenLength
+            && policy.MinPinyinPrefixTokenLength == SearchQuery.MinPinyinPrefixTokenLength
             && policy.PairExactWithPrefix == SearchQuery.PairExactWithPrefix
             && policy.RequireMetadataForSingleChar == SearchQuery.RequireMetadataForSingleChar
             && policy.FirstCharTypoCostsTwo == SearchQuery.FirstCharTypoCostsTwo);
+        Program.Check("policy: MinPinyinPrefixTokenLength==3",
+            policy.MinPinyinPrefixTokenLength == 3, policy.MinPinyinPrefixTokenLength.ToString());
+        Program.Check("policy: RequireStrongKindForShortCircuit 默认关",
+            !policy.RequireStrongKindForShortCircuit);
+        Program.Check("policy: DfBudgetFactor 默认 0（关闭）",
+            policy.DfBudgetFactor == 0, policy.DfBudgetFactor.ToString());
+        Program.Check("policy: DfBudgetCapMultiplier==4",
+            policy.DfBudgetCapMultiplier == 4, policy.DfBudgetCapMultiplier.ToString());
     }
 
     /* ------------------------------------------------------------------ */
@@ -721,10 +730,13 @@ internal static class SearchPlanTests
         {
             new ExpectedHit("c1", "lexical", -16.234855922155567),
         }, new[] { 0, 0, 0, 0, 0, 0 }),
+        // Q4：default@1 要求强证据才短路 → 第一个丢词步的弱命中不再截断后续丢词步，
+        // c2（丢「晴天」后的「周杰伦」）与 c1 都进候选，c2 覆盖度更高排前。
         new("周杰伦 晴天", false, false, new[]
         {
+            new ExpectedHit("c2", "dropTokens", -16.12867556856548),
             new ExpectedHit("c1", "dropTokens", -16.234855922155567),
-        }, new[] { 1, 0, 0, 0, 0, 0 }),
+        }, new[] { 1, 1, 0, 1, 0, 0 }),
         new("woaini", false, false, new[]
         {
             new ExpectedHit("c1", "lexical", -0.23450826217914902),

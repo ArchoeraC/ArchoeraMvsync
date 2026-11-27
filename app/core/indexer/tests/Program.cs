@@ -41,8 +41,10 @@ public static class Program
         SearchRankerTests.Run();
         SearchExactnessTests.Run();
         SchemeRegistryTests.Run();
+        QuerySemanticsTests.Run();
         SearchExplainTests.Run();
         SearchKindProximityTests.Run();
+        EraStoreLyricProximityTests.Run();
         SearchSnippetTests.Run();
         SearchHighlightTests.Run();
         SearchPagingTests.Run();
@@ -58,8 +60,10 @@ public static class Program
         LayerConfidenceTests.Run();
         EraStoreFormatTests.Run();
         EraStoreDictTests.Run();
+        TermCodecTests.Run();
         EraStoreDocNormTests.Run();
         EraStoreLyricDigestTests.Run();
+        EraStoreMetaHashTests.Run();
         EraStorePostingsTests.Run();
         EraStorePackedPositionsTests.Run();
         EraStoreIteratorsTests.Run();

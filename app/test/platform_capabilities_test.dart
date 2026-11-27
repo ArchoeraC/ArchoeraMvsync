@@ -68,6 +68,8 @@ void main() {
     expect(caps.window.setVisible(true), isFalse);
     expect(caps.window.minimize(), isFalse);
     expect(caps.window.position, isNull);
+    // ABI v11：尺寸读取同样降级为 null（调用方据此跳过几何持久化 / 缩放回退）。
+    expect(caps.window.size, isNull);
     await expectLater(caps.power.screenState, emitsDone);
     await expectLater(caps.media.commands, emitsDone);
     await expectLater(caps.window.state, emitsDone);

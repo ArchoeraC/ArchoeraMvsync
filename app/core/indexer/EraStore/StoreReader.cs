@@ -43,6 +43,20 @@ internal sealed class StoreReader : IDisposable
     private readonly object _dfLock = new();
     private const int DfCacheCapacity = 128;
 
+    /// <summary>
+    /// 单术语 df（Q8）：<c>字段 + 词条</c> → 全段 df 之和。字典 df 是墓碑无关的近似
+    /// （死行仍计入），只用于「跳过必然宽命中的步骤」这类成本判定，不参与 bm25。
+    /// </summary>
+    private readonly Dictionary<string, int> _termDfCache = new(StringComparer.Ordinal);
+    private const int TermDfCacheCapacity = 512;
+
+    /// <summary>表达式 df 估算缓存（Q8）：键 = 完整表达式。</summary>
+    private readonly Dictionary<string, int> _exprDfCache = new(StringComparer.Ordinal);
+    private const int ExprDfCacheCapacity = 128;
+
+    /// <summary>前缀 df 估算最多展开的词条数；超过即视为「接近整库」（返回 TotalDocs）。</summary>
+    private const int DfEstimatePrefixCap = 4_096;
+
     /// <summary>逐段歌词置信度位图缓存（T4.2）：键 = 段号；与 reader 生命周期一致。</summary>
     private readonly Dictionary<ushort, LyricsMask> _lyricsMasks = new();
     private readonly object _lyricsMaskLock = new();
@@ -83,6 +97,169 @@ internal sealed class StoreReader : IDisposable
         => policy == LyricsConfidencePolicy.None
             ? expression
             : ((char)('0' + (int)policy)).ToString() + '\u0001' + expression;
+
+    /* ------------------------------------------------------------------ */
+    /* df 预算估算（Q8：计划 / 执行前的成本近似，不参与排序）              */
+    /* ------------------------------------------------------------------ */
+
+    private static readonly FieldId[] AllFieldIds =
+        Enumerable.Range(1, 12).Select(i => (FieldId)i).ToArray();
+
+    /// <summary>
+    /// 单个词条在某字段上的全段 df 之和（前缀形态按词典前缀展开累加）。
+    ///
+    /// <para>墓碑无关（死行仍计入）——估算只用于跳过「必然宽命中」的步骤，
+    /// 不作为 bm25 的 df。前缀展开超过 <see cref="DfEstimatePrefixCap"/> 时返回
+    /// <see cref="TotalDocs"/>（视为整库宽命中）。结果按 <c>(前缀, 字段, 词条)</c> 缓存。</para>
+    /// </summary>
+    internal int TermDf(FieldId field, string term, bool prefix)
+    {
+        if (term.Length == 0) return 0;
+        var key = (prefix ? "\u0001" : "\u0000") + ((char)(byte)field) + term;
+        lock (_dfLock)
+        {
+            if (_termDfCache.TryGetValue(key, out var cached)) return cached;
+        }
+
+        long df = 0;
+        var count = 0;
+        foreach (var segment in OpenPerSegment())
+        {
+            if (prefix)
+            {
+                var budget = DfEstimatePrefixCap - count;
+                if (budget <= 0)
+                {
+                    df = TotalDocs;
+                    count = DfEstimatePrefixCap;
+                    break;
+                }
+                var terms = segment.Dict.ScanPrefix(field, term, budget);
+                foreach (var info in terms) df += info.Df;
+                count += terms.Count;
+                if (count >= DfEstimatePrefixCap)
+                {
+                    df = TotalDocs;
+                    break;
+                }
+                continue;
+            }
+            if (segment.Dict.TryFind(field, term, out var found)) df += found.Df;
+        }
+
+        var value = (int)Math.Min(df, TotalDocs);
+        lock (_dfLock)
+        {
+            if (_termDfCache.Count >= TermDfCacheCapacity) _termDfCache.Clear();
+            _termDfCache[key] = value;
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// 单个 atom 的 df 估算：按字段分别取「各词条 df 的最小值」（短语要求全部词条都出现），
+    /// 再把各字段相加（同一 doc 命中多列会轻微重复计数，属可接受的近似）。
+    /// </summary>
+    internal int AtomDf(IReadOnlyList<string> tokens, bool prefixLast, IReadOnlyList<FieldId>? fields)
+    {
+        if (tokens.Count == 0) return 0;
+        var scope = fields ?? AllFieldIds;
+        long total = 0;
+        foreach (var field in scope)
+        {
+            var min = int.MaxValue;
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                var df = TermDf(field, tokens[i], prefixLast && i == tokens.Count - 1);
+                if (df < min) min = df;
+                if (min == 0) break;
+            }
+            if (min != int.MaxValue) total += min;
+        }
+        return (int)Math.Min(total, TotalDocs);
+    }
+
+    /// <summary>
+    /// 表达式 df 估算（Q8）：列作用域收窄字段族；<c>AND</c> 取子节点最小值、
+    /// <c>OR</c> 取子节点之和（并按 <see cref="TotalDocs"/> 截断）。解析失败返回 0
+    /// （＝未知，调用方不应据此跳过步骤）。结果按完整表达式缓存。
+    /// </summary>
+    internal int EstimateDf(string expression)
+    {
+        if (string.IsNullOrEmpty(expression)) return 0;
+        lock (_dfLock)
+        {
+            if (_exprDfCache.TryGetValue(expression, out var cached)) return cached;
+        }
+
+        FtsNode root;
+        try
+        {
+            root = FtsExpression.Parse(expression);
+        }
+        catch (FormatException)
+        {
+            return 0;
+        }
+
+        var estimate = (int)Math.Min(WalkDf(root, AllFieldIds), TotalDocs);
+        lock (_dfLock)
+        {
+            if (_exprDfCache.Count >= ExprDfCacheCapacity) _exprDfCache.Clear();
+            _exprDfCache[expression] = estimate;
+        }
+        return estimate;
+    }
+
+    private long WalkDf(FtsNode node, IReadOnlyList<FieldId>? fields)
+    {
+        switch (node)
+        {
+            case FtsScope scope:
+                return WalkDf(scope.Child, NarrowFields(fields, scope.Columns));
+            case FtsAnd and:
+            {
+                long min = long.MaxValue;
+                foreach (var child in and.Children)
+                {
+                    var value = WalkDf(child, fields);
+                    if (value < min) min = value;
+                }
+                return min == long.MaxValue ? 0 : min;
+            }
+            case FtsOr or:
+            {
+                long sum = 0;
+                foreach (var child in or.Children) sum += WalkDf(child, fields);
+                return sum;
+            }
+            case FtsPhrase phrase:
+                return AtomDf(phrase.Tokens, phrase.PrefixLast, fields);
+            case FtsTerm term:
+                return AtomDf(new[] { term.Token }, term.Prefix, fields);
+            default:
+                return 0;
+        }
+    }
+
+    /// <summary>列作用域收窄：与已有字段族取交集；列名全部不认识时退回原字段族。</summary>
+    private static IReadOnlyList<FieldId>? NarrowFields(
+        IReadOnlyList<FieldId>? fields, IReadOnlyList<string> columns)
+    {
+        var mapped = new List<FieldId>(columns.Count);
+        foreach (var column in columns)
+        {
+            if (EraQueryPlan.ColumnFields.TryGetValue(column, out var field)) mapped.Add(field);
+        }
+        if (mapped.Count == 0) return fields;
+        if (fields is null) return mapped;
+        var keep = new List<FieldId>(mapped.Count);
+        foreach (var field in mapped)
+        {
+            if (fields.Contains(field)) keep.Add(field);
+        }
+        return keep.Count > 0 ? keep : mapped;
+    }
 
     /// <summary>某段的歌词置信度位图（首次需要时构建并缓存）。</summary>
     internal LyricsMask GetLyricsMask(SegmentReaders segment)
@@ -311,6 +488,7 @@ internal sealed class StoreReader : IDisposable
                     Mtime = seg.Docs.Mtime(doc),
                     LrcMtime = seg.Docs.LrcMtime(doc),
                     LrcSize = seg.Docs.LrcSize(doc),
+                    MetaHash = seg.Docs.MetaHash(doc),
                 };
             }
         }
@@ -502,12 +680,15 @@ internal sealed unsafe class MappedMemoryManager : MemoryManager<byte>
     }
 }
 
-/// <summary>一条活文档的增量状态（DocStore v2 状态列）。</summary>
+/// <summary>一条活文档的增量状态（DocStore v2 状态列 + v6 元数据哈希）。</summary>
 internal sealed class EraTrackState
 {
     public long Mtime { get; set; }
     public long LrcMtime { get; set; }
     public long LrcSize { get; set; }
+
+    /// <summary>元数据内容哈希（DocStore v6）；0 = 旧夹具 / 未提供。</summary>
+    public ulong MetaHash { get; set; }
 }
 
 /// <summary>一段 EraStore 的三元组（DocStore + TermDict + Postings）。</summary>

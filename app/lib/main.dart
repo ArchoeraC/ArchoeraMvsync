@@ -16,6 +16,7 @@ import 'services/log/log.dart';
 import 'services/mcp/mcp_key_store.dart';
 import 'services/platform/platform_capabilities.dart';
 import 'services/platform/window_decor.dart';
+import 'services/platform/window_resize.dart';
 import 'services/deeplink/deep_link_router.dart';
 import 'services/power/frame_governor.dart';
 import 'services/scanner/sqlite_preload.dart';
@@ -152,6 +153,17 @@ Future<void> main(List<String> args) async {
   // TrayIntegration 订阅桥接关闭请求接管（后台常驻语义不变）。尽早调用以减少原生
   // 装饰闪现；失败时降级为当前原生外观，绝不阻断启动。
   applyWindowDecor(prefs.windowDecor);
+  // 最小尺寸 + 上次窗口几何（ABI v11 `get_size` / `get_position`）：桥接不可用
+  // 时静默跳过；最大化 / 全屏退出不写几何，避免下次启动先恢复成全屏尺寸。
+  final startupWindow = platformCaps.window;
+  startupWindow.setMinSize(kWindowMinWidth, kWindowMinHeight);
+  final geometry = prefs.windowGeometry;
+  if (geometry != null) {
+    startupWindow.setSize(geometry.width, geometry.height);
+    final gx = geometry.x;
+    final gy = geometry.y;
+    if (gx != null && gy != null) startupWindow.setPosition(gx, gy);
+  }
   // 预加载内置 SQLite（libe_sqlite3）：dart sqlite3 包经 hooks 配置
   // source: system 按名 dlopen("libe_sqlite3.so")，这里先按绝对路径加载，
   // 使 dart sqlite3 与 scanner-ffi 共享同一 SQLite 实例（同版本），避免

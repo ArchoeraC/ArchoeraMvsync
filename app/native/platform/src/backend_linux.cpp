@@ -1048,6 +1048,10 @@ void (*gdk_device_get_position)(void*, void**, int*, int*) = nullptr;
 void* (*gdk_screen_get_default)() = nullptr;
 int (*gdk_screen_get_monitor_at_window)(void*, void*) = nullptr;
 void (*gdk_screen_get_monitor_workarea)(void*, int, void*) = nullptr;
+// 越界位置矫正用：枚举显示器 + 取每块屏的几何（GTK3 X11 语义；Wayland 下
+// gtk_window_move 本身被合成器忽略，这里只是不做无意义计算）。
+int (*gdk_screen_get_n_monitors)(void*) = nullptr;
+void (*gdk_screen_get_monitor_geometry)(void*, int, void*) = nullptr;
 
 // GdkGeometry（GTK3）：只需 min_width/min_height 位于偏移 0/4；仍按完整布局声明，
 // 避免 GTK 整结构拷贝时越界读。
@@ -1091,6 +1095,10 @@ std::atomic<bool> g_hidden{false};
 // 供 Dart 任意线程 apl_window_get_position 立即往返。
 std::atomic<int32_t> g_pos_x{0};
 std::atomic<int32_t> g_pos_y{0};
+// 窗口尺寸（内容区，GTK 口径）：poll / configure-event 刷新，供任意线程
+// apl_window_get_size 读取（GTK 只能在主循环线程调用）。
+std::atomic<int32_t> g_size_w{0};
+std::atomic<int32_t> g_size_h{0};
 // 最近一次鼠标按下的 GTK 事件时间（Wayland 的 begin_move_drag 需要有效 serial；
 // 拖拽在 idle 回调里启动，`gtk_get_current_event_time()` 此时通常已为 0）。
 std::atomic<unsigned> g_last_event_time{0};
@@ -1193,6 +1201,12 @@ bool load() {
     gdk_screen_get_monitor_workarea =
         sym<decltype(gdk_screen_get_monitor_workarea)>(
             g_gdk, "gdk_screen_get_monitor_workarea");
+    gdk_screen_get_n_monitors =
+        sym<decltype(gdk_screen_get_n_monitors)>(
+            g_gdk, "gdk_screen_get_n_monitors");
+    gdk_screen_get_monitor_geometry =
+        sym<decltype(gdk_screen_get_monitor_geometry)>(
+            g_gdk, "gdk_screen_get_monitor_geometry");
     g_loaded = g_idle_add != nullptr && g_timeout_add != nullptr &&
                g_source_remove != nullptr &&
                g_application_get_default != nullptr &&
@@ -1268,6 +1282,15 @@ int poll(void*) {
         gtk_window_get_position(g_win, &px, &py);
         g_pos_x.store(px, std::memory_order_release);
         g_pos_y.store(py, std::memory_order_release);
+    }
+    if (gtk_window_get_size != nullptr) {
+        int ww = 0;
+        int wh = 0;
+        gtk_window_get_size(g_win, &ww, &wh);
+        if (ww > 0 && wh > 0) {
+            g_size_w.store(ww, std::memory_order_release);
+            g_size_h.store(wh, std::memory_order_release);
+        }
     }
     const bool hidden = gtk_widget_get_visible(g_win) == 0;
     const bool maximized =
@@ -1499,6 +1522,60 @@ bool pointerRootPos(int* x, int* y) {
     return true;
 }
 
+// 位置越界矫正（ABI v11 起的几何恢复用）：目标矩形与任一显示器相交就原样放行，
+// 只有**完全落在所有显示器之外**（拔掉外接屏 / 分辨率变小 / 旧偏好来自另一套布局）
+// 才把原点拉回「离目标中心最近的显示器」内。多屏 + 负坐标布局因此不受影响。
+// 仅在主循环线程调用（GTK/GDK 约束）；缺符号（裁剪环境）时静默跳过。
+void clampMoveToMonitors(void* win, int* x, int* y) {
+    if (gdk_screen_get_default == nullptr || gdk_screen_get_n_monitors == nullptr ||
+        gdk_screen_get_monitor_geometry == nullptr) {
+        return;
+    }
+    void* screen = gdk_screen_get_default();
+    if (screen == nullptr) return;
+    const int n = gdk_screen_get_n_monitors(screen);
+    if (n <= 0) return;
+
+    GdkRectangleLocal want{*x, *y, 1, 1};
+    if (gtk_window_get_size != nullptr) {
+        gtk_window_get_size(win, &want.width, &want.height);
+    }
+    if (want.width <= 0 || want.height <= 0) return;
+
+    bool visible = false;
+    for (int i = 0; i < n && !visible; i++) {
+        GdkRectangleLocal g{};
+        gdk_screen_get_monitor_geometry(screen, i, &g);
+        visible = want.x < g.x + g.width && want.x + want.width > g.x &&
+                  want.y < g.y + g.height && want.y + want.height > g.y;
+    }
+    if (visible) return;
+
+    int best = 0;
+    double best_d = -1.0;
+    for (int i = 0; i < n; i++) {
+        GdkRectangleLocal g{};
+        gdk_screen_get_monitor_geometry(screen, i, &g);
+        const double dx = (want.x + want.width / 2.0) - (g.x + g.width / 2.0);
+        const double dy = (want.y + want.height / 2.0) - (g.y + g.height / 2.0);
+        const double d = dx * dx + dy * dy;
+        if (best_d < 0.0 || d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    GdkRectangleLocal g{};
+    gdk_screen_get_monitor_geometry(screen, best, &g);
+    int nx = want.x;
+    int ny = want.y;
+    if (nx + want.width > g.x + g.width) nx = g.x + g.width - want.width;
+    if (nx < g.x) nx = g.x;
+    if (ny + want.height > g.y + g.height) ny = g.y + g.height - want.height;
+    if (ny < g.y) ny = g.y;
+    *x = nx;
+    *y = ny;
+}
+
 int applyTask(void* p) {
     WindowTask* t = static_cast<WindowTask*>(p);
     void* win = resolveWindow();
@@ -1550,11 +1627,15 @@ int applyTask(void* p) {
                 g_pos_y.store(ny, std::memory_order_release);
                 break;
             }
-            case kTaskMove:
+            case kTaskMove: {
+                int tx = t->a;
+                int ty = t->b;
+                clampMoveToMonitors(win, &tx, &ty);
                 if (gtk_window_move != nullptr) {
-                    gtk_window_move(win, t->a, t->b);
+                    gtk_window_move(win, tx, ty);
                 }
                 break;
+            }
             case kTaskIconify:
                 if (gtk_window_iconify != nullptr) gtk_window_iconify(win);
                 break;
@@ -2712,6 +2793,18 @@ int32_t windowGetPosition(int32_t* x, int32_t* y) {
     if (!gtkwin::hasWindow()) return ERR_BACKEND;
     *x = gtkwin::g_pos_x.load(std::memory_order_acquire);
     *y = gtkwin::g_pos_y.load(std::memory_order_acquire);
+    return OK;
+}
+
+// ABI v11：内容区尺寸（GTK 口径，与 windowSetSize 的 gtk_window_resize 一致）。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    if (!gtkwin::hasWindow()) return ERR_BACKEND;
+    const int32_t ww = gtkwin::g_size_w.load(std::memory_order_acquire);
+    const int32_t wh = gtkwin::g_size_h.load(std::memory_order_acquire);
+    if (ww <= 0 || wh <= 0) return ERR_STATE;
+    *w = ww;
+    *h = wh;
     return OK;
 }
 

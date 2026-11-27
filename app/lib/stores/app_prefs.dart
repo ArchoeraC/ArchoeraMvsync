@@ -685,6 +685,22 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
     state.save();
   }
 
+  /// 记录窗口几何（退出时调用；下次启动恢复）。
+  void setWindowGeometry({
+    required int width,
+    required int height,
+    int? x,
+    int? y,
+  }) {
+    state = state.copyWithWindowGeometry(
+      width: width,
+      height: height,
+      x: x,
+      y: y,
+    );
+    state.save();
+  }
+
   /// 设置窗口装饰方案（system / caption / borderless）。
   void setWindowDecor(String value) {
     state = state.copyWithWindowDecor(value);

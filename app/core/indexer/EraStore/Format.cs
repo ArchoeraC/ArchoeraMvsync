@@ -44,7 +44,11 @@ internal static class EraFormat
     /// <summary>倒排块内 doc 数上限。</summary>
     public const int PostingsBlockDocs = 128;
 
-    /// <summary>词条长度上限（UTF-8 字节），超长拒绝并记 warn。</summary>
+    /// <summary>
+    /// 词条长度上限（UTF-8 字节）。写入前超长单 token 必须经
+    /// <see cref="TermCodec.Canonicalize"/> 换成 <c>0x01 + MD5 hex</c>（33B）的
+    /// 不透明词条；<see cref="TermDictBuilder"/> 仍拒绝直接写入的超长原文。
+    /// </summary>
     public const int MaxTermBytes = 255;
 
     /// <summary>doc 数上限（防御恶意文件触发巨量分配）。</summary>

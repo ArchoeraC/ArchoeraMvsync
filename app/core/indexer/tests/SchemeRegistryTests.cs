@@ -21,6 +21,7 @@ internal static class SchemeRegistryTests
         RegistryShape();
         CapabilityResolve();
         SchemePlanFiltering();
+        MinimalPrefixFree();
         SchemeVectors();
     }
 
@@ -50,6 +51,15 @@ internal static class SchemeRegistryTests
             !def.Allows(SchemeMatchers.Typo2) && !def.Allows(SchemeMatchers.PhoneticLyrics));
         Program.Check("scheme: recall 含 typo2 / phonetic-lyrics",
             recall.Allows(SchemeMatchers.Typo2) && recall.Allows(SchemeMatchers.PhoneticLyrics));
+
+        // Q4：只有 default@1 / fast@1 启用「短路要求强证据」（5k eval 实测指标不变）。
+        Program.Check("scheme: default@1 启用强证据短路",
+            def.Policy.RequireStrongKindForShortCircuit == true);
+        Program.Check("scheme: fast@1 启用强证据短路",
+            fast.Policy.RequireStrongKindForShortCircuit == true);
+        Program.Check("scheme: recall@1 / minimal@1 保持默认短路",
+            !recall.Policy.RequireStrongKindForShortCircuit
+            && !minimal.Policy.RequireStrongKindForShortCircuit);
 
         Program.Check("scheme: 未知 id 回退 default 且报告 false",
             !SchemeRegistry.TryGet("bogus@9", out var fallback) && fallback.Id == SchemeIds.Default);
@@ -198,6 +208,66 @@ internal static class SchemeRegistryTests
         }
     }
 
+    /// <summary>
+    /// Q5：<c>minimal@1</c> 只声明 <c>exact</c> matcher，因此主表达式**不得出现任何** <c>*</c>，
+    /// 单字也不得改写为 <c>字*</c>；其余方案仍保留前缀（fast / default / recall 字节不变）。
+    /// </summary>
+    private static void MinimalPrefixFree()
+    {
+        var meta = new StoreMeta
+        {
+            HasHan = true,
+            HasLatin = true,
+            Pinyin = true,
+            IndexLrc = true,
+            InitialsLyrics = true,
+        };
+
+        foreach (var query in new[] { "我爱你", "爱", "love", "hello world", "晴天", "夜に駆ける" })
+        {
+            var request = new SearchRequest { Query = query };
+            var tokens = Analyzer.AnalyzeQuery(query);
+            var minimal = SearchPlanCompiler.Compile(
+                request, tokens, meta, Get(SchemeIds.Minimal));
+            var minimalStars = minimal.Steps
+                .Where(step => step.Expression?.Contains('*') == true)
+                .Select(step => step.Id)
+                .ToArray();
+            Program.Check($"Q5: minimal@1「{query}」无前缀",
+                minimalStars.Length == 0, string.Join(',', minimalStars));
+            Program.Check($"Q5: minimal@1「{query}」不含 Prefix 形状",
+                minimal.Steps.All(step => step.Kind != MatchKind.Prefix),
+                string.Join(',', minimal.Steps.Select(step => step.Kind)));
+            Program.Check($"Q5: minimal@1「{query}」计划标记 IncludePrefix=false",
+                !minimal.IncludePrefix);
+        }
+
+        // 单字 CJK：exact-only 下必须是精确词元，而不是 `字*`。
+        var single = SearchPlanCompiler.Compile(
+            new SearchRequest { Query = "爱" }, Analyzer.AnalyzeQuery("爱"), meta,
+            Get(SchemeIds.Minimal));
+        var singleExpression = single.Steps[0].Expression ?? "";
+        Program.Check("Q5: minimal@1 单字不做 字* 改写",
+            singleExpression.Contains("\"爱\"", StringComparison.Ordinal)
+            && !singleExpression.Contains('*'), singleExpression);
+        Program.Check("Q5: minimal@1 单字 kind=Exact",
+            single.Steps[0].Kind == MatchKind.Exact, single.Steps[0].Kind.ToString());
+
+        // fast / default / recall 仍允许前缀（与改前逐字节一致）——「我爱你」的末词与单字都带 *。
+        foreach (var id in new[] { SchemeIds.Fast, SchemeIds.Default, SchemeIds.Recall })
+        {
+            var plan = SearchPlanCompiler.Compile(
+                new SearchRequest { Query = "我爱你" }, Analyzer.AnalyzeQuery("我爱你"), meta, Get(id));
+            var expression = plan.Steps[0].Expression ?? "";
+            Program.Check($"Q5: {id} 仍保留前缀",
+                plan.IncludePrefix && expression.Contains('*'), expression);
+            Program.Check($"Q5: {id}「我爱你」表达式与默认编译一致",
+                expression == SearchQuery.CompileMatch(
+                    Analyzer.AnalyzeQuery("我爱你"), metadata: false),
+                expression);
+        }
+    }
+
     private static void SchemeVectors()
     {
         var dir = ResolveVectorDir();
@@ -291,6 +361,15 @@ internal static class SchemeRegistryTests
             Program.Check($"{id2} {id} 只含 lexical", forbidden.Length == 0,
                 string.Join(',', forbidden));
         }
+
+        // Q5：minimal@1 是 exact-only——向量集里每一条都不得出现 `*`。
+        var minimalPlan = SearchPlanCompiler.Compile(
+            request, Analyzer.AnalyzeQuery(query), meta, Get(SchemeIds.Minimal));
+        var stars = minimalPlan.Steps
+            .Where(step => step.Expression?.Contains('*') == true)
+            .Select(step => step.Id)
+            .ToArray();
+        Program.Check($"{id} minimal@1 无前缀", stars.Length == 0, string.Join(',', stars));
     }
 
     private static SearchScheme Get(string id)

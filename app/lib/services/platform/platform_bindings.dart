@@ -72,6 +72,8 @@ const int aplEventTrayMenuCommand = 12;
 const int aplEventSessionEnd = 13;
 const int aplEventWindowCloseRequest = 14;
 
+/// 契约版本 11：新增 `apl_window_get_size`（窗口逻辑尺寸读取，与 set_size 同口径）；
+/// 纯加法，事件 / 能力位 / 既有符号不变。
 /// 契约版本 10：新增窗口控制 API（`apl_window_*`，能力位
 /// `APL_CAP_WINDOW_CONTROL`）与 `APL_EVENT_WINDOW_CLOSE_REQUEST` 关闭请求事件；
 /// Dart 侧窗口控制不再经第三方窗口插件。
@@ -79,7 +81,7 @@ const int aplEventWindowCloseRequest = 14;
 /// 三端改为原生事件驱动，Dart 不再用第三方插件监听窗口状态。
 /// 版本 8：新增 `APL_EVENT_SESSION_END` / `APL_CAP_SESSION_END`（系统关机/注销事件）。
 /// 版本 7：移除 `apl_open_url` / `APL_CAP_OPEN_URL`（破坏性 ABI 变更）。
-const int aplAbiVersion = 10;
+const int aplAbiVersion = 11;
 
 /// 窗口状态 flags（对齐 `APL_WINDOW_FLAG_*`）。
 const int aplWindowFlagMinimized = 1 << 0;
@@ -299,6 +301,7 @@ typedef _AplWindowGetPositionC = Int32 Function(
   Pointer<Int32> x,
   Pointer<Int32> y,
 );
+typedef _AplWindowGetSizeC = Int32 Function(Pointer<Int32> w, Pointer<Int32> h);
 typedef _AplWindowSetPositionC = Int32 Function(Int32 x, Int32 y);
 typedef _AplWindowStartDragC = Int32 Function();
 typedef _AplWindowStartResizeC = Int32 Function(Int32 edge);
@@ -392,6 +395,7 @@ typedef _AplWindowGetPositionD = int Function(
   Pointer<Int32> x,
   Pointer<Int32> y,
 );
+typedef _AplWindowGetSizeD = int Function(Pointer<Int32> w, Pointer<Int32> h);
 typedef _AplWindowSetPositionD = int Function(int x, int y);
 typedef _AplWindowStartDragD = int Function();
 typedef _AplWindowStartResizeD = int Function(int edge);
@@ -655,6 +659,10 @@ class PlatformBindings {
           .lookupFunction<_AplWindowSetPositionC, _AplWindowSetPositionD>(
             'apl_window_set_position',
           ),
+      _windowGetSizeFn = lib
+          .lookupFunction<_AplWindowGetSizeC, _AplWindowGetSizeD>(
+            'apl_window_get_size',
+          ),
       _windowStartDragFn = lib
           .lookupFunction<_AplWindowStartDragC, _AplWindowStartDragD>(
             'apl_window_start_drag',
@@ -756,6 +764,7 @@ class PlatformBindings {
   final _AplWindowSetDecorD _windowSetDecorFn;
   final _AplWindowGetPositionD _windowGetPositionFn;
   final _AplWindowSetPositionD _windowSetPositionFn;
+  final _AplWindowGetSizeD _windowGetSizeFn;
   final _AplWindowStartDragD _windowStartDragFn;
   final _AplWindowStartResizeD _windowStartResizeFn;
   final _AplWindowRequestCloseD _windowRequestCloseFn;
@@ -1013,6 +1022,10 @@ class PlatformBindings {
       _windowGetPositionFn(x, y);
 
   int windowSetPosition(int x, int y) => _windowSetPositionFn(x, y);
+
+  /// ABI v11：逻辑尺寸（与 `windowSetSize` 同口径）。
+  int windowGetSize(Pointer<Int32> w, Pointer<Int32> h) =>
+      _windowGetSizeFn(w, h);
 
   /// 原生标题栏拖拽（鼠标按下时调用）。
   int windowStartDrag() => _windowStartDragFn();

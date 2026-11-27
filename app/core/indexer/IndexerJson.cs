@@ -49,6 +49,16 @@ public sealed class IndexerOptions
     /// </summary>
     public bool InitialsLyrics { get; set; }
 
+    /// <summary>
+    /// 没有脏曲时是否仍做一次有界维护合并（S7，默认 true）。
+    ///
+    /// <para>死行比例 ≥20% 或段数 ≥24 时，即使本次没有任何变更，也调用
+    /// <see cref="EraStore.IncrementalUpdater.Maintain"/> 回收墓碑行 / 小段。这样
+    /// 「上次增量提交后没再改动曲库」不会让死行一直占着磁盘；没有达到阈值时
+    /// <c>Maintain</c> 只读 Manifest 后立即返回，不写文件。</para>
+    /// </summary>
+    public bool AutoMaintain { get; set; } = true;
+
     /// <summary>内部批量事务条数（0 = 使用存储默认）。</summary>
     public int Batch { get; set; }
 
@@ -148,8 +158,10 @@ public sealed class IndexerResult
     public int LyricsTruncatedTracks { get; set; }
 
     /// <summary>
-    /// 因超过 EraFormat.MaxTermBytes（255B）被跳过的词条数（超长无分隔拉丁词 / 首字母串）。
-    /// 只跳过该词条，不影响其余字段与整库构建；Dart 目前不消费，仅诊断。
+    /// 历史字段：旧实现因词条超过 <see cref="EraStore.EraFormat.MaxTermBytes"/>（255B）
+    /// 丢弃词条时记录数量。S3 起超长词条由 <see cref="EraStore.TermCodec"/> 规范化为
+    /// 不透明哈希词条（<c>0x01 + MD5 hex</c>，33B）后正常入库，不再丢弃，因此恒为 0；
+    /// 字段名保留以维持 JSON / ABI 兼容（Dart 目前不消费，仅诊断）。
     /// </summary>
     public int OversizeTokens { get; set; }
 }

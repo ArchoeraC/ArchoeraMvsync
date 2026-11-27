@@ -521,9 +521,10 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           # 固定 Flutter 版本（与本地开发/`pubspec.lock` 对齐），不要用 channel: stable：
-          # 依赖链（window_manager 0.7 → nativeapi 0.6）要求 Dart ^3.14 / Flutter ≥3.50；
-          # 不要改回 channel: stable（会随上游漂移，2026-11-12 曾因此全平台失败）。
-          # 升级前请同时确认 nativeapi / cnativeapi / window_manager 三者的 SDK 约束。
+          # 项目按该版本校准 `dart analyze` / `flutter test` / 三端构建；channel 会随上游漂移，
+          # 2026-11-12 曾因此全平台失败。升级前先在本机跑通 analyze + test 再改这里。
+          # 注：第三方窗口插件（window_manager / nativeapi / cnativeapi）已于 2026-11-26
+          # ABI v10 整体移除，窗口状态与控制都走 app/native/platform 桥接。
           flutter-version: '3.50.1'
           cache: true
 
@@ -631,7 +632,7 @@ jobs:
       - name: Flutter pub get
         working-directory: app
         # --enforce-lockfile：lockfile 与解析结果不一致时立即失败（否则 pub 会
-        # 静默重新解析，把 nativeapi 升到需要更新 Dart 的 0.5.10，见 build-release.sh）。
+        # 静默重新解析传递依赖，让三端构建与本地锁文件漂移）。
         run: flutter pub get --enforce-lockfile
 
       - name: Analyze

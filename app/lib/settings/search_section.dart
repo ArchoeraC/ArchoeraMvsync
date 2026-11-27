@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../../l10n/l10n.dart';
+import '../../services/search/search_index_diagnostics.dart';
 import '../../services/search/search_models.dart';
 import '../../services/search/search_service.dart';
 import '../../stores/app_prefs.dart';
@@ -52,6 +53,8 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
   /// [SearchService.progress]，需显式刷新）。
   Future<void> _ensureIndexThenRefresh() async {
     await SearchService.instance.ensureIndex();
+    // 索引打开时服务内部已缓存健康快照；这里再按需补一次（后台 isolate，不阻塞 UI）。
+    await SearchService.instance.refreshHealth();
     if (mounted) setState(() {});
   }
 
@@ -231,6 +234,7 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
               ),
             ),
           ),
+        ..._buildDiagnostics(l10n, service),
         const Divider(height: 6),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -274,11 +278,104 @@ class _SearchSectionState extends ConsumerState<SearchSection> {
     );
   }
 
+  /// 诊断行：索引世代 / 版本、数据包状态、歌词置信度分布（E5）。
+  ///
+  /// 仅在索引**就绪**且健康快照可解析时显示；缺失字段对应的片段（乃至整行）
+  /// 直接省略，旧原生库 / 未就绪载荷不会显示空值或占位符。数据全部来自
+  /// [SearchService.healthSnapshot] 缓存，这里不做 FFI / 文件 IO。
+  List<Widget> _buildDiagnostics(
+    AppLocalizations l10n,
+    SearchService? service,
+  ) {
+    final status = service?.status;
+    if (service == null || status == null) return const [];
+    if (status.state != LocalSearchState.ready) return const [];
+    final diagnostics = SearchIndexDiagnostics.fromHealth(
+      service.healthSnapshot,
+    );
+    if (diagnostics == null) return const [];
+
+    final rows = <Widget>[];
+
+    // 世代 / 格式 / 分析器版本：有哪个显示哪个。
+    final versionParts = <String>[
+      if (diagnostics.generation != null)
+        l10n.settingsSearchIndexDiagGen(gen: diagnostics.generation!),
+      if (diagnostics.schemaVersion != null)
+        l10n.settingsSearchIndexDiagSchema(version: diagnostics.schemaVersion!),
+      if (diagnostics.analyzerVersion != null)
+        l10n.settingsSearchIndexDiagAnalyzer(
+          version: diagnostics.analyzerVersion!,
+        ),
+    ];
+    if (versionParts.isNotEmpty) {
+      rows.add(
+        SettingTile(
+          icon: EtaIcons.informationOutline,
+          title: l10n.settingsSearchIndexDiagVersions,
+          subtitle: versionParts.join(' · '),
+          trailing: const SizedBox(width: 8),
+        ),
+      );
+    }
+
+    // 数据包：短 id + 同源 / 存在 / 基础表状态；降级能力非零时追加计数。
+    final packParts = <String>[
+      if (diagnostics.shortDataPackId != null)
+        l10n.settingsSearchIndexDiagPackId(id: diagnostics.shortDataPackId!),
+      if (diagnostics.dataPackMatch != null)
+        diagnostics.dataPackMatch!
+            ? l10n.settingsSearchIndexDiagPackMatch
+            : l10n.settingsSearchIndexDiagPackMismatch,
+      if (diagnostics.dataPackPresent != null)
+        diagnostics.dataPackPresent!
+            ? l10n.settingsSearchIndexDiagPackPresent
+            : l10n.settingsSearchIndexDiagPackMissing,
+      if (diagnostics.dataPackFoundationOk != null)
+        diagnostics.dataPackFoundationOk!
+            ? l10n.settingsSearchIndexDiagPackFoundation
+            : l10n.settingsSearchIndexDiagPackFoundationBad,
+      if (diagnostics.capabilityIssueCount > 0)
+        l10n.settingsSearchIndexDiagDegraded(
+          count: diagnostics.capabilityIssueCount,
+        ),
+    ];
+    if (packParts.isNotEmpty) {
+      rows.add(
+        SettingTile(
+          icon: EtaIcons.foldersOutline,
+          title: l10n.settingsSearchIndexDiagDataPack,
+          subtitle: packParts.join(' · '),
+          trailing: const SizedBox(width: 8),
+        ),
+      );
+    }
+
+    // 歌词分层置信度：全 0（无歌词索引）时不显示，避免噪声行。
+    if (diagnostics.confidenceTotal > 0) {
+      rows.add(
+        SettingTile(
+          icon: EtaIcons.chartBarOutline,
+          title: l10n.settingsSearchIndexDiagLyrics,
+          subtitle: l10n.settingsSearchIndexDiagConfidence(
+            high: diagnostics.confidenceHigh,
+            medium: diagnostics.confidenceMedium,
+            low: diagnostics.confidenceLow,
+            none: diagnostics.confidenceNone,
+          ),
+          trailing: const SizedBox(width: 8),
+        ),
+      );
+    }
+    return rows;
+  }
+
   /// 强制全量重建（后台 isolate；进度经 [SearchService.progress] 回传）。
   Future<void> _rebuild() async {
     final l10n = context.l10n;
     toast(l10n.settingsSearchIndexRebuildStarted);
     await SearchService.instance.rebuild();
+    await SearchService.instance.refreshHealth();
     if (mounted) setState(() {});
   }
 

@@ -93,6 +93,9 @@ internal sealed record Step(
 ///
 /// <para><see cref="MinMatch"/> 在 S1 直接取 <c>request.MinExact</c>（v7 兼容字段）；
 /// 设计文档 §3.5 的分段曲线（n=1→1 / n=2→2 / n≥3→ceil(2n/3)）要等 S2 才改变行为。</para>
+///
+/// <para><c>IncludePrefix</c>（Q5）由方案是否声明 <see cref="SchemeMatchers.Prefix"/> 决定，
+/// 执行器解析延迟表达式（模糊趟）时据此关闭 <c>*</c>；<c>minimal@1</c> 因此是纯精确方案。</para>
 /// </summary>
 internal sealed record QueryPlan(
     IReadOnlyList<QueryTerm> Terms,
@@ -101,4 +104,5 @@ internal sealed record QueryPlan(
     int MinMatch,
     string SchemeId,
     IReadOnlyList<string> MissingCaps,
-    SearchPolicy Policy);
+    SearchPolicy Policy,
+    bool IncludePrefix = true);

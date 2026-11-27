@@ -10,7 +10,7 @@
 /// 走本契约（它既不监听也不控制窗口）。
 ///
 /// ABI v9 起 `flags` 是权威状态值；ABI v10 起新增窗口控制 API 与关闭请求事件
-/// （能力位 `APL_CAP_WINDOW_CONTROL`）。
+/// （能力位 `APL_CAP_WINDOW_CONTROL`）；ABI v11 起补 `size`（`apl_window_get_size`）。
 ///
 /// 桥接未置能力位（纯 Wayland 等）时由工厂注入 [NoopSystemWindow]，调用方
 /// 可回退既有路径（Noop 全部控制返回 false、事件为空流）。
@@ -89,6 +89,26 @@ class WindowCloseRequest {
   final WindowCloseReason reason;
 }
 
+/// 窗口逻辑尺寸（DIP；ABI v11 `apl_window_get_size`）。
+///
+/// 与 [SystemWindow.setSize] 同一口径：Windows 为含边框外框、Linux/macOS 为内容区。
+class WindowSize {
+  const WindowSize(this.width, this.height);
+
+  final int width;
+  final int height;
+
+  @override
+  bool operator ==(Object other) =>
+      other is WindowSize && other.width == width && other.height == height;
+
+  @override
+  int get hashCode => Object.hash(width, height);
+
+  @override
+  String toString() => 'WindowSize($width×$height)';
+}
+
 /// 窗口状态与控制契约。
 abstract interface class SystemWindow {
   /// 开/关事件订阅。返回是否成功生效（失败时调用方仅 debug 日志回落，
@@ -142,7 +162,12 @@ abstract interface class SystemWindow {
   /// 当前窗口位置（逻辑像素；桥接不可用/查询失败返回 null）。
   ({int x, int y})? get position;
 
+  /// 移动窗口到逻辑坐标。原生侧会做越界矫正：与任一显示器可用区相交即原样
+  /// 应用（多屏 / 负坐标布局不受影响），完全越界时才拉回最近的那块屏。
   bool setPosition(int x, int y);
+
+  /// 当前窗口尺寸（ABI v11；与 [setSize] 同口径，失败 / 不可用返回 null）。
+  WindowSize? get size;
 
   /// 原生标题栏拖拽（鼠标按下时调用；自绘标题栏 / 无边框窗口）。
   bool startDrag();
@@ -150,8 +175,13 @@ abstract interface class SystemWindow {
   /// 原生边缘缩放（鼠标按下时调用）。
   bool startResize(WindowResizeEdge edge);
 
-  /// 请求关闭：原生只投递 [WindowCloseRequest]，不自行关窗 / 退出。
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close});
+  /// 请求关闭：原生只投递 [WindowCloseRequest]（**恒为 [WindowCloseReason.close]**），
+  /// 不自行关窗 / 退出。
+  ///
+  /// 契约刻意不带 reason 参数：`apl_window_request_close` 没有 reason 入参，多一个
+  /// Dart 参数只会「看起来能区分关闭/退出、实际被丢弃」。需要「明确退出」语义时
+  /// 直接走 `quitApplication`（落盘后 `exit(0)`），不要寄望经此接口表达意图。
+  bool requestClose();
 
   /// 释放底层资源；幂等。
   Future<void> dispose();
@@ -222,14 +252,16 @@ class NoopSystemWindow implements SystemWindow {
   bool setPosition(int x, int y) => false;
 
   @override
+  WindowSize? get size => null;
+
+  @override
   bool startDrag() => false;
 
   @override
   bool startResize(WindowResizeEdge edge) => false;
 
   @override
-  bool requestClose({WindowCloseReason reason = WindowCloseReason.close}) =>
-      false;
+  bool requestClose() => false;
 
   @override
   Future<void> dispose() async {}

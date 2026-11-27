@@ -146,6 +146,9 @@ extension _TrayIntegrationLogic on _TrayIntegrationState {
       Log.w('tray', '窗口隐藏失败（桥接无控制能力），保持窗口可见');
       return;
     }
+    // 隐藏到托盘后进程会长期常驻，可能被系统直接杀掉而走不到统一退出；
+    // 这里先落一次几何（最大化 / 全屏不写），下次启动才能回到原位。
+    saveWindowGeometry(ProviderScope.containerOf(context));
     ref.read(powerSaverProvider).setHidden(true);
   }
 

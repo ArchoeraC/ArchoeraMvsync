@@ -161,6 +161,18 @@ internal static class SearchQuery
     public const int MinPrefixTokenLength = 3;
 
     /// <summary>
+    /// **单音节拼音前缀**（<see cref="PinyinBranch"/> 的 <c>*</c>）的最小长度（Q3）。
+    ///
+    /// <para>与 <see cref="MinPrefixTokenLength"/> 分开：后者是字面末词 / 模糊变体的前缀门槛，
+    /// 本轮不动；本门槛只作用于「一个音节就是整个查询」的拼音支。3 字符完整音节
+    /// （<c>wan</c> / <c>shi</c>）加前缀会扩到**另一个音节**（<c>wang</c> / <c>shine</c>），
+    /// 5k 合成库实测 df 约翻倍（见 <c>docs/local-search-indexer-t314-gate.md</c> Q3）；
+    /// 但同一个门槛也是「边打边搜」3 字符部分拼音（<c>zho</c> → <c>zhong</c>）的召回来源，
+    /// 默认保持 3，抬高门槛属产品决策。</para>
+    /// </summary>
+    public const int MinPinyinPrefixTokenLength = MinPrefixTokenLength;
+
+    /// <summary>
     /// 替换容错的受限字母表（编辑距离 ≤1 的替换集合，刻意不用完整 26 字母）。
     /// 依据「元音误拼 + 键盘邻键 + 视觉 / 语音混淆」，每个字母只给少量候选。
     /// </summary>
@@ -212,8 +224,15 @@ internal static class SearchQuery
         ("ing", "in"),
     };
 
-    /// <summary>把单个词元转义为 FTS5 双引号字符串（内部 <c>"</c> 翻倍）。</summary>
-    public static string Quote(string token) => "\"" + token.Replace("\"", "\"\"") + "\"";
+    /// <summary>
+    /// 把单个词元转义为 FTS5 双引号字符串（内部 <c>"</c> 翻倍）。
+    ///
+    /// <para>超长单 token 先经 <see cref="EraStore.TermCodec.Canonicalize"/> 换成与索引侧同源的
+    /// 不透明词条（<c>0x01 + MD5 hex</c>），表达式解析器因而只会看到词典里真实存在的词条；
+    /// 含空白的短语字符串（多个词条拼接）原样保留。</para>
+    /// </summary>
+    public static string Quote(string token)
+        => "\"" + EraStore.TermCodec.Canonicalize(token).Replace("\"", "\"\"") + "\"";
 
     /// <summary>编译主趟表达式；无可匹配内容返回 <c>null</c>。</summary>
     /// <param name="lyricsInitials">
@@ -221,18 +240,28 @@ internal static class SearchQuery
     /// <c>true</c> 保持纯编译 / 黄金向量调用方的旧行为；真实查询由计划编译器按
     /// Manifest 选项位传入。
     /// </param>
+    /// <param name="includePrefix">
+    /// 是否允许前缀 <c>*</c>（Q5）：由方案是否声明 <see cref="SchemeMatchers.Prefix"/>
+    /// 决定。为 <c>false</c> 时主表达式**不含任何** <c>*</c>（末词前缀、单字前缀改写、
+    /// 单音节拼音前缀全部关闭），让 <c>minimal@1</c> 真正只做精确匹配。
+    /// 默认 <c>true</c> 保持既有调用方（黄金向量）字节不变。
+    /// </param>
+    /// <param name="minPinyinPrefixLength">
+    /// 单音节拼音前缀的最小长度（Q3）；默认取 <see cref="MinPinyinPrefixTokenLength"/>。
+    /// </param>
     public static string? CompileMatch(
         QueryTokens tokens, bool metadata, bool includeCrossLingual = false,
-        bool lyricsInitials = true)
+        bool lyricsInitials = true, bool includePrefix = true,
+        int minPinyinPrefixLength = MinPinyinPrefixTokenLength)
     {
         var branches = new List<string>();
-        Add(branches, LexicalBranch(tokens.Lexical));
+        Add(branches, LexicalBranch(tokens.Lexical, includePrefix));
         var singleChar = RestrictSingleCharToMetadata(tokens);
         if (!singleChar && AllowReadingBranch(tokens))
         {
             // 单字查询已由下面的列门控处理（拉丁单字经 initials_meta_tok 命中），
             // 这里只负责多字查询的拼音 / 首字母支。
-            Add(branches, PinyinBranch(tokens));
+            Add(branches, PinyinBranch(tokens, includePrefix, minPinyinPrefixLength));
             Add(branches, InitialsBranch(tokens, lyricsInitials));
             // 用户直接键入的首字母串（`wan` / `wanzg`）按 bigram 匹配首字母列（T3.9）。
             Add(branches, LatinInitialsBranch(tokens, lyricsInitials));
@@ -249,7 +278,8 @@ internal static class SearchQuery
     }
 
     /// <summary>仅编译词法支（不含拼音 / 首字母），供字段亲和度探测等诊断用途。</summary>
-    public static string? CompileLexical(QueryTokens tokens) => LexicalBranch(tokens.Lexical);
+    public static string? CompileLexical(QueryTokens tokens, bool includePrefix = true)
+        => LexicalBranch(tokens.Lexical, includePrefix);
 
     /// <summary>跨语言候选分支（T1）：候选逐字加引号后 OR；无候选返回 <c>null</c>。</summary>
     public static string? CompileCrossLingual(QueryTokens tokens, bool metadata)
@@ -267,7 +297,8 @@ internal static class SearchQuery
     /// 至多 <see cref="MaxPinyinVariantsPerSyllable"/> 个变体（原形 + 声母 + 韵母 + 两者组合），
     /// 同一音节内 <c>OR</c>，音节之间仍 <c>AND</c>。只出现在兜底趟，不增加主趟成本。
     /// </summary>
-    public static string? CompilePinyinLoose(QueryTokens tokens, bool metadata)
+    public static string? CompilePinyinLoose(
+        QueryTokens tokens, bool metadata, bool includePrefix = true)
     {
         // 缺读音字的 CJK 查询不可做「音节位置无关 AND」：少一个音节就退化成高频单音节。
         if (tokens.HasCjk && !tokens.PinyinComplete) return null;
@@ -290,7 +321,9 @@ internal static class SearchQuery
         var chunks = new List<string>(clean.Count);
         for (var i = 0; i < clean.Count; i++)
         {
-            var prefix = i == clean.Count - 1 && clean[i].Length >= MinPrefixTokenLength;
+            // 兜底趟的末音节前缀沿用字面门槛（MinPrefixTokenLength）：这是「多音节短语
+            // 放宽」，不是 Q3 讨论的「单音节前缀扩到另一个音节」，右界必须更有判别力。
+            var prefix = includePrefix && i == clean.Count - 1 && clean[i].Length >= MinPrefixTokenLength;
             var variants = variantsPerSyllable[i];
             if (variants.Count == 1)
             {
@@ -419,8 +452,8 @@ internal static class SearchQuery
     /// <summary>编译模糊（容错）表达式：拉丁 / 数字词元换成编辑距离 ≤1 变体 OR 组。</summary>
     public static string? CompileFuzzy(
         QueryTokens tokens, bool metadata, int maxVariants = DefaultMaxFuzzyVariants,
-        bool lyricsInitials = true)
-        => CompileFuzzy(tokens, metadata, vocabulary: null, maxVariants, lyricsInitials);
+        bool lyricsInitials = true, bool includePrefix = true)
+        => CompileFuzzy(tokens, metadata, vocabulary: null, maxVariants, lyricsInitials, includePrefix);
 
     /// <summary>
     /// 同上，但用索引词表（T1-8）过滤候选：只保留索引里确实存在、且与查询词
@@ -428,11 +461,12 @@ internal static class SearchQuery
     /// </summary>
     public static string? CompileFuzzy(
         QueryTokens tokens, bool metadata, IReadOnlyList<string>? vocabulary,
-        int maxVariants = DefaultMaxFuzzyVariants, bool lyricsInitials = true)
+        int maxVariants = DefaultMaxFuzzyVariants, bool lyricsInitials = true,
+        bool includePrefix = true, int minPinyinPrefixLength = MinPinyinPrefixTokenLength)
     {
         var branches = new List<string>();
-        Add(branches, FuzzyLexicalBranch(tokens.Lexical, maxVariants, vocabulary));
-        Add(branches, PinyinBranch(tokens));
+        Add(branches, FuzzyLexicalBranch(tokens.Lexical, maxVariants, vocabulary, includePrefix));
+        Add(branches, PinyinBranch(tokens, includePrefix, minPinyinPrefixLength));
         Add(branches, InitialsBranch(tokens, lyricsInitials));
         Add(branches, LatinInitialsBranch(tokens, lyricsInitials));
         return JoinBranches(branches, metadata);
@@ -537,8 +571,12 @@ internal static class SearchQuery
     /// <summary>
     /// 字面支的块划分（**唯一规则**）：连续 CJK bigram 合并为短语块；末词 ≥3 字符可加前缀；
     /// 独立单字 CJK 改前缀（索引里已无中间字 unigram，analyzer v13）。
+    ///
+    /// <para><paramref name="includePrefix"/> 为 <c>false</c> 时（Q5：
+    /// <c>minimal@1</c> 只声明 exact）不做**任何**前缀改写：末词保持精确词元，
+    /// 独立单字也不再写成 <c>字*</c>。</para>
     /// </summary>
-    private static List<LexicalChunk> LexicalChunks(List<string> clean)
+    private static List<LexicalChunk> LexicalChunks(List<string> clean, bool includePrefix = true)
     {
         var chunks = new List<LexicalChunk>();
         if (clean.Count == 0) return chunks;
@@ -563,7 +601,7 @@ internal static class SearchQuery
         }
 
         var last = clean[^1];
-        if (IsPrefixable(last) && last.Length >= MinPrefixTokenLength
+        if (includePrefix && IsPrefixable(last) && last.Length >= MinPrefixTokenLength
             && !chunks[^1].IsPhrase)
         {
             chunks[^1] = chunks[^1] with { IsPrefix = true };
@@ -571,6 +609,8 @@ internal static class SearchQuery
 
         // 索引里已无「中间字」的 unigram（analyzer v13），单字必须改走前缀 `字*`，
         // 才能命中以该字开头的 bigram。只改独立成块的单字，短语块保持原样。
+        // Q5：exact-only 方案（minimal@1）不做该改写——它只允许「索引里真实存在的词元」。
+        if (!includePrefix) return chunks;
         for (var k = 0; k < chunks.Count; k++)
         {
             if (chunks[k].IsPhrase || chunks[k].Terms.Count != 1) continue;
@@ -580,9 +620,9 @@ internal static class SearchQuery
         return chunks;
     }
 
-    private static string? LexicalBranch(IReadOnlyList<string> terms)
+    private static string? LexicalBranch(IReadOnlyList<string> terms, bool includePrefix = true)
     {
-        var chunks = LexicalChunks(Clean(terms));
+        var chunks = LexicalChunks(Clean(terms), includePrefix);
         if (chunks.Count == 0) return null;
 
         var parts = new List<string>(chunks.Count);
@@ -621,7 +661,7 @@ internal static class SearchQuery
     /// （见 <see cref="CompileMatch"/> 的外层列集合），召回的「形状」仍是同一套词元规则，
     /// 因此本函数只吃 <see cref="QueryTokens"/>，保持纯函数。</para>
     /// </summary>
-    public static QueryShape ShapeOf(QueryTokens tokens)
+    public static QueryShape ShapeOf(QueryTokens tokens, bool includePrefix = true)
     {
         var clean = Clean(tokens.Lexical);
 
@@ -638,7 +678,7 @@ internal static class SearchQuery
             return new QueryShape(QueryShapeKind.Initials, Terms: 1);
 
         // 3) 字面形状。
-        var chunks = LexicalChunks(clean);
+        var chunks = LexicalChunks(clean, includePrefix);
         if (chunks.Count == 0)
         {
             // 无字面词元（标点 / 纯空白）：退回拼音 / 首字母支的形状。
@@ -776,6 +816,7 @@ internal static class SearchQuery
     private static bool IsInitialsShaped(string token)
     {
         if (!IsAsciiLowerWord(token) || token.Length < MinInitialsBranchLength) return false;
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return false;
         if (Analyzer.InitialsToBigrams(token).Length == 0) return false;
         var vowels = 0;
         foreach (var ch in token)
@@ -786,14 +827,22 @@ internal static class SearchQuery
         return true;
     }
 
-    private static string? PinyinBranch(QueryTokens tokens)
+    /// <summary>单音节拼音支（Q3 的可测试入口：视图与 <see cref="CompileMatch"/> 同源）。</summary>
+    internal static string? PinyinBranch(
+        QueryTokens tokens, bool includePrefix = true,
+        int minPinyinPrefixLength = MinPinyinPrefixTokenLength)
     {
         // 缺读音字的 CJK 查询：拼音整段串会少音节，退化成高频单音节宽命中。
         if (tokens.HasCjk && !tokens.PinyinComplete) return null;
         var clean = Clean(tokens.Pinyin);
         if (clean.Count == 0) return null;
         if (clean.Count == 1)
-            return $"{{{PinyinColumns}}} : {QuotedAnd(clean, clean[^1].Length >= MinPrefixTokenLength)}";
+        {
+            // Q3：单音节前缀门槛独立于字面门槛，3 字符完整音节（wan）加前缀会扩到
+            // 另一个音节（wang）；同一门槛也保「边打边搜」的部分拼音（zho → zhong）。
+            var prefix = includePrefix && clean[^1].Length >= minPinyinPrefixLength;
+            return $"{{{PinyinColumns}}} : {QuotedAnd(clean, prefix)}";
+        }
         return $"{{{PinyinColumns}}} : {Quote(string.Join(' ', clean))}";
     }
 
@@ -823,6 +872,8 @@ internal static class SearchQuery
         foreach (var token in tokens.Lexical)
         {
             if (token.Length < MinInitialsBranchLength || !IsAsciiLowerWord(token)) continue;
+            // 超长词条是精确哈希词条：不按首字母 bigram 展开（不会命中，且表达式巨大）。
+            if (EraStore.TermCodec.NeedsCanonicalization(token)) continue;
             runs.Add(token);
         }
         return InitialsExpression(runs, lyricsInitials);
@@ -888,7 +939,8 @@ internal static class SearchQuery
     private const int MaxExactTermsPerVariant = 32;
 
     private static string? FuzzyLexicalBranch(
-        IReadOnlyList<string> terms, int maxVariants, IReadOnlyList<string>? vocabulary)
+        IReadOnlyList<string> terms, int maxVariants, IReadOnlyList<string>? vocabulary,
+        bool includePrefix = true)
     {
         var clean = Clean(terms);
         if (clean.Count == 0) return null;
@@ -904,7 +956,7 @@ internal static class SearchQuery
         var groups = new Dictionary<int, List<string>>();
         foreach (var i in expandable)
         {
-            var prefix = i == clean.Count - 1
+            var prefix = includePrefix && i == clean.Count - 1
                 && IsPrefixable(clean[i])
                 && clean[i].Length >= MinPrefixTokenLength;
             if (!useVocabulary)
@@ -916,7 +968,7 @@ internal static class SearchQuery
             }
 
             var limited = vocabulary!.Count > 0 && maxVariants > 0
-                ? VocabularyExpressions(clean[i], vocabulary, maxVariants)
+                ? VocabularyExpressions(clean[i], vocabulary, maxVariants, includePrefix)
                 : new List<string>();
             groups[i] = limited;
         }
@@ -926,7 +978,7 @@ internal static class SearchQuery
         {
             // 预算超限：只扩展最后一个可扩展词元（并截断），其余退回精确。
             var last = expandable[^1];
-            var lastPrefix = last == clean.Count - 1
+            var lastPrefix = includePrefix && last == clean.Count - 1
                 && IsPrefixable(clean[last])
                 && clean[last].Length >= MinPrefixTokenLength;
             var full = EditDistanceOneVariants(clean[last])
@@ -950,7 +1002,7 @@ internal static class SearchQuery
                 continue;
             }
 
-            var prefix = index == clean.Count - 1
+            var prefix = includePrefix && index == clean.Count - 1
                 && IsPrefixable(clean[index])
                 && clean[index].Length >= MinPrefixTokenLength;
             if (groups.TryGetValue(index, out var list) && list.Count > 0)
@@ -983,7 +1035,7 @@ internal static class SearchQuery
     /// 再用 Myers 位并行复核 Damerau 距离 ≤1；前缀下词条过多时退回前缀匹配（保留旧召回）。
     /// </summary>
     private static List<string> VocabularyExpressions(
-        string word, IReadOnlyList<string> vocabulary, int maxVariants)
+        string word, IReadOnlyList<string> vocabulary, int maxVariants, bool includePrefix = true)
     {
         var output = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -1005,6 +1057,8 @@ internal static class SearchQuery
             }
 
             // 变体过短 / 过于常见：前缀匹配保留旧召回（否则要枚举上千词条）。
+            // Q5：exact-only 方案不生成前缀形态——宁可不扩这一条变体，也不引入 `*`。
+            if (!includePrefix) continue;
             var expression = Quote(variant) + "*";
             if (seen.Add(expression) && output.Count < maxVariants) output.Add(expression);
         }
@@ -1024,7 +1078,7 @@ internal static class SearchQuery
     /// </summary>
     public static string? CompileDropTokens(
         QueryTokens tokens, string query, bool metadata, int dropIndex,
-        bool lyricsInitials = true)
+        bool lyricsInitials = true, bool includePrefix = true)
     {
         if (!AllowDropTokens) return null;
         var words = SplitQueryWords(query);
@@ -1041,10 +1095,10 @@ internal static class SearchQuery
         if (keptTokens.Lexical.Count == 0) return null;
 
         var expression = CompileMatch(
-            keptTokens, metadata, includeCrossLingual: false, lyricsInitials);
+            keptTokens, metadata, includeCrossLingual: false, lyricsInitials, includePrefix);
         if (expression is null) return null;
         var original = CompileMatch(
-            tokens, metadata, includeCrossLingual: false, lyricsInitials);
+            tokens, metadata, includeCrossLingual: false, lyricsInitials, includePrefix);
         return string.Equals(expression, original, StringComparison.Ordinal) ? null : expression;
     }
 
@@ -1132,10 +1186,17 @@ internal static class SearchQuery
     }
 
     /// <summary>末词编译为 <c>("tok" OR "tok"*)</c>，或纯前缀 <c>"tok"*</c>。</summary>
+    /// <remarks>
+    /// 超长词条规范化后是**精确**哈希词条：哈希没有词法前缀语义，不加 <c>*</c>
+    /// （对哈希做前缀扫描无害但纯属浪费，见 <see cref="IsPrefixable"/>）。
+    /// </remarks>
     private static string PrefixTerm(string token)
-        => PairExactWithPrefix
+    {
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return Quote(token);
+        return PairExactWithPrefix
             ? "(" + Quote(token) + " OR " + Quote(token) + "*)"
             : Quote(token) + "*";
+    }
 
     /// <summary>整串是否只由索引脚本（汉字 / 假名 / 谚文）构成（跨语言候选归属判定用）。</summary>
     private static bool IsCjkText(string text)
@@ -1242,14 +1303,20 @@ internal static class SearchQuery
             && runes.All(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
     }
 
-    /// <summary>拉丁 / 数字词元可加前缀：不含子串脚本字符即为真。</summary>
+    /// <summary>
+    /// 拉丁 / 数字词元可加前缀：不含子串脚本字符，且未超长（超长词条规范化后是精确的哈希
+    /// 词条，前缀没有意义，见 <see cref="EraStore.TermCodec"/>）。
+    /// </summary>
     private static bool IsPrefixable(string token)
-        => !token.EnumerateRunes().Any(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
+        => !EraStore.TermCodec.NeedsCanonicalization(token)
+            && !token.EnumerateRunes().Any(r => r.Value <= char.MaxValue && IsIndexedScript((char)r.Value));
 
     /// <summary>纯小写拉丁 / 数字词元（可做编辑距离扩展）；过短词不扩展，避免高频噪声。</summary>
+    /// <remarks>超长词条是精确的哈希词条：不做编辑距离扩展（否则要为 300+ 字节枚举数百个变体）。</remarks>
     private static bool IsFuzzyEligible(string token)
     {
         if (token.Length < MinFuzzyWordLength) return false;
+        if (EraStore.TermCodec.NeedsCanonicalization(token)) return false;
         foreach (var rune in token.EnumerateRunes())
         {
             var isLower = rune.Value >= 0x61 && rune.Value <= 0x7A;

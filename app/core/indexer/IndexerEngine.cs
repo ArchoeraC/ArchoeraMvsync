@@ -11,7 +11,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Archoera.Indexer;
 
-/// <summary>阶段一（脏集探测）轻量行：仅 <c>id/path/file_mtime</c>，**不含歌词 / 元数据大列**。</summary>
+/// <summary>
+/// 阶段一（脏集探测）轻量行：<c>id/path/file_mtime</c> + 元数据三列（算内容哈希用），
+/// **不含歌词大列**。
+/// </summary>
 internal sealed class TrackProbe
 {
     public string Id { get; init; } = "";
@@ -23,6 +26,21 @@ internal sealed class TrackProbe
 
     /// <summary><c>tracks.lrc_size</c>（scanner 写入的侧车聚合字节；0 = 无侧车 / 未探测）。</summary>
     public long LrcSize { get; init; }
+
+    /// <summary><c>tracks.title</c> 原始文本（S6 元数据哈希原料）。</summary>
+    public string TitleRaw { get; init; } = "";
+
+    /// <summary><c>tracks.artists</c> 原始 JSON 文本（S6 元数据哈希原料，不解析）。</summary>
+    public string ArtistsRaw { get; init; } = "";
+
+    /// <summary><c>tracks.album</c> 原始文本（S6 元数据哈希原料，不解析）。</summary>
+    public string AlbumRaw { get; init; } = "";
+
+    /// <summary>
+    /// 由三段原始文本算出的元数据内容哈希（<see cref="EraStore.MetaHash"/>，S6）。
+    /// 与 DocStore v6 的 <c>meta_hash</c> 同一定义；不符即判脏。
+    /// </summary>
+    public ulong MetaHash { get; init; }
 }
 
 /// <summary>曲库 <c>tracks</c> 行的分析期只读投影（阶段二按脏 id 取内容）。</summary>
@@ -33,6 +51,13 @@ internal sealed class TrackRecord
     public string Title { get; init; } = "";
     public string ArtistText { get; init; } = "";
     public string AlbumText { get; init; } = "";
+
+    /// <summary><c>tracks.artists</c> 原始 JSON 文本（S6 哈希原料；与 <see cref="ArtistText"/> 并存）。</summary>
+    public string ArtistsRaw { get; init; } = "";
+
+    /// <summary><c>tracks.album</c> 原始文本（S6 哈希原料；与 <see cref="AlbumText"/> 并存）。</summary>
+    public string AlbumRaw { get; init; } = "";
+
     public string Lyrics { get; init; } = "";
     public long Mtime { get; init; }
 
@@ -60,7 +85,8 @@ internal sealed class TrackRecord
 ///
 /// **两阶段**（设计文档 §2.2「增量 ≈ K 成正比」）：
 /// <list type="number">
-///   <item><b>脏集探测</b>：只读轻量列 <c>id/path/file_mtime</c>（不含 lyrics/title/artists/album），
+///   <item><b>脏集探测</b>：只读轻量列 <c>id/path/file_mtime</c> + 元数据三列
+///         <c>title/artists/album</c>（只为算内容哈希，不读歌词大列），
 ///         结合既有 DocStore 状态与 <c>.lrc</c> <c>(mtime,size)</c> 判定脏 <c>track_id</c>；
 ///         全量模式所有 id 皆脏。</item>
 ///   <item><b>取内容 + 分析</b>：仅按脏 id 分块取完整列（<c>WHERE id IN (…)</c>，块大小
@@ -70,6 +96,7 @@ internal sealed class TrackRecord
 /// 脏集规则（确定性，无 sleep / 轮询）：
 /// <list type="bullet">
 ///   <item>新增/变更 = <c>track_id</c> 不在索引，或 <c>file_mtime ≠ indexed_mtime</c>；</item>
+///   <item>元数据内容哈希（S6）与已索引不符：直接改 <c>title/artists/album</c> 而不碰音频文件也能发现；</item>
 ///   <item><c>.lrc</c> 侧车 <c>(mtime,size)</c> 与已索引不符（含子开关关→开 / 开→关的清理）；</item>
 ///   <item>Manifest 元数据版本 / analyzer 锚 / 拼音开关不一致 → 强制全量。</item>
 /// </list>
@@ -212,8 +239,6 @@ public sealed class IndexerEngine
         int processed = 0, indexed = 0, deleted = 0;
         // V6 护栏触发计数：layers = (曲目, 层) 维度；tracks = 受影响曲目数（去重）。
         int lyricsTruncatedLayers = 0, lyricsTruncatedTracks = 0;
-        // 超过 EraFormat.MaxTermBytes 被跳过的词条数（超长无分隔拉丁词 / 超长首字母串）。
-        int oversizeTokens = 0;
 
         void Fire(string phase, string current) => _progress?.Invoke(new IndexerProgress
         {
@@ -249,7 +274,9 @@ public sealed class IndexerEngine
                     isDirty = existing.Mtime != probe.Mtime
                         || (options.IndexLrc
                             ? existing.LrcMtime != probe.LrcMtime || existing.LrcSize != probe.LrcSize
-                            : existing.LrcMtime != 0 || existing.LrcSize != 0);
+                            : existing.LrcMtime != 0 || existing.LrcSize != 0)
+                        // S6：直接改 library.db 的元数据（不碰音频）时 file_mtime 不变，靠内容哈希发现。
+                        || existing.MetaHash != probe.MetaHash;
                 }
             }
 
@@ -285,9 +312,7 @@ public sealed class IndexerEngine
                         lyricsTruncatedTracks++;
                     }
                     profile.Add(tokens);
-                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
-                    oversizeTokens += oversize;
-                    eraDocs.Add(doc);
+                    eraDocs.Add(BuildEraDoc(track, tokens, lyricLines));
                     indexed++;
                     if (indexed % ProgressEvery == 0) Fire("index", item.Path);
                 }
@@ -328,7 +353,6 @@ public sealed class IndexerEngine
             profile = build.Profile;
             lyricsTruncatedLayers = build.TruncatedLayers;
             lyricsTruncatedTracks = build.TruncatedTracks;
-            oversizeTokens = build.OversizeTokens;
             var fullManifest = EraStore.StoreReader.TryReadManifest(eraPath);
             if (fullManifest is not null)
             {
@@ -422,6 +446,30 @@ public sealed class IndexerEngine
                 eraDead = inc.DeadDocs;
                 wroteEra = true;
             }
+            else if (options.AutoMaintain && eraPath is not null && File.Exists(eraPath))
+            {
+                // S7：没有任何脏曲 / 删除时，仍按阈值做一次有界维护（回收墓碑行与小段）。
+                // Maintain 先读 Manifest；未达阈值时不写文件，因此干净索引的重复运行仍零写入。
+                var meta = MetaFromProfile(profile, options);
+                var maintained = EraStore.IncrementalUpdater.Maintain(
+                    eraPath,
+                    new EraStore.IncrementalOptions
+                    {
+                        OptionsBits = BuildOptionsBits(meta),
+                        Capabilities = EffectiveCapabilities(meta),
+                        NoPositionFields = EraStore.BuildDefaults.CreateNoPositionFields(),
+                    });
+                eraMerged = maintained.Merged;
+                eraSegments = maintained.SegmentCount;
+                wroteEra = maintained.Merged;
+                if (maintained.Merged)
+                {
+                    Fire("maintain", maintained.SegmentCount.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
+                    Log.LogInfo("indexer",
+                        $"EraStore 无脏曲维护: 合并后 {maintained.SegmentCount} 段");
+                }
+            }
 
             var keep = EraStore.CurrentPointer.Read(eraDir);
             if (keep is not null) CleanupEraFiles(eraDir, keep);
@@ -443,13 +491,6 @@ public sealed class IndexerEngine
             {
                 Log.LogWarn("indexer", $"EraStore 全量重建也失败，下次运行重试: {inner.Message}");
             }
-        }
-
-        if (oversizeTokens > 0)
-        {
-            Log.LogWarn("indexer",
-                $"跳过了 {oversizeTokens} 个超过 {EraStore.EraFormat.MaxTermBytes}B 的词条"
-                + "（超长无分隔文本 / 超长首字母串；该词条不可检索，其余字段不受影响）");
         }
 
         stopwatch.Stop();
@@ -477,7 +518,8 @@ public sealed class IndexerEngine
             EraDeadDocs = eraDead,
             LyricsTruncatedLayers = lyricsTruncatedLayers,
             LyricsTruncatedTracks = lyricsTruncatedTracks,
-            OversizeTokens = oversizeTokens,
+            // 超长词条已改为哈希词条（EraStore.TermCodec），不再丢弃；字段保留 ABI 兼容。
+            OversizeTokens = 0,
         };
     }
 
@@ -637,8 +679,7 @@ public sealed class IndexerEngine
     /// <see cref="EraStore.IndexBuilder"/>。不得先把全库 <see cref="EraStore.AnalyzedDoc"/>
     /// 收进 List——48.7k 真实歌词下那会是 GiB 级常驻内存（T3.10 实测 5k 已近 1 GB）。
     /// </summary>
-    private static (int LiveDocs, int Segments, ScriptProfile Profile, int TruncatedLayers, int TruncatedTracks,
-        int OversizeTokens)
+    private static (int LiveDocs, int Segments, ScriptProfile Profile, int TruncatedLayers, int TruncatedTracks)
         BuildFullEra(
             string eraDir, string eraName, string libraryPath, HashSet<string> seen,
             IndexerOptions options, long generation, int optionsBits, IReadOnlyList<string> capabilities,
@@ -649,7 +690,6 @@ public sealed class IndexerEngine
         var profile = seed;
         var truncatedLayers = 0;
         var truncatedTracks = 0;
-        var oversizeTokens = 0;
 
         IEnumerable<EraStore.AnalyzedDoc> Enumerate()
         {
@@ -672,9 +712,7 @@ public sealed class IndexerEngine
                     }
                     profile.Add(tokens);
                     live++;
-                    var (doc, oversize) = BuildEraDoc(track, tokens, lyricLines);
-                    oversizeTokens += oversize;
-                    yield return doc;
+                    yield return BuildEraDoc(track, tokens, lyricLines);
                 }
             }
         }
@@ -703,7 +741,7 @@ public sealed class IndexerEngine
         var segments = EraStore.StoreReader.TryReadManifest(eraPath) is { } built
             ? CountEraSegments(built)
             : 0;
-        return (live, segments, profile, truncatedLayers, truncatedTracks, oversizeTokens);
+        return (live, segments, profile, truncatedLayers, truncatedTracks);
     }
 
     private static int CountEraSegments(EraStore.Manifest manifest)
@@ -909,32 +947,22 @@ public sealed class IndexerEngine
     /// <summary>
     /// 把 <see cref="TrackRecord"/> + <see cref="DocTokens"/> 转成 EraStore 的
     /// <see cref="EraStore.AnalyzedDoc"/>。12 字段 token 串与 EraStore 的字段族一一对应。
+    ///
+    /// 词条硬上限（<see cref="EraStore.EraFormat.MaxTermBytes"/> = 255B）由
+    /// <see cref="EraStore.TermCodec"/> 在写入前统一处理：超长单 token（超长无分隔拉丁词 /
+    /// URL / 长串）换成不透明哈希词条（<c>0x01 + MD5 hex</c>，33B），查询侧走同一个 helper，
+    /// 因此仍然可检索。词条不再丢弃，其余字段与整库构建也不受影响。
     /// </summary>
-    private static (EraStore.AnalyzedDoc Doc, int OversizeTokens) BuildEraDoc(
+    private static EraStore.AnalyzedDoc BuildEraDoc(
         TrackRecord track, DocTokens tokens, IReadOnlyList<string> lyricLines)
     {
-        // 词条硬上限（EraFormat.MaxTermBytes = 255B）：超长无分隔拉丁词（URL / 长串）或超长
-        // 首字母串会让 TermDict 抛异常、令整次全量构建失败。这里在写入前剔除并计数：
-        // 该词条不可检索，但其余字段与整库构建不受影响（与 V6 护栏同一「只截异常数据」原则）。
-        var oversize = 0;
         string[] SplitTok(string s)
         {
             if (string.IsNullOrEmpty(s)) return Array.Empty<string>();
             var parts = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var kept = 0;
             for (var i = 0; i < parts.Length; i++)
-            {
-                var term = parts[i];
-                // 4 字节 rune 最多 63 个字符；更短的必然 ≤255B，免逐个算编码长度。
-                if (term.Length > 63 &&
-                    System.Text.Encoding.UTF8.GetByteCount(term) > EraStore.EraFormat.MaxTermBytes)
-                {
-                    oversize++;
-                    continue;
-                }
-                parts[kept++] = term;
-            }
-            return kept == parts.Length ? parts : parts[..kept];
+                parts[i] = EraStore.TermCodec.Canonicalize(parts[i]);
+            return parts;
         }
 
         var fields = new Dictionary<EraStore.FieldId, string[]>
@@ -964,6 +992,11 @@ public sealed class IndexerEngine
             + "|" + tokens.LayerSourceBits + "|" + tokens.LayerConf);
         var rev = System.Security.Cryptography.MD5.HashData(revInput);
 
+        // v6 元数据内容哈希（S6）：必须与阶段一探测用**同一份原始 DB 文本**（title 原文 /
+        // artists JSON 原文 / album 原文），绝不能拿解析后的 ArtistText / AlbumText，
+        // 否则构建值与探测值会漂移。NULL 已在读取侧折叠为空串。
+        var metaHash = EraStore.MetaHash.Compute(track.Title, track.ArtistsRaw, track.AlbumRaw);
+
         byte flags = 0;
         if (tokens.LyricsTrTok.Length > 0) flags |= 1;
         if (tokens.LyricsRomTok.Length > 0) flags |= 2;
@@ -973,11 +1006,11 @@ public sealed class IndexerEngine
         // title / artist / album 保存原文（片段 / explain 依赖）；DocStore v3 的归一列
         // （title_norm / artist_norm / album_norm）由 IndexBuilder.MakeRecord 统一生成（T3.11），
         // v4 的 layer_conf 由 BuildTokens 给出，单曲不再各写一份归一化规则。
-        return (new EraStore.AnalyzedDoc(
+        return new EraStore.AnalyzedDoc(
             trackBytes, rev, 0, flags, fields,
             track.Title, track.ArtistText, track.AlbumText,
             tokens.IndexedMtime, tokens.IndexedLrcMtime, tokens.IndexedLrcSize,
-            tokens.LayerConf, lyricLines), oversize);
+            tokens.LayerConf, lyricLines, metaHash);
     }
 
     /// <summary>
@@ -1103,7 +1136,10 @@ public sealed class IndexerEngine
         }
     }
 
-    /// <summary>阶段一：流式读取轻量列（<c>id/path/file_mtime</c>），不含歌词 / 元数据大列。</summary>
+    /// <summary>
+    /// 阶段一：流式读取轻量列（<c>id/path/file_mtime</c> + <c>title/artists/album</c>），
+    /// 不含歌词大列。<c>.lrc</c> 状态列按旧库能力条件选择（无侧车列的库自动降级）。
+    /// </summary>
     private static IEnumerable<TrackProbe> ReadTrackProbes(string libraryPath, CancellationToken ct)
     {
         using var conn = OpenLibraryReadOnly(libraryPath);
@@ -1112,21 +1148,30 @@ public sealed class IndexerEngine
         //   lyrics_lrc / lyrics_lrc_trans / lyrics_lrc_romaji 存**原始文本**（保时间轴给播放侧），
         //   lrc_mtime / lrc_size 供脏集判定，lrc_checked 标识「本轮扫描已探测过侧车」。
         // 旧库（无这些列）自动降级为「无侧车」，不报错。
+        // S6：元数据三列只用于内容哈希（原始 DB 文本，不做 JSON 解析）。
         var hasLrc = HasLrcColumns(conn);
         cmd.CommandText = hasLrc
-            ? "SELECT id, path, file_mtime, lrc_mtime, lrc_size FROM tracks ORDER BY id"
-            : "SELECT id, path, file_mtime FROM tracks ORDER BY id";
+            ? "SELECT id, path, file_mtime, title, artists, album, lrc_mtime, lrc_size "
+              + "FROM tracks ORDER BY id"
+            : "SELECT id, path, file_mtime, title, artists, album FROM tracks ORDER BY id";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
             ct.ThrowIfCancellationRequested();
+            var title = reader.IsDBNull(3) ? "" : reader.GetString(3);
+            var artists = reader.IsDBNull(4) ? "" : reader.GetString(4);
+            var album = reader.IsDBNull(5) ? "" : reader.GetString(5);
             yield return new TrackProbe
             {
                 Id = reader.IsDBNull(0) ? "" : reader.GetString(0),
                 Path = reader.IsDBNull(1) ? "" : reader.GetString(1),
                 Mtime = reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
-                LrcMtime = hasLrc && !reader.IsDBNull(3) ? reader.GetInt64(3) : 0,
-                LrcSize = hasLrc && !reader.IsDBNull(4) ? reader.GetInt64(4) : 0,
+                TitleRaw = title,
+                ArtistsRaw = artists,
+                AlbumRaw = album,
+                MetaHash = EraStore.MetaHash.Compute(title, artists, album),
+                LrcMtime = hasLrc && !reader.IsDBNull(6) ? reader.GetInt64(6) : 0,
+                LrcSize = hasLrc && !reader.IsDBNull(7) ? reader.GetInt64(7) : 0,
             };
         }
     }
@@ -1194,7 +1239,9 @@ public sealed class IndexerEngine
                 Id = reader.IsDBNull(0) ? "" : reader.GetString(0),
                 Path = reader.IsDBNull(1) ? "" : reader.GetString(1),
                 Title = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                ArtistsRaw = reader.IsDBNull(3) ? "" : reader.GetString(3),
                 ArtistText = ParseArtists(reader.IsDBNull(3) ? null : reader.GetString(3)),
+                AlbumRaw = reader.IsDBNull(4) ? "" : reader.GetString(4),
                 AlbumText = ParseAlbum(reader.IsDBNull(4) ? null : reader.GetString(4)),
                 Lyrics = reader.IsDBNull(5) ? "" : reader.GetString(5),
                 Mtime = reader.IsDBNull(6) ? 0 : reader.GetInt64(6),

@@ -45,6 +45,7 @@ int32_t windowSetResizable(int32_t on);
 int32_t windowSetDecor(int32_t mode);
 int32_t windowGetPosition(int32_t* x, int32_t* y);
 int32_t windowSetPosition(int32_t x, int32_t y);
+int32_t windowGetSize(int32_t* w, int32_t* h);
 int32_t windowStartDrag();
 int32_t windowStartResize(int32_t edge);
 int32_t windowRequestClose();

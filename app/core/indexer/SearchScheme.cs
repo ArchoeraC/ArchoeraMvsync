@@ -165,7 +165,7 @@ internal static class SchemeRegistry
                 new[] { SchemeMatchers.Exact, SchemeMatchers.Prefix },
                 surfaceOnly,
                 BucketRanker,
-                SearchPolicy.Default,
+                SearchPolicy.StrongShortCircuit,
                 SchemeIds.Minimal),
             new SearchScheme(
                 SchemeIds.Default,
@@ -177,7 +177,7 @@ internal static class SchemeRegistry
                 },
                 withTypo,
                 BucketRanker,
-                SearchPolicy.Default,
+                SearchPolicy.StrongShortCircuit,
                 SchemeIds.Fast),
             new SearchScheme(
                 SchemeIds.Recall,
