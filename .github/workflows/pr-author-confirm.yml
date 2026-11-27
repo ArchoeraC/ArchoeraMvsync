@@ -1,0 +1,95 @@
+# =====================================================================
+#  PR 作者确认门禁（protect-main 的必需检查：author-confirm）
+#
+#  目的：Code Owner 的 approval 不能替代 PR 作者本人对「可合并状态」的
+#  最终确认。作者在本 PR 评论一条内容为 `/confirm` 的评论后，本 workflow
+#  在该 PR 的最新 head commit 上写入 `author-confirm` 成功检查；ruleset
+#  把它设为必需检查，因此即使 Code Owner 已批准，作者未确认也无法合并。
+#
+#  之后如再推送新提交，旧检查不会覆盖新 commit，需要作者重新评论
+#  `/confirm`，防止「确认后夹带改动」。
+#
+#  安全边界：
+#  - 由 issue_comment 触发，workflow 取自默认分支，贡献者无法在 PR 里改它；
+#  - 不 checkout 任何 PR 代码、不执行 PR 内容，只用事件元数据 + REST API；
+#  - 只接受 PR 作者本人的评论，其他评论直接退出；
+#  - 权限最小化：pull-requests: read + checks: write。
+# =====================================================================
+name: PR author confirmation
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+concurrency:
+  group: pr-author-confirm-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  author-confirm:
+    name: author-confirm
+    if: github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate /confirm comment and mark the head commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_URL: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          PR_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          set -euo pipefail
+
+          # 只接受 PR 作者本人（GitHub 登录名大小写不敏感）
+          if [ "${COMMENT_AUTHOR,,}" != "${PR_AUTHOR,,}" ]; then
+            echo "comment author is not the PR author; skip"
+            exit 0
+          fi
+
+          # 只接受内容恰为 /confirm 的评论（允许首尾空白）
+          normalized="$(printf '%s' "$COMMENT_BODY" | tr -d '[:space:]')"
+          if [ "$normalized" != "/confirm" ]; then
+            echo "comment is not /confirm; skip"
+            exit 0
+          fi
+
+          # 取 PR 当前 head；已关闭 / 已合并的 PR 不再写检查
+          pr_json="$(curl -sS -f \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API_URL/repos/$REPO/pulls/$PR_NUMBER")"
+          state="$(printf '%s' "$pr_json" | jq -r '.state')"
+          head_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha')"
+          if [ "$state" != "open" ] || [ -z "$head_sha" ] || [ "$head_sha" = "null" ]; then
+            echo "PR is not open or head sha is unavailable; skip"
+            exit 0
+          fi
+
+          # 在最新 head commit 上创建成功检查（Checks API，归属 GitHub Actions）
+          payload="$(jq -n --arg sha "$head_sha" '{
+            name: "author-confirm",
+            head_sha: $sha,
+            status: "completed",
+            conclusion: "success",
+            output: {
+              title: "PR 作者已确认",
+              summary: "作者已在 PR 评论中发送 /confirm。"
+            }
+          }')"
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API_URL/repos/$REPO/check-runs" \
+            -d "$payload" >/dev/null
+
+          echo "author-confirm check created on $head_sha"
