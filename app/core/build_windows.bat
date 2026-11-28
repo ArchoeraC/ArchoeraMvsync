@@ -230,6 +230,10 @@ rem =====================================================================
 echo [build_windows] ===== indexer =====
 pushd "%ROOT%indexer"
 if not exist build mkdir build
+rem 数据包清单 / Dart 同源常量必须与 data/ 一致（T4.3）；忘记重算 data_pack_id 会让
+rem 索引与查询用的表不一致，这里在发布前直接拦住（与 build.sh 同一条检查）。
+dotnet run --project tools\gen_tables -- --manifest-only --check
+if errorlevel 1 exit /b 1
 dotnet publish indexer-ffi\indexer-ffi.csproj -c Release -r win-x64 ^
     -p:Version=%APPVER_NUM% -p:FileVersion=%APPVER_NUM% -p:InformationalVersion=%APPVER%
 if errorlevel 1 exit /b 1

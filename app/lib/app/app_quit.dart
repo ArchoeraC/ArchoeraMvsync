@@ -13,6 +13,7 @@ import '../../apis/runtime.dart';
 import '../services/playback/playback_notifier.dart';
 import '../services/log/log.dart';
 import '../services/platform/platform_capabilities.dart';
+import '../services/platform/window_geometry.dart';
 import '../stores/vault_session_store.dart';
 
 /// 退出应用（所有退出路径统一走此入口）。
@@ -31,19 +32,32 @@ import '../stores/vault_session_store.dart';
 /// - 短暂等待引擎 FFI / 后台 isolate 收尾（引擎线程随进程退出回收）。
 ///
 /// [reason] 仅用于日志区分退出来源（用户请求 / 系统关机注销）。
-Future<void> quitApplication(WidgetRef ref, {String reason = '用户请求'}) async {
+Future<void> quitApplication(WidgetRef ref, {String reason = '用户请求'}) =>
+    quitApplicationWith(ProviderScope.containerOf(ref.context), reason: reason);
+
+/// 与 [quitApplication] 相同，但以 [ProviderContainer] 为输入。
+///
+/// 供**没有 WidgetRef** 的调用点使用（如自绘标题栏的关闭按钮）；两者共用同一条
+/// 落盘 / 平台桥接收尾 / `exit(0)` 路径，避免多套退出逻辑。
+Future<void> quitApplicationWith(
+  ProviderContainer container, {
+  String reason = '用户请求',
+}) async {
   Log.i('lifecycle', '正常退出（$reason）');
   // 播放现场同步落盘（会话记忆关闭时 _persistSession 内部自行跳过）
-  ref.read(playbackProvider.notifier).persistNow();
+  container.read(playbackProvider.notifier).persistNow();
   // vault 会话写队列 flush（登录态/凭据不丢；仅 vault 实现有异步队列）
   final store = getRuntime().sessionStore;
   if (store is VaultSessionStore) {
     await store.flush();
   }
+  // 窗口几何（ABI v11 `get_size` / `get_position`）：最大化 / 全屏退出不写，
+  // 保留上次普通窗口的尺寸与位置；桥接不可用 / 查询失败忽略。
+  saveWindowGeometry(container);
   // 平台桥接收尾：停 inhibit 线程 / 关单实例互斥体 / SMTC(WinRT) deinit。
   // 必须在 exit(0) 前（此时 COM 仍初始化），否则 WinRT 对象会在进程退出时
   // 晚于 COM uninit 释放 → 崩溃；同时避免内存泄漏。
-  await ref.read(platformCapabilitiesProvider).dispose();
+  await container.read(platformCapabilitiesProvider).dispose();
   // 给引擎 FFI / 后台 isolate 短暂收尾后退出
   await Future<void>.delayed(const Duration(milliseconds: 200));
   exit(0);

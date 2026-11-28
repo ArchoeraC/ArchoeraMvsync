@@ -17,7 +17,7 @@ import 'tracks_db.dart';
 import '../../stores/app_prefs.dart';
 import '../log/log.dart';
 import '../netease/track.dart';
-import '../search/search_lyric_snippet.dart';
+import '../search/search_models.dart';
 import '../search/search_service.dart';
 import '../../utils/safe_file.dart';
 
@@ -47,6 +47,7 @@ class LibraryState {
     this.rankedIds = const [],
     this.searchIndexActive = false,
     this.lyricSnippets = const {},
+    this.searchHighlights = const {},
     this.error,
   });
 
@@ -105,10 +106,15 @@ class LibraryState {
 
   /// 歌词命中**行内片段**：trackId → 命中窗口文本。
   ///
-  /// 仅索引排行路径 + 查询非空时非空；在**页加载异步路径**（取页 / 重载）计算
-  /// 并缓存，行渲染只同步查表（不经 build 每帧读歌词 / 算 snippet，见
-  /// `services/search/search_lyric_snippet.dart`）。关闭态 / 元数据命中行为空。
+  /// 仅索引排行路径 + 查询非空时非空；在**页加载异步路径**由 C# 装饰（取页 /
+  /// 重载）计算并缓存，行渲染只同步查表。关闭态 / 元数据命中行为空。
   final Map<String, String> lyricSnippets;
+
+  /// 结果高亮：trackId → 高亮区间（由 C# `era_search_decorate` 产出）。
+  ///
+  /// 仅索引排行路径 + 查询非空时非空；在页加载异步路径计算并缓存，行渲染只
+  /// 同步查表。关闭态 / 未就绪为空。
+  final Map<String, LocalTrackHighlight> searchHighlights;
 
   final String? error;
 
@@ -132,6 +138,7 @@ class LibraryState {
     List<String>? rankedIds,
     bool? searchIndexActive,
     Map<String, String>? lyricSnippets,
+    Map<String, LocalTrackHighlight>? searchHighlights,
     String? error,
   }) {
     return LibraryState(
@@ -154,6 +161,7 @@ class LibraryState {
       rankedIds: rankedIds ?? this.rankedIds,
       searchIndexActive: searchIndexActive ?? this.searchIndexActive,
       lyricSnippets: lyricSnippets ?? this.lyricSnippets,
+      searchHighlights: searchHighlights ?? this.searchHighlights,
       error: error ?? this.error,
     );
   }

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "name": "archoera-search-data",
+  "version": "1.0.0",
+  "unicode": "18.0.0",
+  "generator": "gen_tables@1",
+  "files": [
+    {
+      "name": "accent_fold.tsv",
+      "sha256": "68eafd7239df5722042e3a030b2ef851dc09e7a069180439aa15cc78058a4e38",
+      "bytes": 5349,
+      "license": "Unicode"
+    },
+    {
+      "name": "def_en2hanzi.tsv",
+      "sha256": "731f5fea407f50ceae8a5b80932c29c65e1166b8f3bc94d7810978f6220be032",
+      "bytes": 306119,
+      "license": "Unicode"
+    },
+    {
+      "name": "def_hanzi2en.tsv",
+      "sha256": "11096dc4adc12fb6426c08e265fa68c716c6368a6145af4e8ccabd417fe53224",
+      "bytes": 690531,
+      "license": "Unicode"
+    },
+    {
+      "name": "ja_readings.tsv",
+      "sha256": "3072f2041693f0c07fa9f2ccb94d85601e94cd86e8b2d1db2e4c5a97f6617025",
+      "bytes": 600479,
+      "license": "Unicode"
+    },
+    {
+      "name": "kana_romaji.tsv",
+      "sha256": "e5e1bc0c62c2bda36d916257ce9683ed9fc79618f955e9183304a9366e384c2e",
+      "bytes": 3688,
+      "license": "AGPL-3.0-or-later"
+    },
+    {
+      "name": "lexicon_cross.tsv",
+      "sha256": "605e646c1202d716c09667d9249460dc5ab1fed664c6a658cb76405494f17cc2",
+      "bytes": 4378,
+      "license": "CC0-1.0"
+    },
+    {
+      "name": "nfkc.tsv",
+      "sha256": "6df34eed2ad60931efb8c0850b660c28951445e911ad60782d78c86036a647d2",
+      "bytes": 61632,
+      "license": "Unicode"
+    },
+    {
+      "name": "variant_fold.tsv",
+      "sha256": "6a9d17248c21d6609a3db8c7295b98535c8c1eb82ba4b06ffda2328766fde37f",
+      "bytes": 36235,
+      "license": "Unicode"
+    }
+  ]
+}

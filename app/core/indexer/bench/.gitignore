@@ -5,6 +5,11 @@
 # 此处不再重复；下面只留 bench 专属项。
 qbench/bin/
 qbench/obj/
+erastore/bin/
+erastore/obj/
+
+# EraStoreBench 默认输出目录（JSON 指标，属运行期产物；报告由 REPORT.md 渲染提交）
+erastore/out/
 
 # 基准用 SQLite 库（含 WAL 侧车与世代化临时库）
 *.db

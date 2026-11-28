@@ -1,0 +1,43 @@
+# ArchoeraMvsync 搜索数据包：策展跨语言专名词表（T4.1 / RP §5.5.4）
+# 来源: Archoera 自建（公开艺人 / 乐队名称的事实性对照，非第三方数据集抓取）
+# 许可证: CC0-1.0（本表随仓库分发；事实性名称对照本身不构成著作权客体）
+# 字段: SOURCE_TERM<TAB>TARGET_TERM<TAB>WEIGHT<TAB>SOURCE<TAB>LICENSE<TAB>NOTE
+# 规则: 只收高置信专名；单字源禁止；每源 ≤4 目标；weight 0.50–1.00；
+#       每行必须有 source / license；无来源的行在加载期被拒绝。
+# 状态: seed（2026-11-25，16 组双向）。按 §5.5.4 仍需人工复核抽样签字。
+周杰伦	Jay Chou	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Jay Chou	周杰伦	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+邓丽君	Teresa Teng	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Teresa Teng	邓丽君	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+王菲	Faye Wong	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Faye Wong	王菲	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+张学友	Jacky Cheung	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Jacky Cheung	张学友	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+陈奕迅	Eason Chan	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Eason Chan	陈奕迅	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+林俊杰	JJ Lin	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+JJ Lin	林俊杰	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+蔡依林	Jolin Tsai	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Jolin Tsai	蔡依林	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+孙燕姿	Stefanie Sun	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Stefanie Sun	孙燕姿	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+梁静茹	Fish Leong	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Fish Leong	梁静茹	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+五月天	Mayday	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Mayday	五月天	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+李荣浩	Li Ronghao	0.90	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Li Ronghao	李荣浩	0.90	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+毛不易	Mao Buyi	0.90	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Mao Buyi	毛不易	0.90	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+米津玄師	Kenshi Yonezu	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Kenshi Yonezu	米津玄師	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+椎名林檎	Ringo Sheena	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Ringo Sheena	椎名林檎	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+坂本龍一	Ryuichi Sakamoto	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Ryuichi Sakamoto	坂本龍一	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+久石譲	Joe Hisaishi	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Joe Hisaishi	久石譲	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+宇多田ヒカル	Hikaru Utada	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Hikaru Utada	宇多田ヒカル	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+中島美嘉	Mika Nakashima	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核
+Mika Nakashima	中島美嘉	0.95	Archoera 自建（公开艺人名称对照）	CC0-1.0	seed; 待人工复核

@@ -567,6 +567,13 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
     state.save();
   }
 
+  /// 设置 macOS 显卡选择（`auto` / `discrete` / `integrated`；**重启后生效**：
+  /// 引擎启动时就要选设备）。
+  void setMacosGPU(String value) {
+    state = state.copyWithMacosGPU(value);
+    state.save();
+  }
+
   /// 设置自定义主色（null = 恢复默认亮蓝）。
   void setAccent(int? accent) {
     state = state.copyWithAccent(accent);
@@ -675,6 +682,22 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
   /// 设置播放条悬浮模式。
   void setFloatingPlayerBar(bool value) {
     state = state.copyWithFloatingBar(value);
+    state.save();
+  }
+
+  /// 记录窗口几何（退出时调用；下次启动恢复）。
+  void setWindowGeometry({
+    required int width,
+    required int height,
+    int? x,
+    int? y,
+  }) {
+    state = state.copyWithWindowGeometry(
+      width: width,
+      height: height,
+      x: x,
+      y: y,
+    );
     state.save();
   }
 
@@ -953,16 +976,26 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
     state.save();
   }
 
-  /// 设置本地曲库搜索索引开关（总开关 / `.lrc` / 歌词罗马音子开关）。
+  /// 设置本地曲库搜索索引开关（总开关 / `.lrc` / 歌词罗马音 / 歌词首字母子开关）。
   ///
   /// 同步刷新 [appPrefsSnapshot]：`SearchService` 经该快照判定启用态，
   /// 设置页切换后立即调用 `ensureIndex` / `deactivate` 才能读到新值，
   /// 无需等待应用根组件下一帧重建刷新快照。
-  void setSearchIndex({bool? enabled, bool? indexLrc, bool? romajiLyrics}) {
+  void setSearchIndex({
+    bool? enabled,
+    bool? indexLrc,
+    bool? pinyin,
+    bool? lyricsPinyin,
+    bool? romajiLyrics,
+    bool? initialsLyrics,
+  }) {
     state = state.copyWithSearchIndex(
       enabled: enabled,
       indexLrc: indexLrc,
+      pinyin: pinyin,
+      lyricsPinyin: lyricsPinyin,
       romajiLyrics: romajiLyrics,
+      initialsLyrics: initialsLyrics,
     );
     state.save();
     appPrefsSnapshot = state;

@@ -40,13 +40,14 @@ internal static class Japanese
     private static readonly Lazy<Dictionary<string, string[]>> KanaTable = new(static () =>
     {
         var table = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        foreach (var line in ReadResourceLines("Archoera.Indexer.data.kana_romaji.tsv"))
+        foreach (var line in ReadPackLines(DataPack.KanaRomajiFile))
         {
             var cols = line.Split('\t');
             if (cols.Length < 2) continue;
             var variants = cols[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (variants.Length > 0) table[cols[0]] = variants;
         }
+        MemoryTrim.Request();
         return table;
     });
 
@@ -54,7 +55,7 @@ internal static class Japanese
     private static readonly Lazy<Dictionary<int, string[]>> KanjiReadings = new(static () =>
     {
         var table = new Dictionary<int, string[]>();
-        foreach (var line in ReadResourceLines("Archoera.Indexer.data.ja_readings.tsv"))
+        foreach (var line in ReadPackLines(DataPack.JaReadingsFile))
         {
             var cols = line.Split('\t');
             if (cols.Length < 2) continue;
@@ -63,6 +64,7 @@ internal static class Japanese
             var kana = cols[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (kana.Length > 0) table[cp] = kana;
         }
+        MemoryTrim.Request();
         return table;
     });
 
@@ -313,12 +315,14 @@ internal static class Japanese
             bigrams.Add(s.Substring(i, 2));
     }
 
-    /// <summary>读取内嵌表（<c>#</c> 注释 / 空行跳过）；缺失时返回空序列（**不抛**）。</summary>
-    private static IEnumerable<string> ReadResourceLines(string logicalName)
+    /// <summary>
+    /// 读取数据包表（<c>#</c> 注释 / 空行跳过）；缺失 / 损坏时返回空序列（**不抛**）。
+    /// 降级能力由 <see cref="DataPack"/> 统一登记（<c>readings</c>），查询侧据此关掉读音步。
+    /// </summary>
+    private static IEnumerable<string> ReadPackLines(string file)
     {
-        var assembly = typeof(Japanese).Assembly;
-        using var stream = assembly.GetManifestResourceStream(logicalName);
-        if (stream is null) yield break;   // 资源缺失：降级为空表（调用方得到空读音，不崩）
+        using var stream = DataPack.Current.TryOpen(file, out var opened) ? opened : null;
+        if (stream is null) yield break;
         using var reader = new StreamReader(stream, Encoding.UTF8);
         string? line;
         while ((line = reader.ReadLine()) is not null)

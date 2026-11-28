@@ -20,14 +20,17 @@ import '../core/types.dart';
 
 KgModule kgLyric = (params) async {
   final hash = params['hash'] as String?;
-  if (hash == null || hash.isEmpty) return {'code': 400, 'message': 'hash required'};
+  if (hash == null || hash.isEmpty) {
+    return {'code': 400, 'message': 'hash required'};
+  }
 
   final seconds = kgIntervalToSeconds(params['duration']);
 
   try {
     // 第 1 步：按 hash+name+时长 查候选
     final name = '${params['name'] ?? ''}';
-    final searchUrl = '$kgLyricSearchUrl?ver=1&man=yes&client=pc&lrctxt=1'
+    final searchUrl =
+        '$kgLyricSearchUrl?ver=1&man=yes&client=pc&lrctxt=1'
         '&keyword=${Uri.encodeComponent(name)}'
         '&hash=${Uri.encodeComponent(hash)}'
         '&timelength=$seconds';
@@ -37,14 +40,17 @@ KgModule kgLyric = (params) async {
     final candidate = candidates is List && candidates.isNotEmpty
         ? (candidates.first as Map).cast<String, dynamic>()
         : null;
-    if (candidate == null) return {'code': 404, 'message': 'no lyric candidate'};
+    if (candidate == null) {
+      return {'code': 404, 'message': 'no lyric candidate'};
+    }
 
     final krctype = (candidate['krctype'] as num?)?.toInt() ?? 0;
     final contenttype = (candidate['contenttype'] as num?)?.toInt() ?? 0;
     final fmt = krctype == 1 && contenttype != 1 ? 'krc' : 'lrc';
 
     // 第 2 步：下载 + 解码
-    final downloadUrl = '$kgLyricDownloadUrl?ver=1&client=pc&charset=utf8'
+    final downloadUrl =
+        '$kgLyricDownloadUrl?ver=1&client=pc&charset=utf8'
         '&id=${Uri.encodeComponent('${candidate['id']}')}'
         '&accesskey=${Uri.encodeComponent('${candidate['accesskey']}')}'
         '&fmt=$fmt';
@@ -68,10 +74,7 @@ KgModule kgLyric = (params) async {
     }
 
     if (dlFmt == 'lrc') {
-      return {
-        'code': 200,
-        'lrc': utf8.decode(base64Decode(dlContent)),
-      };
+      return {'code': 200, 'lrc': utf8.decode(base64Decode(dlContent))};
     }
 
     return {'code': 500, 'message': 'unknown lyric fmt: $dlFmt'};

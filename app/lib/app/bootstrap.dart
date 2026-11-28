@@ -67,7 +67,7 @@ class _AuthBootstrapState extends ConsumerState<AuthBootstrap> {
         ref.read(downloadControllerProvider.notifier).resumePendingAtStartup(),
       );
       // 本地搜索索引：总开关开启时**后台预构建**（不阻塞首帧；失败静默降级；
-      // 开关关闭时不触碰模块 / search.db）。此时 appPrefsSnapshot 已在 main
+      // 开关关闭时不触碰模块 / 本地索引）。此时 appPrefsSnapshot 已在 main
       // 注入完成。幂等：重复触发由 warmUpOnStartup 内部门控吸收。
       unawaited(SearchService.instance.warmUpOnStartup());
     });

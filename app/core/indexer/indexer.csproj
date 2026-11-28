@@ -18,12 +18,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 构建期以内存为先：索引器是后台批处理任务，峰值 RSS 比几毫秒 CPU 更敏感。
+         S2.7 的 30k 实测（118.7 MB）即以此配置取得；生产 CLI / FFI 同源生效。 -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    <RuntimeHostConfigurationOption Include="System.GC.Gen0Size" Value="2000000" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- tests/ 是独立测试运行器（显式 Link 共享源码），不得编入 CLI -->
     <Compile Remove="tests/**" />
     <!-- indexer-ffi/ 是独立 AOT 共享库，不得编入 CLI -->
     <Compile Remove="indexer-ffi/**" />
     <!-- tools/ 是构建期数据表生成器（独立 .NET 控制台程序），不得编入 CLI -->
     <Compile Remove="tools/**" />
+    <!-- bench/ 是独立的基准 / 回放工程（各自有 csproj），不得把其 obj 生成文件编入 CLI -->
+    <Compile Remove="bench/**" />
     <!-- 侧车歌词读取：与 scanner **共用同一源文件**（避免两套解码 / 分层实现漂移）。
          扫描器负责把 .lrc 解析结果写进 library.db，索引器只读 DB（零文件系统访问）。 -->
     <!-- 文本脚本分类（汉字 / 假名 / 谚文 / 拉丁）：与其它模块共用同一源文件 -->
@@ -65,8 +74,15 @@
     <EmbeddedResource Include="data/def_en2hanzi.tsv">
       <LogicalName>Archoera.Indexer.data.def_en2hanzi.tsv</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="data/lexicon_cross.tsv">
+      <LogicalName>Archoera.Indexer.data.lexicon_cross.tsv</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="data/def_hanzi2en.tsv">
       <LogicalName>Archoera.Indexer.data.def_hanzi2en.tsv</LogicalName>
+    </EmbeddedResource>
+    <!-- 数据包清单（T4.3 §5.5.1）：运行时按它算 data_pack_id 并做存在性 / 字节数校验。 -->
+    <EmbeddedResource Include="data/manifest.json">
+      <LogicalName>Archoera.Indexer.data.manifest.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

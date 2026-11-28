@@ -50,6 +50,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'Redraw only active ripple bands; CPU fallback path only';
 
   @override
+  String get settingsMacOSGPU => 'Discrete GPU acceleration';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Auto uses the discrete GPU only when it supports every Metal feature of the integrated GPU; Prefer discrete forces it (may drop to Metal 2, and on AMD the cover color / fluid background fall back). Restart to apply';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Auto (recommended)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Prefer discrete GPU';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'Integrated GPU';
+
+  @override
   String get settingsLyricsEdgeFade => 'Lyrics edge fade';
 
   @override
@@ -3435,14 +3451,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      'This software (ArchoeraMvsync) is open source under AGPL-3.0: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
+      'This software (ArchoeraMvsync) is open source under AGPL-3.0-or-later: you may freely use, study, modify and redistribute it, and comply-compliant commercial use is permitted; we do not offer closed-source commercial licensing outside AGPL obligations. Please read the following before use:\n\n';
 
   @override
   String get settingsDecline1Title => '1. Software nature\n';
 
   @override
   String get settingsDecline1Body =>
-      'This software is a third-party open-source client, not affiliated with, authorized by, or cooperating with any music platform or its official client. The project itself is not run for profit and accepts no commercial partnerships, ads or sponsored content; it only accepts voluntary donations that carry no additional license rights (donations do not change the AGPL-3.0 terms or affect any feature; commercial use of the code remains governed by AGPL-3.0). For richer features, please use the official client.\n\n';
+      'This software is a third-party open-source client, not affiliated with, authorized by, or cooperating with any music platform or its official client. The project itself is not run for profit and accepts no commercial partnerships, ads or sponsored content; it only accepts voluntary donations that carry no additional license rights (donations do not change the AGPL-3.0-or-later terms or affect any feature; commercial use of the code remains governed by AGPL-3.0-or-later). For richer features, please use the official client.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle =>
@@ -3450,7 +3466,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDeclineLicenseBody =>
-      'This software is released under the GNU Affero General Public License v3 (AGPL-3.0). Within the scope of that license, you are free to run, study, modify and redistribute this software, provided that you: retain the copyright and license notices; release your derivative works under the same license; and, if you make the functionality of this software (including modified versions) available to users over a network, provide those users with the corresponding complete source code. This project offers no closed-source commercial licensing outside AGPL obligations. The complete terms are governed by the accompanying LICENSE file and https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
+      'This software is released under the GNU Affero General Public License v3 (AGPL-3.0-or-later). Within the scope of that license, you are free to run, study, modify and redistribute this software, provided that you: retain the copyright and license notices; release your derivative works under the same license; and, if you make the functionality of this software (including modified versions) available to users over a network, provide those users with the corresponding complete source code. This project offers no closed-source commercial licensing outside AGPL obligations. The complete terms are governed by the accompanying LICENSE file and https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
 
   @override
   String get settingsDecline2Title => '2. Content sources & copyright\n';
@@ -3472,7 +3488,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      'Do not use this software for commercial activities, bulk scraping, crawling or resale; do not use in violation of local laws or platform terms of service; do not bypass technical protection measures, access controls or terms of service of online platforms.\n\n';
+      'Do not use this software to infringe copyrights or other lawful rights (including bulk scraping, crawling or reselling content); do not use it in violation of local laws or platform terms of service; do not bypass technical protection measures, access controls or terms of service of online platforms. This section is a usage reminder and does not impose any additional license restriction beyond AGPL-3.0-or-later; commercial use is governed by the LICENSE.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. Login & account\n';
@@ -4666,6 +4682,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'Auto-generate romaji for Japanese lyrics without transliteration so they can be found by romaji (roughly doubles index size)';
 
   @override
+  String get settingsSearchIndexInitials => 'Index lyric initials';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      'Also make lyrics searchable by pinyin initials (e.g. wanzg); turn off to shrink the index (takes effect after rebuilding the index)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Index metadata pinyin';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Search titles / artists / albums by pinyin or initials; off by default (takes effect after rebuilding the index)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Index lyrics pinyin';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Search lyrics by pinyin syllables; the largest derived column, off by default (takes effect after rebuilding the index)';
+
+  @override
   String get settingsSearchIndexNote =>
       'The index is derived data: off by default and free; enabling builds it in the background using time and disk (hundreds of MB for 10k tracks), and failures fall back to basic search automatically.';
 
@@ -4730,6 +4767,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSearchIndexRebuildStarted => 'Rebuilding index…';
+
+  @override
+  String get settingsSearchIndexDiagVersions => 'Index generation & versions';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return 'Gen $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'Schema $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'Analyzer $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => 'Search data pack';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'Pack $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'matches index';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => 'built by another pack';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => 'present';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => 'missing';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => 'foundation ok';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => 'foundation missing';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '$count degraded capabilities';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => 'Lyrics confidence';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return 'High $high · Medium $medium · Low $low · None $none';
+  }
 
   @override
   String get libraryFullScan => 'Full Scan';
@@ -5396,6 +5495,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsEqReset => 'Reset equalizer';
+
+  @override
+  String get equalizerQuickDesc =>
+      'Quick adjustments from the player: preset, preamp and 10 bands. Changes apply immediately.';
 
   @override
   String get settingsEqPresetFlat => 'Flat';

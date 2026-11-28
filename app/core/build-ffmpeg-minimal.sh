@@ -22,11 +22,11 @@
 #      而引擎按 libopus 的 interleaved flt 接口编写（见 src/encoder.c）。
 #      实测内嵌库从 ~22MB 降到 ~6MB（全部视频解码器/编码器/滤镜不再编译）。
 #      注意：FFmpeg **没有** `--disable-video` 选项，只能按组件白名单裁剪；
-#      解码器名单由 FFmpeg 9.0.1 `libavcodec/allcodecs.c` 的内部解码器
+#      解码器名单由 FFmpeg 9.0.2 `libavcodec/allcodecs.c` 的内部解码器
 #      与 `ffmpeg -decoders` 的音频类别求交集生成（升级 FFmpeg 时需同步）。
 #
 #  环境变量：
-#    FFMPEG_VERSION  源码版本（默认 9.0.1）
+#    FFMPEG_VERSION  源码版本（默认 9.0.2）
 #    FFMPEG_PREFIX   安装前缀（默认 $HOME/.local/ffmpeg-minimal）
 #    MBEDTLS_VERSION 自包含 TLS 后端版本（默认 3.6.2）
 #    MBEDTLS_PREFIX  mbedTLS 安装前缀（默认 $HOME/.local/mbedtls-minimal）
@@ -35,17 +35,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VER="${FFMPEG_VERSION:-9.0.1}"
+VER="${FFMPEG_VERSION:-9.0.2}"
 PREFIX="${FFMPEG_PREFIX:-$HOME/.local/ffmpeg-minimal}"
 MBEDTLS_VER="${MBEDTLS_VERSION:-3.6.2}"
 MBEDTLS_PREFIX="${MBEDTLS_PREFIX:-$HOME/.local/mbedtls-minimal}"
 if command -v nproc >/dev/null 2>&1; then JOBS="$(nproc)"; else JOBS="$(sysctl -n hw.ncpu)"; fi
 
 # TLS 标记：旧前缀（无 TLS / 未含系统 CA 回退补丁）需重建，否则 https 仍不可用。
-# v2 = 含 `patches/ffmpeg-<ver>-mbedtls-system-ca.patch`（mbedTLS 回退系统信任库）。
+# 文件内容 = 本次构建的 FFmpeg 版本号：**升级版本时旧前缀必须重建**（9.0.1 → 9.0.2
+# 这类小版本升级会改 `libavformat/tls_mbedtls.c` 等文件，复用旧前缀等于继续跑旧库）；
+# v2 起标记即存在（含 `patches/ffmpeg-<ver>-mbedtls-system-ca.patch` 的系统信任库回退）。
 TLS_MARKER="$PREFIX/.mbedtls-system-ca"
-if [[ -f "$TLS_MARKER" && ( -f "$PREFIX/lib/libavformat.so" || -f "$PREFIX/lib/libavformat.dylib" ) ]]; then
-  echo "[build-ffmpeg-minimal] 已存在（含 TLS + 系统 CA 回退），跳过：$PREFIX"
+if [[ -f "$TLS_MARKER" && "$(cat "$TLS_MARKER" 2>/dev/null)" == "$VER" &&
+      ( -f "$PREFIX/lib/libavformat.so" || -f "$PREFIX/lib/libavformat.dylib" ) ]]; then
+  echo "[build-ffmpeg-minimal] 已存在 FFmpeg $VER（含 TLS + 系统 CA 回退），跳过：$PREFIX"
   exit 0
 fi
 
@@ -90,7 +93,7 @@ else
 fi
 
 # ── 仅音频组件白名单（--disable-everything 后按需启用）──────────────────
-# 解码器：FFmpeg 9.0.1 全部「内部音频解码器」（libavcodec/allcodecs.c 内部
+# 解码器：FFmpeg 9.0.2 全部「内部音频解码器」（libavcodec/allcodecs.c 内部
 #   解码器 ∩ `ffmpeg -decoders` 音频类别），不含任何视频/图像解码器。
 #   升级 FFmpeg 版本时需重新生成（方法见文件头注释）。
 AUDIO_DECODERS="aac,aac_fixed,aac_latm,ac3,ac3_fixed,adpcm_4xm,adpcm_adx,adpcm_afc,adpcm_agm,adpcm_aica,adpcm_argo,adpcm_circus,adpcm_ct,adpcm_dtk,adpcm_ea,adpcm_ea_maxis_xa,adpcm_ea_r1,adpcm_ea_r2,adpcm_ea_r3,adpcm_ea_xas,adpcm_ima_acorn,adpcm_ima_alp,adpcm_ima_amv,adpcm_ima_apc,adpcm_ima_apm,adpcm_ima_cunning,adpcm_ima_dat4,adpcm_ima_dk3,adpcm_ima_dk4,adpcm_ima_ea_eacs,adpcm_ima_ea_sead,adpcm_ima_escape,adpcm_ima_hvqm2,adpcm_ima_hvqm4,adpcm_ima_iss,adpcm_ima_magix,adpcm_ima_moflex,adpcm_ima_mtf,adpcm_ima_oki,adpcm_ima_pda,adpcm_ima_qt,adpcm_ima_rad,adpcm_ima_smjpeg,adpcm_ima_ssi,adpcm_ima_wav,adpcm_ima_ws,adpcm_ima_xbox,adpcm_ms,adpcm_mtaf,adpcm_n64,adpcm_psx,adpcm_psxc,adpcm_sanyo,adpcm_sbpro_2,adpcm_sbpro_3,adpcm_sbpro_4,adpcm_swf,adpcm_thp,adpcm_thp_le,adpcm_vima,adpcm_xa,adpcm_xmd,adpcm_yamaha,adpcm_zork,ahx,alac,als,amrnb,amrwb,anull,apac,ape,aptx,aptx_hd,atrac1,atrac3,atrac3al,atrac9,binkaudio_dct,binkaudio_rdft,bmv_audio,bonk,cbd2_dpcm,comfortnoise,cook,dca,derf_dpcm,dfpwm,dolby_e,dsd_lsbf,dsd_lsbf_planar,dsd_msbf,dsd_msbf_planar,dsicinaudio,dss_sp,dst,dvaudio,eac3,evrc,fastaudio,flac,ftr,g723_1,g728,g729,gremlin_dpcm,gsm,gsm_ms,hca,hcom,iac,ilbc,imc,interplay_dpcm,mace3,mace6,metasound,misc4,mlp,mp1,mp1float,mp2,mp2float,mp3,mp3adu,mp3adufloat,mp3float,mp3on4,mp3on4float,mpc7,mpc8,msnsiren,nellymoser,on2avc,opus,osq,paf_audio,pcm_alaw,pcm_bluray,pcm_dvd,pcm_f16le,pcm_f24le,pcm_f32be,pcm_f32le,pcm_f64be,pcm_f64le,pcm_lxf,pcm_mulaw,pcm_s16be,pcm_s16be_planar,pcm_s16le,pcm_s16le_planar,pcm_s24be,pcm_s24daud,pcm_s24le,pcm_s24le_planar,pcm_s32be,pcm_s32le,pcm_s32le_planar,pcm_s64be,pcm_s64le,pcm_s8,pcm_s8_planar,pcm_sga,pcm_u16be,pcm_u16le,pcm_u24be,pcm_u24le,pcm_u32be,pcm_u32le,pcm_u8,pcm_vidc,qcelp,qdm2,qdmc,qoa,ralf,rka,roq_dpcm,s302m,sbc,sdx2_dpcm,shorten,sipr,siren,smackaud,sol_dpcm,speex,tak,truehd,truespeech,tta,twinvq,vmdaudio,vorbis,wady_dpcm,wavarc,wavpack,wmalossless,wmapro,wmav1,wmav2,wmavoice,ws_snd1,xan_dpcm,xma1,xma2"
@@ -205,8 +208,8 @@ cp -f LICENSE.md "$PREFIX/share/licenses/ffmpeg/" 2>/dev/null || true
   echo "源码：https://ffmpeg.org/releases/ffmpeg-$VER.tar.xz"
 } > "$PREFIX/share/licenses/ffmpeg/BUILD-CONFIG.txt"
 
-# TLS 标记：供下次运行判断前缀是否为「含 TLS」新构建。
-touch "$TLS_MARKER"
+# TLS 标记：写入本次构建的版本号，供下次运行判断前缀是否可复用。
+printf '%s\n' "$VER" > "$TLS_MARKER"
 
 echo "[build-ffmpeg-minimal] 安装完成：$PREFIX"
 ls -1 "$PREFIX/lib"/libav*.so* "$PREFIX/lib"/libswresample.so* 2>/dev/null \

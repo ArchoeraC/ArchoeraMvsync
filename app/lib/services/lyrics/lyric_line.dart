@@ -10,6 +10,8 @@
 /// 由本模块 [convertQrcToYrc] 归一化（Flutter 零依赖实现）。
 library;
 
+import 'lyric_script.dart';
+
 /// 一行歌词（毫秒时间戳 + 文本）。
 class LyricLine {
   const LyricLine({required this.timeMs, required this.text});
@@ -727,44 +729,98 @@ List<LyricGroup> parseLyricGroups({
   String? transAt(int timeMs) => nearestAt(transLines, transTimes, timeMs);
   String? romaAt(int timeMs) => nearestAt(romaLines, romaTimes, timeMs);
 
-  // 交错翻译合并：本地下载（KG 等）的 LRC 常见「主行 + 同时间戳译文」
-  // 的交错结构（`[mm:ss.xx]原文` 后紧跟 `[mm:ss.xx]译文`，如
-  // `[00:37.472]僕は強くならなきゃいけない` + `[00:37.472]必须要让自己变得强大起来`）。
-  // 若两行视为独立主行，译文会占一个时间轴槽位、译文也无法挂到主行
-  // （渲染时把译文当当前行、原文行反而短暂缺失）。仅在**未单独提供**
-  // translation 参数时启用合并——在线平台（NT/KG API）主歌词与
-  // 翻译分开返回，content 内不会交错，合并反而会误吞主行。
-  // 背景人声行（含尾随和声子行）不参与合并。
-  final interleaved = translation == null || translation.trim().isEmpty;
+  // 交错译文合并 / 分层：本地下载与流媒体常见「主行 + 同时间戳译文」的
+  // 交错结构（`[mm:ss.xx]原文` 后紧跟 `[mm:ss.xx]译文`），部分来源把译文排
+  // 在原文前面，也有来源在 content 里又重复一份 translation 字段。归属按文字
+  // 脚本判定（见 lyric_script.dart）：含假名 / 谚文的行优先当原文，纯汉字行在
+  // 存在假名 / 谚文对照时当译文；中文歌 + 英文译文仍按位置保留中文原文。
+  // 背景人声行（含尾随和声子行）不参与归位。
+  final transExact = <int, String>{};
+  for (final t in transLines) {
+    final text = t.text.trim();
+    if (text.isEmpty) continue;
+    transExact.putIfAbsent(t.timeMs, () => text);
+  }
+
   final groups = <LyricGroup>[];
   final hints = <int?>[];
-  for (final row in sorted) {
-    final last = groups.isEmpty ? null : groups.last;
-    if (interleaved &&
-        !row.isBg &&
-        last != null &&
-        !last.isBG &&
-        row.timeMs == last.original.timeMs &&
-        last.translation == null) {
-      // 同时间戳的下一行 → 挂为上一行的翻译，不单独成行
-      groups[groups.length - 1] = LyricGroup(
-        original: last.original,
-        translation: row.text,
-        romaji: last.romaji,
-        fragments: last.fragments,
-        isBG: last.isBG,
-      );
-      continue;
+
+  void addGroup(LyricGroup group, int? hint) {
+    groups.add(group);
+    hints.add(hint);
+  }
+
+  void flushMains(List<_LyricRow> rows, int timeMs) {
+    if (rows.isEmpty) return;
+    // 正文里与单独给出的译文重复的行先从主行候选里剔除（流媒体服务器常见：
+    // lrc 已交错译文，同时又单独返回 translation）。
+    var kept = rows;
+    final exact = transExact[timeMs];
+    if (rows.length > 1 && exact != null) {
+      final key = normalizeLyricText(exact);
+      final filtered = [
+        for (final r in rows)
+          if (normalizeLyricText(r.text) != key) r,
+      ];
+      if (filtered.isNotEmpty) kept = filtered;
     }
-    groups.add(LyricGroup(
-      original: LyricLine(timeMs: row.timeMs, text: row.text),
-      // 背景人声行不挂翻译/音译（同一时间戳的译文属于主行，避免重复）。
-      translation: row.isBg ? null : transAt(row.timeMs),
-      romaji: row.isBg ? null : romaAt(row.timeMs),
-      fragments: row.fragments,
-      isBG: row.isBg,
-    ));
-    hints.add(row.endHint);
+    final resolved = classifySameTimeLyricLines(
+      [for (final r in kept) r.text],
+      providedTranslation: transAt(timeMs),
+      providedRomaji: romaAt(timeMs),
+    );
+    final main = kept[resolved.originalIndex];
+    addGroup(
+      LyricGroup(
+        original: LyricLine(timeMs: main.timeMs, text: main.text),
+        translation: resolved.translation,
+        romaji: resolved.romaji,
+        fragments: main.fragments,
+        isBG: false,
+      ),
+      main.endHint,
+    );
+    // 同一时刻的多句日 / 韩文原文（对唱等）按独立主行输出。
+    for (final index in resolved.separateIndices) {
+      final row = kept[index];
+      addGroup(
+        LyricGroup(
+          original: LyricLine(timeMs: row.timeMs, text: row.text),
+          fragments: row.fragments,
+        ),
+        row.endHint,
+      );
+    }
+  }
+
+  var rowIndex = 0;
+  while (rowIndex < sorted.length) {
+    final timeMs = sorted[rowIndex].timeMs;
+    var next = rowIndex;
+    while (next < sorted.length && sorted[next].timeMs == timeMs) {
+      next++;
+    }
+    final mains = <_LyricRow>[];
+    final backgrounds = <_LyricRow>[];
+    for (var i = rowIndex; i < next; i++) {
+      final row = sorted[i];
+      (row.isBg ? backgrounds : mains).add(row);
+    }
+    // 同一时间戳的所有正文行先归位（原文 / 译文 / 音译），背景人声行随后
+    // 单独输出——行内尾随和声拆分出的背景行会插在原文与交错译文之间，
+    // 不能让它们打断归位。
+    flushMains(mains, timeMs);
+    for (final bg in backgrounds) {
+      addGroup(
+        LyricGroup(
+          original: LyricLine(timeMs: bg.timeMs, text: bg.text),
+          fragments: bg.fragments,
+          isBG: true,
+        ),
+        bg.endHint,
+      );
+    }
+    rowIndex = next;
   }
 
   // 行结束时间后置计算：下一行起始即本行结束（末行给默认 4s 兜底）。

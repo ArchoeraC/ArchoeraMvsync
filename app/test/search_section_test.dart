@@ -2,10 +2,8 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// 回归：.lrc 子开关**仅在总开关开启时可用**（默认关闭时禁用）；总开关默认关。
-// 关闭态下 SearchSection 不得触碰 / 构造 SearchService（零成本）。
-// 开启态下切换 .lrc 子开关应写偏好并触发**增量重建**（P4，经测试接缝观测，
-// 不触碰真实 FFI / search.db）。
+// 回归：派生列子开关仅在总开关开启时可用；全部默认关。
+// 子开关只写偏好、**不自动重建**（现有索引保留，下次重建生效）。
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,23 +18,38 @@ class _Prefs extends AppPrefsNotifier {
   _Prefs(this._initial);
   final AppPrefs _initial;
 
-  /// 记录 setSearchIndex 调用（不影响全局 appPrefsSnapshot / 不落盘）。
   bool? lastIndexLrc;
+  bool? lastPinyin;
+  bool? lastLyricsPinyin;
   bool? lastRomajiLyrics;
+  bool? lastInitialsLyrics;
   int setSearchIndexCalls = 0;
 
   @override
   AppPrefs build() => _initial;
 
   @override
-  void setSearchIndex({bool? enabled, bool? indexLrc, bool? romajiLyrics}) {
+  void setSearchIndex({
+    bool? enabled,
+    bool? indexLrc,
+    bool? pinyin,
+    bool? lyricsPinyin,
+    bool? romajiLyrics,
+    bool? initialsLyrics,
+  }) {
     setSearchIndexCalls++;
     lastIndexLrc = indexLrc ?? lastIndexLrc;
+    lastPinyin = pinyin ?? lastPinyin;
+    lastLyricsPinyin = lyricsPinyin ?? lastLyricsPinyin;
     lastRomajiLyrics = romajiLyrics ?? lastRomajiLyrics;
+    lastInitialsLyrics = initialsLyrics ?? lastInitialsLyrics;
     state = state.copyWithSearchIndex(
       enabled: enabled,
       indexLrc: indexLrc,
+      pinyin: pinyin,
+      lyricsPinyin: lyricsPinyin,
       romajiLyrics: romajiLyrics,
+      initialsLyrics: initialsLyrics,
     );
   }
 }
@@ -59,32 +72,25 @@ void main() {
     SearchService.instance.debugReindexOverride = null;
   });
 
-  testWidgets('总开关默认关：.lrc 子开关禁用', (tester) async {
+  testWidgets('总开关默认关：全部子开关禁用且默认关', (tester) async {
     await tester.pumpWidget(_wrap(AppPrefs()));
     await tester.pumpAndSettle();
 
     final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-    expect(switches, hasLength(3), reason: '总开关 + .lrc 子开关 + 歌词罗马音子开关');
+    expect(switches, hasLength(6),
+        reason: '总开关 + .lrc + 元数据拼音 + 歌词拼音 + 歌词首字母 + 歌词罗马音');
     expect(switches[0].value, isFalse, reason: '总开关默认关');
     expect(switches[0].onChanged, isNotNull);
-    expect(switches[1].value, isFalse, reason: '.lrc 子开关默认关');
-    expect(
-      switches[1].onChanged,
-      isNull,
-      reason: '总开关关闭时 .lrc 子开关不可用（onChanged == null）',
-    );
-    expect(switches[2].value, isFalse, reason: '歌词罗马音子开关默认关');
-    expect(
-      switches[2].onChanged,
-      isNull,
-      reason: '总开关关闭时歌词罗马音子开关不可用（onChanged == null）',
-    );
-    // 关闭态：动作按钮禁用（不构造 SearchService / 不触碰 search.db）。
+    for (var i = 1; i < switches.length; i++) {
+      expect(switches[i].value, isFalse, reason: '子开关默认关（index=$i）');
+      expect(switches[i].onChanged, isNull,
+          reason: '总开关关闭时子开关不可用（index=$i）');
+    }
     expect(find.text('Rebuild index'), findsOneWidget);
     expect(find.text('Delete index'), findsOneWidget);
   });
 
-  testWidgets('总开关开启：.lrc 子开关可用', (tester) async {
+  testWidgets('总开关开启：全部子开关可用', (tester) async {
     await tester.pumpWidget(
       _wrap(AppPrefs().copyWithSearchIndex(enabled: true)),
     );
@@ -92,11 +98,12 @@ void main() {
 
     final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
     expect(switches[0].value, isTrue);
-    expect(switches[1].onChanged, isNotNull);
-    expect(switches[2].onChanged, isNotNull);
+    for (var i = 1; i < switches.length; i++) {
+      expect(switches[i].onChanged, isNotNull, reason: 'index=$i');
+    }
   });
 
-  testWidgets('总开关开启：切换 .lrc 子开关 → 写偏好 + 触发增量重建', (tester) async {
+  testWidgets('切换 .lrc → 只写偏好，不自动重建', (tester) async {
     final prefs = _Prefs(AppPrefs().copyWithSearchIndex(enabled: true));
     var reindexCalls = 0;
     SearchService.instance.debugReindexOverride = () async {
@@ -120,17 +127,12 @@ void main() {
     await tester.tap(find.byType(Switch).at(1));
     await tester.pumpAndSettle();
 
-    expect(prefs.lastIndexLrc, isTrue, reason: '切换后写入 .lrc 偏好');
-    expect(reindexCalls, 1, reason: '切换 .lrc 子开关触发一次增量重建（reindex）');
+    expect(prefs.lastIndexLrc, isTrue);
+    expect(reindexCalls, 0, reason: '子开关不自动重建，保留现有索引');
   });
 
-  testWidgets('总开关开启：切换歌词罗马音子开关 → 写偏好 + 触发重建', (tester) async {
+  testWidgets('切换元数据 / 歌词拼音 → 分别写偏好', (tester) async {
     final prefs = _Prefs(AppPrefs().copyWithSearchIndex(enabled: true));
-    var reindexCalls = 0;
-    SearchService.instance.debugReindexOverride = () async {
-      reindexCalls++;
-    };
-
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appPrefsProvider.overrideWith(() => prefs)],
@@ -147,8 +149,35 @@ void main() {
 
     await tester.tap(find.byType(Switch).at(2));
     await tester.pumpAndSettle();
+    expect(prefs.lastPinyin, isTrue);
 
-    expect(prefs.lastRomajiLyrics, isTrue, reason: '切换后写入歌词罗马音偏好');
-    expect(reindexCalls, 1, reason: '切换歌词罗马音子开关触发一次重建（reindex）');
+    await tester.tap(find.byType(Switch).at(3));
+    await tester.pumpAndSettle();
+    expect(prefs.lastLyricsPinyin, isTrue);
+  });
+
+  testWidgets('切换歌词首字母 / 罗马音 → 分别写偏好', (tester) async {
+    final prefs = _Prefs(AppPrefs().copyWithSearchIndex(enabled: true));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appPrefsProvider.overrideWith(() => prefs)],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SingleChildScrollView(child: SearchSection()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Switch).at(4));
+    await tester.pumpAndSettle();
+    expect(prefs.lastInitialsLyrics, isTrue);
+
+    await tester.tap(find.byType(Switch).at(5));
+    await tester.pumpAndSettle();
+    expect(prefs.lastRomajiLyrics, isTrue);
   });
 }

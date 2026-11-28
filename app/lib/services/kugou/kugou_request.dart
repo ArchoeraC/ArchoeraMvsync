@@ -25,6 +25,20 @@ const kgMobilecdnUrl = 'http://mobilecdn.kugou.com/api/v3/search/song';
 /// 热搜：mobilecdn 的 /api/v3/search/hot，公网无鉴权
 const kgSearchHotUrl = 'http://mobilecdn.kugou.com/api/v3/search/hot';
 
+/// 歌单信息：mobilecdn 的 /api/v3/special/info，公网无鉴权。
+///
+/// 用于把搜索结果里的数字 `specialid` 换成公开歌单接口需要的
+/// `global_specialid`（`collection_<n>_<n>_<n>_<n>`）；数字 id 直接传给
+/// `/pubsongs/v2/get_other_list_file_nofilt` 会得到
+/// `error_code=20010 invalid param`。
+const kgSpecialInfoUrl = 'http://mobilecdn.kugou.com/api/v3/special/info';
+
+/// 专辑歌曲：mobilecdn 的 /api/v3/album/song，公网无鉴权。
+///
+/// 网关 `/v1/album_audio/lite` 在未登录 / 部分设备上会返回
+/// `error_code=20010 invalid param`；该通道作为兜底（对齐 baka 插件）。
+const kgAlbumSongUrl = 'http://mobilecdn.kugou.com/api/v3/album/song';
+
 /// 兜底搜索：songsearch.kugou.com（无封面）
 const kgSearchUrl = 'https://songsearch.kugou.com/song_search_v2';
 
@@ -791,7 +805,9 @@ Future<String> kgRegisterDevice({
 
 /// 校验网关响应：`status:0` / `error_code` 非 0/200 视为业务失败（抛异常）。
 /// 成功码约定不统一：多数网关接口用 0，部分通道（歌词系）用 200，两值均放行。
-void _checkKgStatus(dynamic body) {
+///
+/// [path] 仅用于错误信息（定位到具体接口；不参与签名/请求）。
+void _checkKgStatus(dynamic body, {String? path}) {
   if (body is! Map) return;
   // 某些网关把风控事件 id 放在 body 里（request.js 的 ssaCode 兼容字段）。
   final ssa = body['ssaCode'] ?? body['ssa_code'] ?? body['ssa-code'];
@@ -804,14 +820,16 @@ void _checkKgStatus(dynamic body) {
   if (code == 20028) {
     throw KgRiskVerifyRequiredException('酷狗要求完成安全验证（20028），请在酷狗官方客户端完成验证后重试。');
   }
+  final label = path == null ? 'KG' : 'KG $path';
+  final msg = body['error_msg'] ?? body['errmsg'] ?? body['msg'];
+  final detail = msg == null ? '$body' : '$msg';
   final status = body['status'];
   if (status is num && status == 0) {
-    throw KgApiException(
-      'KG status=0: ${body['error_msg'] ?? body['msg'] ?? body}',
-    );
+    final codeText = code != 0 ? ' (error_code=$code)' : '';
+    throw KgApiException('$label status=0$codeText: $detail');
   }
   if (code != 0 && code != 200) {
-    throw KgApiException('KG error_code=$code: ${body['error_msg'] ?? body}');
+    throw KgApiException('$label error_code=$code: $detail');
   }
 }
 
@@ -907,7 +925,7 @@ Future<dynamic> kgGateway(
       kgCleanResponse(utf8.decode(bytes, allowMalformed: true)),
     );
   }
-  _checkKgStatus(resp);
+  _checkKgStatus(resp, path: path);
   return resp;
 }
 

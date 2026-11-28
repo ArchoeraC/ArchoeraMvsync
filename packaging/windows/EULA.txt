@@ -1,9 +1,9 @@
 ﻿ArchoeraMvsync 用户协议与免责声明
 
-本软件（ArchoeraMvsync）以 AGPL-3.0 开源：遵守其条款即可自由使用、学习、修改与再分发，合规的开源商业使用同样被许可；本项目不提供脱离 AGPL 义务的闭源商业授权（此表述为作者意向，不构成对 AGPL 的附加限制）。安装并使用本软件前，请阅读并同意以下声明。
+本软件（ArchoeraMvsync）以 AGPL-3.0-or-later 开源：遵守其条款即可自由使用、学习、修改与再分发，合规的开源商业使用同样被许可；本项目不提供脱离 AGPL 义务的闭源商业授权（此表述为作者意向，不构成对 AGPL 的附加限制）。完整条款见随包 LICENSE，对应源码见 https://github.com/ArchoeraC/ArchoeraMvsync 。安装并使用本软件前，请阅读并同意以下声明。
 
 一、软件性质
-本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。
+本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。
 
 二、内容来源与版权
 本软件自身不提供、不存储、不分发任何音乐内容。音频、歌词、封面等均来自您的本地文件或各音乐平台公开接口，其版权归原权利人及平台所有，本软件不主张任何所有权。
@@ -12,7 +12,7 @@
 使用过程中产生的版权数据（播放链接、歌词、封面等）仅供您个人试听与学习研究，请勿用于商业或公开传播；建议在产生后 24 小时内清除。如需长期欣赏，请通过正版渠道购买或订阅，支持正版音乐。
 
 四、使用限制
-请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。
+请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以随附 LICENSE 的条款为准。
 
 五、登录与账号
 本软件提供扫码登录（用各音乐平台官方 App 扫描本软件展示的二维码）与账号凭据登录，用于同步收藏、歌单并解锁相应功能。请注意：
@@ -35,6 +35,6 @@
 
 English Notice
 
-ArchoeraMvsync is free software licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). It is a third-party, open-source client with no affiliation, cooperation or authorization relationship with any music platform. It neither provides, stores nor distributes any music content; all content comes from your local files or public platform interfaces and remains the property of the respective rights holders.
+ArchoeraMvsync is free software licensed under the GNU Affero General Public License v3.0 or any later version (AGPL-3.0-or-later). The complete license text is included with the package; corresponding source code: https://github.com/ArchoeraC/ArchoeraMvsync. It is a third-party, open-source client with no affiliation, cooperation or authorization relationship with any music platform. It neither provides, stores nor distributes any music content; all content comes from your local files or public platform interfaces and remains the property of the respective rights holders.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. You are solely responsible for how you use this software and for complying with all applicable laws and platform terms of service.

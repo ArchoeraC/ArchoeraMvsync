@@ -47,6 +47,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsRippleDamageClipDesc => 'アクティブな波紋帯のみ再描画；CPU フォールバック時のみ有効';
 
   @override
+  String get settingsMacOSGPU => '独立GPUアクセラレーション';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：独立GPUの Metal 能力が内蔵GPU以上の場合のみ独立GPUを使用します。「独立GPUを優先」は強制します（Metal 2 へ降格する場合があり、AMD ではカバー色・流体背景がフォールバックします）。反映には再起動が必要です';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推奨）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '独立GPUを優先';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '内蔵GPU';
+
+  @override
   String get settingsLyricsEdgeFade => '歌詞の上下フェード';
 
   @override
@@ -3335,14 +3351,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsDecline1Body =>
-      'このソフトウェアはサードパーティクライアントであり、各音楽プラットフォームおよびその公式クライアントとは一切の関連、提携、許諾関係はありません。 本プロジェクト自体は営利を目的とせず、商業提携・広告・スポンサーコンテンツの挿入は一切受け付けません。追加のライセンス権利を伴わない自発的な寄付のみを受け付けます（寄付は AGPL-3.0 の条件や機能に一切影響しません）。より充実した機能が必要な場合は、公式クライアントをご利用ください。\n\n';
+      'このソフトウェアはサードパーティクライアントであり、各音楽プラットフォームおよびその公式クライアントとは一切の関連、提携、許諾関係はありません。 本プロジェクト自体は営利を目的とせず、商業提携・広告・スポンサーコンテンツの挿入は一切受け付けません。追加のライセンス権利を伴わない自発的な寄付のみを受け付けます（寄付は AGPL-3.0-or-later の条件や機能に一切影響しません）。より充実した機能が必要な場合は、公式クライアントをご利用ください。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '2. オープンソースライセンスとソースコード\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本ソフトウェアは GNU Affero 一般公衆利用許諾契約書第 3 版（AGPL-3.0）に基づいて公開されています。このライセンスの範囲内で、本ソフトウェアを自由に実行・研究・改変・再配布できますが、以下の条件を遵守する必要があります：著作権およびライセンス表示を保持すること；派生作品を同一ライセンスで公開すること；本ソフトウェア（改変版を含む）の機能をネットワーク経由で利用者に提供する場合、その利用者に対応する完全なソースコードを提供すること。本プロジェクトは AGPL の義務を回避するクローズドソースの商用ライセンスを提供しません。完全な条件は添付の LICENSE ファイルおよび https://www.gnu.org/licenses/agpl-3.0.html に準拠します。\n\n';
+      '本ソフトウェアは GNU Affero 一般公衆利用許諾契約書第 3 版（AGPL-3.0-or-later）に基づいて公開されています。このライセンスの範囲内で、本ソフトウェアを自由に実行・研究・改変・再配布できますが、以下の条件を遵守する必要があります：著作権およびライセンス表示を保持すること；派生作品を同一ライセンスで公開すること；本ソフトウェア（改変版を含む）の機能をネットワーク経由で利用者に提供する場合、その利用者に対応する完全なソースコードを提供すること。本プロジェクトは AGPL の義務を回避するクローズドソースの商用ライセンスを提供しません。完全な条件は添付の LICENSE ファイルおよび https://www.gnu.org/licenses/agpl-3.0.html に準拠します。\n\n';
 
   @override
   String get settingsDecline2Title => '2. コンテンツソースと著作権\n';
@@ -3363,7 +3379,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      '商業活動、一括スクレイピング、クローリング、転売に使用しないでください；法令または利用規約に違反する方法で使用しないでください。\n\n';
+      '本ソフトウェアを著作権その他の正当な権利を侵害する目的（一括スクレイピング、クローリング、コンテンツの転売など）で使用しないでください。現地の法令や利用規約に違反する方法で使用しないでください。オンラインプラットフォームの技術的保護措置、アクセス制御、利用規約を回避しないでください。本条は利用上の注意であり、AGPL-3.0-or-later を超える追加のライセンス制限を課すものではありません。商業利用は LICENSE に従います。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. ログインとアカウント\n';
@@ -4505,6 +4521,27 @@ class AppLocalizationsJa extends AppLocalizations {
       '音訳のない日本語歌詞からローマ字を自動生成し、ローマ字で検索できるようにします（索引サイズは約2倍）';
 
   @override
+  String get settingsSearchIndexInitials => '歌詞の頭文字索引';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌詞をピンイン頭文字（例: wanzg）でも検索できます。オフにすると索引が小さくなります（変更時は再構築が必要）';
+
+  @override
+  String get settingsSearchIndexPinyin => 'メタデータのピンイン索引';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '曲名・アーティスト・アルバムをピンインや頭文字で検索します。既定はオフ（索引の再構築後に有効）';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌詞のピンイン索引';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '歌詞をピンイン音节で検索します。最も大きい派生列のため既定はオフ（索引の再構築後に有効）';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引は派生データです：既定はオフでコストゼロ。有効化すると初回構築に時間とディスク（1万曲で数百 MB 程度）を使用し、失敗時は自動で基本検索にフォールバックします。';
 
@@ -4568,6 +4605,68 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsSearchIndexRebuildStarted => '索引の再構築を開始しました';
+
+  @override
+  String get settingsSearchIndexDiagVersions => 'インデックスの世代とバージョン';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'スキーマ $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'アナライザー $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '検索データパック';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'パック $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'インデックスと一致';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '別のパックで構築';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '欠落';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基盤テーブル正常';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基盤テーブル欠落';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '低下した機能 $count 件';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌詞の信頼度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · なし $none';
+  }
 
   @override
   String get libraryFullScan => '全件スキャン';
@@ -5228,6 +5327,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsEqReset => 'Reset equalizer';
+
+  @override
+  String get equalizerQuickDesc =>
+      'プレイヤーからすばやく調整：プリセット、プリアンプ、10 バンド。変更はすぐに反映されます。';
 
   @override
   String get settingsEqPresetFlat => 'Flat';

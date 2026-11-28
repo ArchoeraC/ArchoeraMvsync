@@ -28,6 +28,7 @@ const sidebarHiddenKeysKey = 'appearance.sidebarHiddenKeys';
 const localeKey = 'appearance.locale';
 const floatingBarKey = 'appearance.floatingPlayerBar';
 const windowDecorKey = 'appearance.windowDecor';
+const windowGeometryKey = 'appearance.windowGeometry';
 const autoHideWindowControlsKey = 'appearance.autoHideWindowControls';
 const coverRadiusKey = 'appearance.coverRadius';
 const weatherEnabledKey = 'appearance.weatherEnabled';
@@ -131,11 +132,31 @@ extension AppearancePrefs on AppPrefs {
     return 'borderless';
   }
 
+  /// 上次退出时的窗口几何（逻辑像素；ABI v11 `get_size` / `get_position`）。
+  ///
+  /// 只持久化「普通窗口」尺寸；最大化 / 全屏退出时不写，避免下次启动先恢复成
+  /// 全屏尺寸。非法值 / 越界一律忽略（返回 null = 用 runner 默认值）。
+  ({int width, int height, int? x, int? y})? get windowGeometry {
+    final raw = data[windowGeometryKey];
+    if (raw is! Map) return null;
+    final w = raw['width'];
+    final h = raw['height'];
+    if (w is! int || h is! int) return null;
+    if (w < 640 || h < 420 || w > 16384 || h > 16384) return null;
+    final x = raw['x'];
+    final y = raw['y'];
+    return (
+      width: w,
+      height: h,
+      x: x is int ? x : null,
+      y: y is int ? y : null,
+    );
+  }
+
   /// 无边框方案下自动隐藏窗口按钮（仅在指针移到右上角时显示）。
   ///
   /// **默认关闭**：触摸屏 / 无鼠标设备无法通过悬停唤出按钮。
-  bool get autoHideWindowControls =>
-      data[autoHideWindowControlsKey] == true;
+  bool get autoHideWindowControls => data[autoHideWindowControlsKey] == true;
 
   /// 背景图片路径（磁盘绝对路径；null = 未选择，对齐 imageBackground.src）。
   String? get backgroundImage => data[backgroundImageKey] as String?;
@@ -362,6 +383,19 @@ extension AppearancePrefs on AppPrefs {
 
   AppPrefs copyWithFloatingBar(bool value) =>
       AppPrefs(initialData: {...data, floatingBarKey: value});
+
+  /// 记录窗口几何（退出时写入；下次启动恢复）。
+  AppPrefs copyWithWindowGeometry({
+    required int width,
+    required int height,
+    int? x,
+    int? y,
+  }) => AppPrefs(
+    initialData: {
+      ...data,
+      windowGeometryKey: {'width': width, 'height': height, 'x': ?x, 'y': ?y},
+    },
+  );
 
   /// 设置窗口装饰方案（非法值忽略，保留原值）。
   AppPrefs copyWithWindowDecor(String value) => AppPrefs(

@@ -4,7 +4,7 @@
 
 // 索引构建的**子 isolate 传输**回归。
 //
-// 背景：构建必须在子 isolate 里跑阻塞的 `indexer_run`。`Isolate.run` 发送的是
+// 背景：构建必须在子 isolate 里跑阻塞的 `era_index_run`。`Isolate.run` 发送的是
 // 「闭包 + 其上下文」的深拷贝；调用方 `SearchService` 持有 `_gateTail`（`Future`，
 // **不可发送**）等现场。若 isolate 入口写在实例方法内（尤其同函数里还有
 // `NativeCallable.listener(某实例方法)` 这类 tear-off），`this` 就会进入闭包上下文
@@ -100,8 +100,8 @@ void main() {
     expect(service.status.isError, isTrue);
     expect(
       service.status.message,
-      contains('library.db'),
-      reason: '状态须反映 indexer 的具体失败原因（源曲库不存在）',
+      contains('源曲库不存在'),
+      reason: '状态须反映 indexer 的具体失败原因（错误 JSON 的 error.message）',
     );
     expect(
       service.status.message,

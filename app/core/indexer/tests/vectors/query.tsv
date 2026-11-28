@@ -27,8 +27,9 @@ shanghai	shanghai	shang hai	*
 wo ai ni	wo ai ni	wo ai ni	*
 # 5) 中文：bigram + 首尾 unigram（v13），拼音逐字主读音，首字母整串
 我爱你	我爱 爱你 我 你	wo ai ni	wan
-# 6) 中英混合：CJK 段 bigram + 首尾 unigram（v13）+ 拉丁整词（woaini 在拼音列切分）
-我爱woaini	我爱 我 爱 woaini	wo ai wo ai ni	wa woaini
+# 6) 中英混合：CJK 段 bigram + 首尾 unigram（v13）+ 拉丁整词（woaini 在拼音列切分）；
+#    v15：拉丁段不进首字母列，查询侧首字母只保留人类可读的 CJK 段串（wa）。
+我爱woaini	我爱 我 爱 woaini	wo ai wo ai ni	wa
 # 7) NFKC 折叠与索引侧同构：ﬁ→fi（查询侧词元/拼音一致）
 ﬁ	fi	fi	*
 # 8) NFKC 全范围（v3）：非 BMP 星平面兼容字母折叠为 ASCII（查询侧同构）

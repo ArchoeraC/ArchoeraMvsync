@@ -990,6 +990,7 @@ void* g_gtk = nullptr;
 void* g_gdk = nullptr;
 void* g_glib = nullptr;
 void* g_gio = nullptr;
+void* g_gobject = nullptr;
 bool g_loaded = false;
 
 // 用 g_idle_add 延后到主循环空闲执行：g_main_context_invoke 会同步调用，
@@ -998,6 +999,12 @@ bool g_loaded = false;
 unsigned (*g_idle_add)(int (*)(void*), void*) = nullptr;
 unsigned (*g_timeout_add)(unsigned, int (*)(void*), void*) = nullptr;
 int (*g_source_remove)(unsigned) = nullptr;
+// GTK 信号（事件驱动；替代 500ms 轮询）。用 dlopen 的 gobject 符号连接，
+// 不引入编译期 GTK 头依赖（与现有 dlopen 策略一致）。
+unsigned long (*g_signal_connect_data)(void* instance, const char* signal,
+                                       void* handler, void* data,
+                                       void* destroy, int flags) = nullptr;
+void (*g_signal_handler_disconnect)(void* instance, unsigned long id) = nullptr;
 // 取窗口：优先应用自身窗口列表（gtk_application_get_windows，官方 API，列表归
 // application 所有、无需释放）；避免 gtk_window_list_toplevels() 遍历全局顶层
 // 窗口列表（实测会陷入无上限遍历，导致主线程 100% CPU + 内存暴涨卡死）。
@@ -1005,15 +1012,96 @@ void* (*g_application_get_default)() = nullptr;
 void* (*gtk_application_get_windows)(void*) = nullptr;
 int (*gtk_widget_get_visible)(void*) = nullptr;
 int (*gtk_window_is_active)(void*) = nullptr;
+int (*gtk_window_is_maximized)(void*) = nullptr;
+int (*gtk_window_is_fullscreen)(void*) = nullptr;
 void* (*gtk_widget_get_window)(void*) = nullptr;
 int (*gdk_window_get_state)(void*) = nullptr;
 void (*gtk_window_present)(void*) = nullptr;
+unsigned (*gdk_event_get_time)(void*) = nullptr;
+
+// ── 窗口控制（ABI v10；GTK 只能主循环线程调用）────────────────────
+// 全部经 g_idle_add 调度（理由同 activateOnMain）；位置缓存为原子，供任意线程读。
+constexpr int kGdkHintMinSize = 1 << 1;  // GDK_HINT_MIN_SIZE
+void (*gtk_window_resize)(void*, int, int) = nullptr;
+void (*gtk_window_move)(void*, int, int) = nullptr;
+void (*gtk_window_get_position)(void*, int*, int*) = nullptr;
+void (*gtk_window_get_size)(void*, int*, int*) = nullptr;
+void (*gtk_window_iconify)(void*) = nullptr;
+void (*gtk_window_deiconify)(void*) = nullptr;
+void (*gtk_window_maximize)(void*) = nullptr;
+void (*gtk_window_unmaximize)(void*) = nullptr;
+void (*gtk_window_fullscreen)(void*) = nullptr;
+void (*gtk_window_unfullscreen)(void*) = nullptr;
+void (*gtk_window_set_keep_above)(void*, int) = nullptr;
+void (*gtk_window_set_resizable)(void*, int) = nullptr;
+void (*gtk_window_set_decorated)(void*, int) = nullptr;
+void (*gtk_window_show)(void*) = nullptr;
+void (*gtk_window_hide)(void*) = nullptr;
+void (*gtk_window_set_geometry_hints)(void*, void*, void*, int) = nullptr;
+void (*gtk_window_begin_move_drag)(void*, int, int, int, unsigned) = nullptr;
+void (*gtk_window_begin_resize_drag)(void*, int, int, int, int, unsigned) = nullptr;
+unsigned (*gtk_get_current_event_time)() = nullptr;
+void* (*gdk_display_get_default)() = nullptr;
+void* (*gdk_display_get_default_seat)(void*) = nullptr;
+void* (*gdk_seat_get_pointer)(void*) = nullptr;
+void (*gdk_device_get_position)(void*, void**, int*, int*) = nullptr;
+void* (*gdk_screen_get_default)() = nullptr;
+int (*gdk_screen_get_monitor_at_window)(void*, void*) = nullptr;
+void (*gdk_screen_get_monitor_workarea)(void*, int, void*) = nullptr;
+// 越界位置矫正用：枚举显示器 + 取每块屏的几何（GTK3 X11 语义；Wayland 下
+// gtk_window_move 本身被合成器忽略，这里只是不做无意义计算）。
+int (*gdk_screen_get_n_monitors)(void*) = nullptr;
+void (*gdk_screen_get_monitor_geometry)(void*, int, void*) = nullptr;
+
+// GdkGeometry（GTK3）：只需 min_width/min_height 位于偏移 0/4；仍按完整布局声明，
+// 避免 GTK 整结构拷贝时越界读。
+struct GdkGeometryLocal {
+    int32_t min_width;
+    int32_t min_height;
+    int32_t max_width;
+    int32_t max_height;
+    int32_t base_width;
+    int32_t base_height;
+    int32_t width_inc;
+    int32_t height_inc;
+    double min_aspect;
+    double max_aspect;
+    int32_t win_gravity;
+};
+
+// GdkRectangle：x / y / width / height。
+struct GdkRectangleLocal {
+    int32_t x;
+    int32_t y;
+    int32_t width;
+    int32_t height;
+};
 
 void* g_win = nullptr;
-unsigned g_timer = 0;
+// g_win 只在主循环写入；本标志供任意线程判断「是否已发现窗口」（避免跨线程
+// 直接读裸指针构成数据竞争）。
+std::atomic<bool> g_have_window{false};
+unsigned g_timer = 0;      // 信号不可用时的轮询兜底
+unsigned g_retry = 0;      // 启动早期窗口尚未创建时的重试 source
+unsigned long g_handlers[10] = {};
+int g_handler_count = 0;
 std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_minimized{false};
 std::atomic<bool> g_focused{true};
+std::atomic<bool> g_maximized{false};
+std::atomic<bool> g_fullscreen{false};
+std::atomic<bool> g_hidden{false};
+// 窗口位置（根坐标）：poll 里从 GTK 刷新；set_position 先乐观写缓存，
+// 供 Dart 任意线程 apl_window_get_position 立即往返。
+std::atomic<int32_t> g_pos_x{0};
+std::atomic<int32_t> g_pos_y{0};
+// 窗口尺寸（内容区，GTK 口径）：poll / configure-event 刷新，供任意线程
+// apl_window_get_size 读取（GTK 只能在主循环线程调用）。
+std::atomic<int32_t> g_size_w{0};
+std::atomic<int32_t> g_size_h{0};
+// 最近一次鼠标按下的 GTK 事件时间（Wayland 的 begin_move_drag 需要有效 serial；
+// 拖拽在 idle 回调里启动，`gtk_get_current_event_time()` 此时通常已为 0）。
+std::atomic<unsigned> g_last_event_time{0};
 
 template <typename T>
 T sym(void* handle, const char* name) {
@@ -1031,10 +1119,16 @@ bool load() {
     g_gio = dlopen("libgio-2.0.so.0", RTLD_NOW);
     if (g_gio == nullptr) g_gio = dlopen(nullptr, RTLD_NOW);
     if (g_gio == nullptr) g_gio = g_gtk;
+    g_gobject = dlopen("libgobject-2.0.so.0", RTLD_NOW);
+    if (g_gobject == nullptr) g_gobject = g_gtk;
     if (g_gtk == nullptr || g_glib == nullptr) return false;
     g_idle_add = sym<decltype(g_idle_add)>(g_glib, "g_idle_add");
     g_timeout_add = sym<decltype(g_timeout_add)>(g_glib, "g_timeout_add");
     g_source_remove = sym<decltype(g_source_remove)>(g_glib, "g_source_remove");
+    g_signal_connect_data = sym<decltype(g_signal_connect_data)>(
+        g_gobject, "g_signal_connect_data");
+    g_signal_handler_disconnect = sym<decltype(g_signal_handler_disconnect)>(
+        g_gobject, "g_signal_handler_disconnect");
     g_application_get_default = sym<decltype(g_application_get_default)>(
         g_gio, "g_application_get_default");
     gtk_application_get_windows = sym<decltype(gtk_application_get_windows)>(
@@ -1043,12 +1137,76 @@ bool load() {
         g_gtk, "gtk_widget_get_visible");
     gtk_window_is_active = sym<decltype(gtk_window_is_active)>(
         g_gtk, "gtk_window_is_active");
+    gtk_window_is_maximized = sym<decltype(gtk_window_is_maximized)>(
+        g_gtk, "gtk_window_is_maximized");
+    gtk_window_is_fullscreen = sym<decltype(gtk_window_is_fullscreen)>(
+        g_gtk, "gtk_window_is_fullscreen");
     gtk_widget_get_window = sym<decltype(gtk_widget_get_window)>(
         g_gtk, "gtk_widget_get_window");
     gdk_window_get_state = sym<decltype(gdk_window_get_state)>(
         g_gdk, "gdk_window_get_state");
     gtk_window_present =
         sym<decltype(gtk_window_present)>(g_gtk, "gtk_window_present");
+    gdk_event_get_time =
+        sym<decltype(gdk_event_get_time)>(g_gdk, "gdk_event_get_time");
+    // 窗口控制（部分符号缺失时，对应 API 返回 ERR_UNSUPPORTED；load 仍成功）。
+    gtk_window_resize =
+        sym<decltype(gtk_window_resize)>(g_gtk, "gtk_window_resize");
+    gtk_window_move = sym<decltype(gtk_window_move)>(g_gtk, "gtk_window_move");
+    gtk_window_get_position = sym<decltype(gtk_window_get_position)>(
+        g_gtk, "gtk_window_get_position");
+    gtk_window_get_size =
+        sym<decltype(gtk_window_get_size)>(g_gtk, "gtk_window_get_size");
+    gtk_window_iconify =
+        sym<decltype(gtk_window_iconify)>(g_gtk, "gtk_window_iconify");
+    gtk_window_deiconify =
+        sym<decltype(gtk_window_deiconify)>(g_gtk, "gtk_window_deiconify");
+    gtk_window_maximize =
+        sym<decltype(gtk_window_maximize)>(g_gtk, "gtk_window_maximize");
+    gtk_window_unmaximize =
+        sym<decltype(gtk_window_unmaximize)>(g_gtk, "gtk_window_unmaximize");
+    gtk_window_fullscreen =
+        sym<decltype(gtk_window_fullscreen)>(g_gtk, "gtk_window_fullscreen");
+    gtk_window_unfullscreen = sym<decltype(gtk_window_unfullscreen)>(
+        g_gtk, "gtk_window_unfullscreen");
+    gtk_window_set_keep_above = sym<decltype(gtk_window_set_keep_above)>(
+        g_gtk, "gtk_window_set_keep_above");
+    gtk_window_set_resizable = sym<decltype(gtk_window_set_resizable)>(
+        g_gtk, "gtk_window_set_resizable");
+    gtk_window_set_decorated = sym<decltype(gtk_window_set_decorated)>(
+        g_gtk, "gtk_window_set_decorated");
+    gtk_window_show = sym<decltype(gtk_window_show)>(g_gtk, "gtk_window_show");
+    gtk_window_hide = sym<decltype(gtk_window_hide)>(g_gtk, "gtk_window_hide");
+    gtk_window_set_geometry_hints = sym<decltype(gtk_window_set_geometry_hints)>(
+        g_gtk, "gtk_window_set_geometry_hints");
+    gtk_window_begin_move_drag = sym<decltype(gtk_window_begin_move_drag)>(
+        g_gtk, "gtk_window_begin_move_drag");
+    gtk_window_begin_resize_drag = sym<decltype(gtk_window_begin_resize_drag)>(
+        g_gtk, "gtk_window_begin_resize_drag");
+    gtk_get_current_event_time = sym<decltype(gtk_get_current_event_time)>(
+        g_gtk, "gtk_get_current_event_time");
+    gdk_display_get_default = sym<decltype(gdk_display_get_default)>(
+        g_gdk, "gdk_display_get_default");
+    gdk_display_get_default_seat = sym<decltype(gdk_display_get_default_seat)>(
+        g_gdk, "gdk_display_get_default_seat");
+    gdk_seat_get_pointer =
+        sym<decltype(gdk_seat_get_pointer)>(g_gdk, "gdk_seat_get_pointer");
+    gdk_device_get_position = sym<decltype(gdk_device_get_position)>(
+        g_gdk, "gdk_device_get_position");
+    gdk_screen_get_default = sym<decltype(gdk_screen_get_default)>(
+        g_gdk, "gdk_screen_get_default");
+    gdk_screen_get_monitor_at_window =
+        sym<decltype(gdk_screen_get_monitor_at_window)>(
+            g_gdk, "gdk_screen_get_monitor_at_window");
+    gdk_screen_get_monitor_workarea =
+        sym<decltype(gdk_screen_get_monitor_workarea)>(
+            g_gdk, "gdk_screen_get_monitor_workarea");
+    gdk_screen_get_n_monitors =
+        sym<decltype(gdk_screen_get_n_monitors)>(
+            g_gdk, "gdk_screen_get_n_monitors");
+    gdk_screen_get_monitor_geometry =
+        sym<decltype(gdk_screen_get_monitor_geometry)>(
+            g_gdk, "gdk_screen_get_monitor_geometry");
     g_loaded = g_idle_add != nullptr && g_timeout_add != nullptr &&
                g_source_remove != nullptr &&
                g_application_get_default != nullptr &&
@@ -1100,10 +1258,15 @@ void activate() {
 
 void emit() {
     if (!g_enabled.load(std::memory_order_acquire)) return;
-    dispatch(makeWindowState(g_minimized.load(std::memory_order_acquire),
-                             g_focused.load(std::memory_order_acquire)));
+    dispatch(makeWindowState(
+        g_minimized.load(std::memory_order_acquire),
+        g_focused.load(std::memory_order_acquire),
+        g_maximized.load(std::memory_order_acquire),
+        g_fullscreen.load(std::memory_order_acquire),
+        g_hidden.load(std::memory_order_acquire)));
 }
 
+// 从 GTK/GDK 读取完整窗口状态；信号回调与轮询兜底共用。
 int poll(void*) {
     if (g_win == nullptr) return 1;  // G_SOURCE_CONTINUE
     const bool active = gtk_window_is_active(g_win) != 0;
@@ -1112,41 +1275,151 @@ int poll(void*) {
     if (gdkwin != nullptr) {
         minimized = (gdk_window_get_state(gdkwin) & kGdkStateIconified) != 0;
     }
+    // 位置缓存：根坐标；configure-event / 轮询都会刷新，供任意线程读取。
+    if (gtk_window_get_position != nullptr) {
+        int px = 0;
+        int py = 0;
+        gtk_window_get_position(g_win, &px, &py);
+        g_pos_x.store(px, std::memory_order_release);
+        g_pos_y.store(py, std::memory_order_release);
+    }
+    if (gtk_window_get_size != nullptr) {
+        int ww = 0;
+        int wh = 0;
+        gtk_window_get_size(g_win, &ww, &wh);
+        if (ww > 0 && wh > 0) {
+            g_size_w.store(ww, std::memory_order_release);
+            g_size_h.store(wh, std::memory_order_release);
+        }
+    }
+    const bool hidden = gtk_widget_get_visible(g_win) == 0;
+    const bool maximized =
+        gtk_window_is_maximized != nullptr && gtk_window_is_maximized(g_win) != 0;
+    const bool fullscreen = gtk_window_is_fullscreen != nullptr &&
+                            gtk_window_is_fullscreen(g_win) != 0;
     if (active != g_focused.load(std::memory_order_acquire) ||
-        minimized != g_minimized.load(std::memory_order_acquire)) {
+        minimized != g_minimized.load(std::memory_order_acquire) ||
+        hidden != g_hidden.load(std::memory_order_acquire) ||
+        maximized != g_maximized.load(std::memory_order_acquire) ||
+        fullscreen != g_fullscreen.load(std::memory_order_acquire)) {
         g_focused.store(active, std::memory_order_release);
         g_minimized.store(minimized, std::memory_order_release);
+        g_hidden.store(hidden, std::memory_order_release);
+        g_maximized.store(maximized, std::memory_order_release);
+        g_fullscreen.store(fullscreen, std::memory_order_release);
         emit();
     }
-    return 1;
+    return 1;  // G_SOURCE_CONTINUE
+}
+
+// GTK 事件信号：只作「状态可能变化」的触发，真实状态仍由 poll 查询。
+// 返回值 FALSE 让 GTK 继续默认处理（不吞掉聚焦/状态事件）。
+int onStateSignal(void*, void*, void*) {
+    poll(nullptr);
+    return 0;
+}
+
+int onVisibilitySignal(void*, void*) {
+    poll(nullptr);
+    return 0;
+}
+
+// delete-event（关闭按钮 / Alt+F4 / WM_DELETE_WINDOW）：只上报关闭请求，
+// 返回 TRUE 阻止 GTK 默认 destroy；隐藏还是退出由 Dart 决策。
+int onDeleteEvent(void*, void*, void*) {
+    if (!g_enabled.load(std::memory_order_acquire)) return 0;  // FALSE：已停订阅
+    dispatch(makeWindowCloseRequest(WINDOW_CLOSE));
+    return 1;  // TRUE：不销毁窗口
+}
+
+// 记录鼠标按下时间：拖拽/缩放请求在 idle 回调里执行，届时 current event 已失效，
+// Wayland 合成器要求 timestamp 来自触发拖拽的那次按下。返回 FALSE 不吞事件。
+int onButtonPress(void*, void* event, void*) {
+    if (event != nullptr && gdk_event_get_time != nullptr) {
+        g_last_event_time.store(gdk_event_get_time(event),
+                                std::memory_order_release);
+    }
+    return 0;
+}
+
+void connectSignals() {
+    if (g_win == nullptr || g_signal_connect_data == nullptr ||
+        g_signal_handler_disconnect == nullptr || g_handler_count > 0) {
+        return;
+    }
+    auto add = [](const char* name, void* handler) {
+        if (g_handler_count >= 10) return;
+        g_handlers[g_handler_count++] = g_signal_connect_data(
+            g_win, name, handler, nullptr, nullptr, 0);
+    };
+    // 事件驱动的焦点 / 状态变化（最大化 / 全屏 / 图标化都走 window-state-event）。
+    add("focus-in-event", reinterpret_cast<void*>(&onStateSignal));
+    add("focus-out-event", reinterpret_cast<void*>(&onStateSignal));
+    add("window-state-event", reinterpret_cast<void*>(&onStateSignal));
+    add("configure-event", reinterpret_cast<void*>(&onStateSignal));
+    // 显示 / 隐藏（托盘隐藏、最小化到托盘）：GTK show/hide 信号无事件参数。
+    add("show", reinterpret_cast<void*>(&onVisibilitySignal));
+    add("hide", reinterpret_cast<void*>(&onVisibilitySignal));
+    // 鼠标按下时间（拖拽/缩放的 Wayland serial；不吞事件）。
+    add("button-press-event", reinterpret_cast<void*>(&onButtonPress));
+    // 关闭请求：拦截 delete-event（返回 TRUE），由 Dart 决定隐藏 / 退出。
+    add("delete-event", reinterpret_cast<void*>(&onDeleteEvent));
+}
+
+void disconnectSignals() {
+    if (g_win != nullptr && g_signal_handler_disconnect != nullptr) {
+        for (int i = 0; i < g_handler_count; i++) {
+            g_signal_handler_disconnect(g_win, g_handlers[i]);
+        }
+    }
+    g_handler_count = 0;
 }
 
 int setupOnMainThread(void*) {
+    // setEvents(false) 与已排队的 idle 竞争：停订阅后不得再挂信号 /
+    // 重新开启 delete-event 拦截，否则窗口将无法关闭。
+    if (!g_enabled.load(std::memory_order_acquire)) return 0;  // G_SOURCE_REMOVE
     struct GList {
         void* data;
         GList* next;
         GList* prev;
     };
-    void* app = g_application_get_default != nullptr
-                    ? g_application_get_default()
-                    : nullptr;
-    if (app != nullptr) {
-        // 应用自身窗口列表（按最近聚焦排序，首元素为当前聚焦窗口）；列表归
-        // application 所有，只读、不可修改/释放。
-        auto* it = static_cast<GList*>(gtk_application_get_windows(app));
-        while (it != nullptr) {
-            void* win = it->data;
-            if (win != nullptr && gtk_widget_get_visible(win) != 0) {
-                g_win = win;
-                break;
+    // 本次调用消耗掉调度它的 source（idle 或上一次 retry timeout）；失败时
+    // 重新挂一个新的 timeout，返回 0 只移除当前 source，不影响新挂的。
+    g_retry = 0;
+    if (g_win == nullptr) {
+        void* app = g_application_get_default != nullptr
+                        ? g_application_get_default()
+                        : nullptr;
+        if (app != nullptr) {
+            // 应用自身窗口列表（按最近聚焦排序，首元素为当前聚焦窗口）；列表归
+            // application 所有，只读、不可修改/释放。
+            auto* it = static_cast<GList*>(gtk_application_get_windows(app));
+            while (it != nullptr) {
+                void* win = it->data;
+                if (win != nullptr && gtk_widget_get_visible(win) != 0) {
+                    g_win = win;
+                    g_have_window.store(true, std::memory_order_release);
+                    break;
+                }
+                it = it->next;
             }
-            it = it->next;
         }
     }
-    if (g_win == nullptr) return 0;  // G_SOURCE_REMOVE
+    if (g_win == nullptr) {
+        // 启动早期窗口还没创建：每 500ms 重试，而不是永久静默（旧实现直接
+        // G_SOURCE_REMOVE，桥接之后再也没事件）。该 source 由 setEvents(false) 撤销。
+        if (g_retry == 0) g_retry = g_timeout_add(500, setupOnMainThread, nullptr);
+        return 0;  // 本次 timeout 结束；下一次在 g_retry 里继续
+    }
+    g_retry = 0;
+    connectSignals();
     poll(nullptr);
-    if (g_timer == 0) g_timer = g_timeout_add(500, poll, nullptr);
-    return 0;  // G_SOURCE_REMOVE
+    // 信号可用时不装轮询；仅当 gobject 缺失（极少见的裁剪环境）保留兜底。
+    if (g_handler_count == 0 && g_timer == 0) {
+        g_timer = g_timeout_add(500, poll, nullptr);
+    }
+    return 0;  // G_SOURCE_REMOVE（若作为重试 timeout，找到窗口后自然停止）
 }
 
 int32_t setEvents(bool on) {
@@ -1162,7 +1435,427 @@ int32_t setEvents(bool on) {
         g_source_remove(g_timer);
         g_timer = 0;
     }
+    if (g_retry != 0) {
+        g_source_remove(g_retry);
+        g_retry = 0;
+    }
+    disconnectSignals();
     return OK;
+}
+
+// ── 窗口控制（ABI v10）────────────────────────────────────────────
+// 线程模型：入口函数只做符号检查 + 把操作排到 GTK 主循环（g_idle_add），
+// 绝不从 Dart 线程直接调用 GTK；位置缓存为原子，读接口无需主循环。
+enum TaskOp {
+    kTaskResize,
+    kTaskMinSize,
+    kTaskCenter,
+    kTaskMove,
+    kTaskIconify,
+    kTaskDeiconify,
+    kTaskMaximize,
+    kTaskUnmaximize,
+    kTaskFullscreen,
+    kTaskUnfullscreen,
+    kTaskKeepAbove,
+    kTaskResizable,
+    kTaskDecorated,
+    kTaskShow,
+    kTaskHide,
+    kTaskDrag,
+    kTaskResizeDrag,
+};
+
+struct WindowTask {
+    int32_t op;
+    int32_t a;
+    int32_t b;
+};
+
+// GList 布局（glib）：data / next / prev。
+struct GListLocal {
+    void* data;
+    GListLocal* next;
+    GListLocal* prev;
+};
+
+// 主循环上解析目标窗口：g_win 可能尚未发现（控制调用早于窗口创建）。
+void* resolveWindow() {
+    if (g_win != nullptr) return g_win;
+    if (g_application_get_default == nullptr ||
+        gtk_application_get_windows == nullptr) {
+        return nullptr;
+    }
+    void* app = g_application_get_default();
+    if (app == nullptr) return nullptr;
+    auto* it = static_cast<GListLocal*>(gtk_application_get_windows(app));
+    while (it != nullptr) {
+        if (it->data != nullptr) {
+            g_win = it->data;
+            g_have_window.store(true, std::memory_order_release);
+            break;
+        }
+        it = it->next;
+    }
+    return g_win;
+}
+
+// 指针根坐标（拖拽/缩放热区用）。GTK 3.20+ 的 seat/pointer API；取不到时回退
+// 到窗口缓存中心（无鼠标事件时 begin_*_drag 本来也不会生效）。
+bool pointerRootPos(int* x, int* y) {
+    if (gdk_display_get_default == nullptr ||
+        gdk_display_get_default_seat == nullptr ||
+        gdk_seat_get_pointer == nullptr || gdk_device_get_position == nullptr) {
+        return false;
+    }
+    void* display = gdk_display_get_default();
+    if (display == nullptr) return false;
+    void* seat = gdk_display_get_default_seat(display);
+    if (seat == nullptr) return false;
+    void* pointer = gdk_seat_get_pointer(seat);
+    if (pointer == nullptr) return false;
+    int px = 0;
+    int py = 0;
+    gdk_device_get_position(pointer, nullptr, &px, &py);
+    *x = px;
+    *y = py;
+    return true;
+}
+
+// 位置越界矫正（ABI v11 起的几何恢复用）：目标矩形与任一显示器相交就原样放行，
+// 只有**完全落在所有显示器之外**（拔掉外接屏 / 分辨率变小 / 旧偏好来自另一套布局）
+// 才把原点拉回「离目标中心最近的显示器」内。多屏 + 负坐标布局因此不受影响。
+// 仅在主循环线程调用（GTK/GDK 约束）；缺符号（裁剪环境）时静默跳过。
+void clampMoveToMonitors(void* win, int* x, int* y) {
+    if (gdk_screen_get_default == nullptr || gdk_screen_get_n_monitors == nullptr ||
+        gdk_screen_get_monitor_geometry == nullptr) {
+        return;
+    }
+    void* screen = gdk_screen_get_default();
+    if (screen == nullptr) return;
+    const int n = gdk_screen_get_n_monitors(screen);
+    if (n <= 0) return;
+
+    GdkRectangleLocal want{*x, *y, 1, 1};
+    if (gtk_window_get_size != nullptr) {
+        gtk_window_get_size(win, &want.width, &want.height);
+    }
+    if (want.width <= 0 || want.height <= 0) return;
+
+    bool visible = false;
+    for (int i = 0; i < n && !visible; i++) {
+        GdkRectangleLocal g{};
+        gdk_screen_get_monitor_geometry(screen, i, &g);
+        visible = want.x < g.x + g.width && want.x + want.width > g.x &&
+                  want.y < g.y + g.height && want.y + want.height > g.y;
+    }
+    if (visible) return;
+
+    int best = 0;
+    double best_d = -1.0;
+    for (int i = 0; i < n; i++) {
+        GdkRectangleLocal g{};
+        gdk_screen_get_monitor_geometry(screen, i, &g);
+        const double dx = (want.x + want.width / 2.0) - (g.x + g.width / 2.0);
+        const double dy = (want.y + want.height / 2.0) - (g.y + g.height / 2.0);
+        const double d = dx * dx + dy * dy;
+        if (best_d < 0.0 || d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    GdkRectangleLocal g{};
+    gdk_screen_get_monitor_geometry(screen, best, &g);
+    int nx = want.x;
+    int ny = want.y;
+    if (nx + want.width > g.x + g.width) nx = g.x + g.width - want.width;
+    if (nx < g.x) nx = g.x;
+    if (ny + want.height > g.y + g.height) ny = g.y + g.height - want.height;
+    if (ny < g.y) ny = g.y;
+    *x = nx;
+    *y = ny;
+}
+
+int applyTask(void* p) {
+    WindowTask* t = static_cast<WindowTask*>(p);
+    void* win = resolveWindow();
+    if (win != nullptr) {
+        switch (t->op) {
+            case kTaskResize:
+                if (gtk_window_resize != nullptr) {
+                    gtk_window_resize(win, t->a, t->b);
+                }
+                break;
+            case kTaskMinSize:
+                if (gtk_window_set_geometry_hints != nullptr) {
+                    GdkGeometryLocal geo{};
+                    geo.min_width = t->a;
+                    geo.min_height = t->b;
+                    gtk_window_set_geometry_hints(win, nullptr, &geo,
+                                                  kGdkHintMinSize);
+                }
+                break;
+            case kTaskCenter: {
+                int ww = 0;
+                int wh = 0;
+                if (gtk_window_get_size != nullptr) {
+                    gtk_window_get_size(win, &ww, &wh);
+                }
+                GdkRectangleLocal wa{};
+                if (gdk_screen_get_default != nullptr &&
+                    gdk_screen_get_monitor_workarea != nullptr) {
+                    void* screen = gdk_screen_get_default();
+                    int mon = 0;
+                    if (screen != nullptr &&
+                        gdk_screen_get_monitor_at_window != nullptr &&
+                        gtk_widget_get_window != nullptr) {
+                        void* gdkwin = gtk_widget_get_window(win);
+                        if (gdkwin != nullptr) {
+                            mon = gdk_screen_get_monitor_at_window(screen,
+                                                                   gdkwin);
+                        }
+                    }
+                    if (screen != nullptr) {
+                        gdk_screen_get_monitor_workarea(screen, mon, &wa);
+                    }
+                }
+                const bool has_area = wa.width > 0 && wa.height > 0;
+                const int nx = has_area ? wa.x + (wa.width - ww) / 2 : 0;
+                const int ny = has_area ? wa.y + (wa.height - wh) / 2 : 0;
+                if (gtk_window_move != nullptr) gtk_window_move(win, nx, ny);
+                g_pos_x.store(nx, std::memory_order_release);
+                g_pos_y.store(ny, std::memory_order_release);
+                break;
+            }
+            case kTaskMove: {
+                int tx = t->a;
+                int ty = t->b;
+                clampMoveToMonitors(win, &tx, &ty);
+                if (gtk_window_move != nullptr) {
+                    gtk_window_move(win, tx, ty);
+                }
+                break;
+            }
+            case kTaskIconify:
+                if (gtk_window_iconify != nullptr) gtk_window_iconify(win);
+                break;
+            case kTaskDeiconify:
+                if (gtk_window_deiconify != nullptr) gtk_window_deiconify(win);
+                if (gtk_window_present != nullptr) gtk_window_present(win);
+                break;
+            case kTaskMaximize:
+                if (gtk_window_maximize != nullptr) gtk_window_maximize(win);
+                break;
+            case kTaskUnmaximize:
+                if (gtk_window_unmaximize != nullptr) {
+                    gtk_window_unmaximize(win);
+                }
+                break;
+            case kTaskFullscreen:
+                if (gtk_window_fullscreen != nullptr) {
+                    gtk_window_fullscreen(win);
+                }
+                break;
+            case kTaskUnfullscreen:
+                if (gtk_window_unfullscreen != nullptr) {
+                    gtk_window_unfullscreen(win);
+                }
+                break;
+            case kTaskKeepAbove:
+                if (gtk_window_set_keep_above != nullptr) {
+                    gtk_window_set_keep_above(win, t->a);
+                }
+                break;
+            case kTaskResizable:
+                if (gtk_window_set_resizable != nullptr) {
+                    gtk_window_set_resizable(win, t->a);
+                }
+                break;
+            case kTaskDecorated:
+                if (gtk_window_set_decorated != nullptr) {
+                    gtk_window_set_decorated(win, t->a);
+                }
+                break;
+            case kTaskShow:
+                if (gtk_window_show != nullptr) gtk_window_show(win);
+                if (gtk_window_present != nullptr) gtk_window_present(win);
+                break;
+            case kTaskHide:
+                if (gtk_window_hide != nullptr) gtk_window_hide(win);
+                break;
+            case kTaskDrag: {
+                int px = 0;
+                int py = 0;
+                if (!pointerRootPos(&px, &py)) {
+                    int ww = 0;
+                    int wh = 0;
+                    if (gtk_window_get_size != nullptr) {
+                        gtk_window_get_size(win, &ww, &wh);
+                    }
+                    px = g_pos_x.load(std::memory_order_acquire) + ww / 2;
+                    py = g_pos_y.load(std::memory_order_acquire) + wh / 2;
+                }
+                const unsigned ts =
+                    g_last_event_time.load(std::memory_order_acquire) != 0
+                        ? g_last_event_time.load(std::memory_order_acquire)
+                        : (gtk_get_current_event_time != nullptr
+                               ? gtk_get_current_event_time()
+                               : 0u);
+                if (gtk_window_begin_move_drag != nullptr) {
+                    gtk_window_begin_move_drag(win, 1, px, py, ts);
+                }
+                break;
+            }
+            case kTaskResizeDrag: {
+                int px = 0;
+                int py = 0;
+                if (!pointerRootPos(&px, &py)) {
+                    int ww = 0;
+                    int wh = 0;
+                    if (gtk_window_get_size != nullptr) {
+                        gtk_window_get_size(win, &ww, &wh);
+                    }
+                    px = g_pos_x.load(std::memory_order_acquire) + ww / 2;
+                    py = g_pos_y.load(std::memory_order_acquire) + wh / 2;
+                }
+                const unsigned ts =
+                    g_last_event_time.load(std::memory_order_acquire) != 0
+                        ? g_last_event_time.load(std::memory_order_acquire)
+                        : (gtk_get_current_event_time != nullptr
+                               ? gtk_get_current_event_time()
+                               : 0u);
+                // GdkWindowEdge 的枚举顺序与 APL_WINDOW_EDGE_* 完全一致。
+                if (gtk_window_begin_resize_drag != nullptr) {
+                    gtk_window_begin_resize_drag(win, t->a, 1, px, py, ts);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    delete t;
+    return 0;  // G_SOURCE_REMOVE
+}
+
+int32_t schedule(int32_t op, int32_t a, int32_t b) {
+    if (g_idle_add == nullptr) return ERR_UNSUPPORTED;
+    WindowTask* t = new WindowTask{op, a, b};
+    const unsigned id = g_idle_add(applyTask, t);
+    if (id == 0) {
+        delete t;
+        return ERR_BACKEND;
+    }
+    return OK;
+}
+
+// 是否已发现主窗口（原子标志，任意线程可读；未发现时控制 API 报后端不可用，
+// 避免 Dart 拿到 0,0 的假位置）。
+bool hasWindow() { return g_have_window.load(std::memory_order_acquire); }
+
+int32_t setSize(int32_t w, int32_t h) {
+    if (!load() || gtk_window_resize == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskResize, w, h);
+}
+
+int32_t setMinSize(int32_t w, int32_t h) {
+    if (!load() || gtk_window_set_geometry_hints == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    return schedule(kTaskMinSize, w, h);
+}
+
+int32_t center() {
+    if (!load() || gtk_window_move == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskCenter, 0, 0);
+}
+
+int32_t show() {
+    if (!load() || gtk_window_show == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskShow, 0, 0);
+}
+
+int32_t hide() {
+    if (!load() || gtk_window_hide == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskHide, 0, 0);
+}
+
+int32_t minimize() {
+    if (!load() || gtk_window_iconify == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskIconify, 0, 0);
+}
+
+int32_t restore() {
+    if (!load() || gtk_window_deiconify == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskDeiconify, 0, 0);
+}
+
+int32_t setMaximized(int32_t on) {
+    if (!load()) return ERR_UNSUPPORTED;
+    if (on != 0) {
+        if (gtk_window_maximize == nullptr) return ERR_UNSUPPORTED;
+        return schedule(kTaskMaximize, 0, 0);
+    }
+    if (gtk_window_unmaximize == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskUnmaximize, 0, 0);
+}
+
+int32_t setFullscreen(int32_t on) {
+    if (!load()) return ERR_UNSUPPORTED;
+    if (on != 0) {
+        if (gtk_window_fullscreen == nullptr) return ERR_UNSUPPORTED;
+        return schedule(kTaskFullscreen, 0, 0);
+    }
+    if (gtk_window_unfullscreen == nullptr) return ERR_UNSUPPORTED;
+    return schedule(kTaskUnfullscreen, 0, 0);
+}
+
+int32_t setAlwaysOnTop(int32_t on) {
+    if (!load() || gtk_window_set_keep_above == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    return schedule(kTaskKeepAbove, on != 0 ? 1 : 0, 0);
+}
+
+int32_t setResizable(int32_t on) {
+    if (!load() || gtk_window_set_resizable == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    return schedule(kTaskResizable, on != 0 ? 1 : 0, 0);
+}
+
+// GTK 只有「有/无装饰」两档：SYSTEM 保留系统标题栏；CAPTION 与 BORDERLESS
+// 都只能去掉全部服务端装饰（无编译期 GTK 头可做 CSD 定制），窗口按钮由自绘 UI
+// 接管。语义差异在 macOS/Windows 实现，Linux 侧如实降级。
+int32_t setDecor(int32_t mode) {
+    if (!load() || gtk_window_set_decorated == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    const int32_t decorated = mode == APL_WINDOW_DECOR_SYSTEM ? 1 : 0;
+    return schedule(kTaskDecorated, decorated, 0);
+}
+
+int32_t setPosition(int32_t x, int32_t y) {
+    if (!load() || gtk_window_move == nullptr) return ERR_UNSUPPORTED;
+    // 乐观更新缓存：Dart 紧接着 get_position 时应立即看到新值；后续
+    // configure-event / poll 再以 GTK 实际值校正。
+    g_pos_x.store(x, std::memory_order_release);
+    g_pos_y.store(y, std::memory_order_release);
+    return schedule(kTaskMove, x, y);
+}
+
+int32_t startDrag() {
+    if (!load() || gtk_window_begin_move_drag == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    return schedule(kTaskDrag, 0, 0);
+}
+
+int32_t startResize(int32_t edge) {
+    if (!load() || gtk_window_begin_resize_drag == nullptr) {
+        return ERR_UNSUPPORTED;
+    }
+    return schedule(kTaskResizeDrag, edge, 0);
 }
 
 }  // namespace gtkwin
@@ -1991,7 +2684,7 @@ uint32_t caps() {
                  CAP_SESSION_END;
     const bool hasDisplay = std::getenv("WAYLAND_DISPLAY") != nullptr ||
                             std::getenv("DISPLAY") != nullptr;
-    if (hasDisplay && gtkwin::available()) c |= CAP_WINDOW_STATE;
+    if (hasDisplay && gtkwin::available()) c |= CAP_WINDOW_STATE | CAP_WINDOW_CONTROL;
     return c;
 }
 
@@ -2076,6 +2769,60 @@ int32_t powerSetScreenEvents(int32_t on) {
 }
 
 int32_t windowSetEvents(int32_t on) { return gtkwin::setEvents(on != 0); }
+
+// ── 窗口控制（ABI v10）────────────────────────────────────────────
+int32_t windowSetSize(int32_t w, int32_t h) { return gtkwin::setSize(w, h); }
+int32_t windowSetMinSize(int32_t w, int32_t h) {
+    return gtkwin::setMinSize(w, h);
+}
+int32_t windowCenter() { return gtkwin::center(); }
+int32_t windowShow() { return gtkwin::show(); }
+int32_t windowHide() { return gtkwin::hide(); }
+int32_t windowMinimize() { return gtkwin::minimize(); }
+int32_t windowRestore() { return gtkwin::restore(); }
+int32_t windowSetMaximized(int32_t on) { return gtkwin::setMaximized(on); }
+int32_t windowSetFullscreen(int32_t on) { return gtkwin::setFullscreen(on); }
+int32_t windowSetAlwaysOnTop(int32_t on) {
+    return gtkwin::setAlwaysOnTop(on);
+}
+int32_t windowSetResizable(int32_t on) { return gtkwin::setResizable(on); }
+int32_t windowSetDecor(int32_t mode) { return gtkwin::setDecor(mode); }
+
+int32_t windowGetPosition(int32_t* x, int32_t* y) {
+    if (x == nullptr || y == nullptr) return ERR_STATE;
+    if (!gtkwin::hasWindow()) return ERR_BACKEND;
+    *x = gtkwin::g_pos_x.load(std::memory_order_acquire);
+    *y = gtkwin::g_pos_y.load(std::memory_order_acquire);
+    return OK;
+}
+
+// ABI v11：内容区尺寸（GTK 口径，与 windowSetSize 的 gtk_window_resize 一致）。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    if (!gtkwin::hasWindow()) return ERR_BACKEND;
+    const int32_t ww = gtkwin::g_size_w.load(std::memory_order_acquire);
+    const int32_t wh = gtkwin::g_size_h.load(std::memory_order_acquire);
+    if (ww <= 0 || wh <= 0) return ERR_STATE;
+    *w = ww;
+    *h = wh;
+    return OK;
+}
+
+int32_t windowSetPosition(int32_t x, int32_t y) {
+    return gtkwin::setPosition(x, y);
+}
+
+int32_t windowStartDrag() { return gtkwin::startDrag(); }
+int32_t windowStartResize(int32_t edge) { return gtkwin::startResize(edge); }
+
+// 只投递关闭请求；桥接不关窗（Dart 决定隐藏到托盘 / 退出）。
+int32_t windowRequestClose() {
+    dispatch(makeWindowCloseRequest(WINDOW_CLOSE));
+    return OK;
+}
+
+// 退出前显式摘观察者：等价 windowSetEvents(0)（幂等）。
+int32_t windowStopEvents() { return gtkwin::setEvents(false); }
 
 int32_t mediaSetTrack(const AplTrackMeta* meta) {
     DBusConnection* c = conn();

@@ -4,13 +4,15 @@
 第三方运行库、其许可、源码获取方式与 LGPL 赋予的替换权。各原生模块自身的第三方
 登记见 `app/core/*/THIRD-PARTY-LICENSES.md`。
 
-本软件整体以 **AGPL-3.0** 授权（见根 `LICENSE`）。第三方组件按各自许可继续适用，
+本软件整体以 **AGPL-3.0-or-later** 授权：GNU Affero General Public License
+第 3 版或任何更高版本，完整正文见随包 `ArchoeraMvsync-LICENSE.txt`，对应源码
+见 <https://github.com/ArchoeraC/ArchoeraMvsync>。第三方组件按各自许可继续适用，
 仅并入与 AGPL-3.0 兼容的组件（LGPL-2.1+ / LGPL-3.0+ / MIT / BSD / Apache-2.0 /
 MPL-1.1 / 公有领域）。
 
 ## 随包内嵌的运行库
 
-### FFmpeg 9.0.1（libavformat / libavcodec / libavutil / libswresample）
+### FFmpeg 9.0.2（libavformat / libavcodec / libavutil / libswresample）
 
 - **许可**：Linux/macOS **LGPL-3.0-or-later**、Windows **LGPL-2.1-or-later**（均为**纯 LGPL
   · 仅音频构建**：`--disable-gpl --disable-nonfree --disable-autodetect --disable-everything`
@@ -19,7 +21,7 @@ MPL-1.1 / 公有领域）。
   依赖）而带 `--enable-version3`，故升为 LGPL-3.0-or-later；Windows 用系统原生 Schannel，不带
   `version3`，维持 LGPL-2.1-or-later。两者均无 GPL，AGPL-3.0 聚合分发兼容。
 - **链接方式**：动态链接（未静态合并）。
-- **源码**：https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz
+- **源码**：https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
   （构建脚本与确切配置见 `app/core/build-ffmpeg-minimal.sh`）。
 - **许可文本**：同目录 `COPYING.LGPLv3`、`COPYING.LGPLv2.1`、`LICENSE.md`。
 - **替换权**：依 LGPL，你可获得对应源码，并以修改后的 FFmpeg 动态库替换本程序
@@ -63,11 +65,17 @@ MPL-1.1 / 公有领域）。
 | indexer（C#） | `SQLitePCLRaw.lib.e_sqlite3` 3.53.3 | **Apache-2.0** | 原生 SQLite（含 FTS5，公有领域），随 FFI 分发 |
 | scraper（C++） | Rust 后端（加密：`aes` / `md-5` / `sha1` / `num-bigint` / `getrandom`；HTTP：`reqwest` / `rustls` / `aws-lc-rs` 等） | MIT OR Apache-2.0（TLS 部分含 ISC） | 替代系统 OpenSSL 与 libcurl；staticlib **静态合并**进 `libarchoera_scraper`，逐项见 `app/core/scraper-crypto/THIRD-PARTY-LICENSES.md` |
 
-> 本地曲库搜索索引器另内嵌由 Unicode 数据离线生成的查询表（`data/nfkc.tsv`、
-> `data/def_en2hanzi.tsv`、`data/def_hanzi2en.tsv`、`data/ja_readings.tsv`，派生自
-> **Unihan `kDefinition` / `kJapanese`** 等；`data/kana_romaji.tsv` 为自研表），
-> 受 [Unicode License](https://www.unicode.org/license.txt) 约束——详见
-> `app/core/indexer/THIRD-PARTY-LICENSES.md`。
+> 本地曲库搜索索引器另内嵌一组离线查询表：
+>
+> - `data/nfkc.tsv` / `data/accent_fold.tsv` / `data/variant_fold.tsv` /
+>   `data/ja_readings.tsv` / `data/def_en2hanzi.tsv` / `data/def_hanzi2en.tsv`
+>   派生自 **Unicode Unihan `kDefinition` / `kJapanese` / `kSimplifiedVariant`** 等，
+>   受 [Unicode License](https://www.unicode.org/license.txt) 约束；
+> - `data/kana_romaji.tsv` 为本项目自研表，随仓库按 **AGPL-3.0-or-later** 分发；
+> - `data/lexicon_cross.tsv` 为本项目自建策展专名词表（seed），按 **CC0-1.0** 释出。
+>
+> 逐项来源与许可证见 `app/core/indexer/THIRD-PARTY-LICENSES.md`；数据包
+> `manifest.json` 为每个文件记录 `license` 字段。
 
 ## 字体 / 图标许可
 

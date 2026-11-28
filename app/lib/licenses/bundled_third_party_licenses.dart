@@ -93,7 +93,7 @@ const List<BundledThirdPartyLicense> bundledThirdPartyLicenses = [
   ),
   BundledThirdPartyLicense(
     name: 'FFmpeg',
-    version: '9.0.1',
+    version: '9.0.2',
     licenseId: 'LGPL-3.0-or-later（Linux/macOS）/ LGPL-2.1-or-later（Windows）',
     homeUrl: 'https://ffmpeg.org',
     assetPath: 'assets/licenses/LGPL-3.0.txt',

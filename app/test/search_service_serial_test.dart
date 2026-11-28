@@ -6,10 +6,10 @@
 //
 // 覆盖要求：
 //   - 并发 rebuild + reindex：严格串行、**不重叠**（同一 `search.db` 上并发
-//     `indexer_run` 会互相破坏）；
+//     `era_index_run` 会互相破坏）；
 //   - rebuild 与 search→ensureIndex 串行；
 //   - deleteIndex 不与构建并发（构建结束前不得动 `search.db`）；
-//   - search 在构建中不抛异常（回退 LIKE 返回 null）；
+//   - search 在构建中不抛异常（索引未就绪 → 降级链路不可用时返回 null，回退 LIKE）；
 //   - dispose 后不再触达构建 / 查询。
 
 import 'dart:async';
@@ -54,12 +54,17 @@ void main() {
     service.debugReset();
     appPrefsSnapshot = null;
     SearchService.debugSearchDbPathOverride = null;
+    // 本文件只验证构建门串行化：把降级检索的 `library.db` 指向不存在的路径，
+    // 使「索引未就绪 → search 返回 null」保持确定性（不读机器上的真实曲库）。
+    SearchService.debugLibraryDbPathOverride =
+        '${Directory.systemTemp.path}/archoera-no-such-library.db';
   });
 
   tearDown(() {
     service.debugReset();
     appPrefsSnapshot = null;
     SearchService.debugSearchDbPathOverride = null;
+    SearchService.debugLibraryDbPathOverride = null;
   });
 
   test('并发 rebuild + reindex：严格串行、不重叠（后到者排队）', () async {
@@ -95,13 +100,16 @@ void main() {
     expect(ex.peak, 1, reason: 'ensureIndex 与 rebuild 不得并发');
   });
 
-  test('deleteIndex 与构建不冲突：构建结束前不删除 search.db', () async {
+  test('deleteIndex 与构建不冲突：构建结束前不删除 EraStore', () async {
     appPrefsSnapshot = AppPrefs(initialData: {enableLocalSearchIndexKey: true});
     final tmp = await Directory.systemTemp.createTemp('search_gate_delete');
     addTearDown(() => tmp.deleteSync(recursive: true));
     final dbPath = '${tmp.path}/search.db';
     SearchService.debugSearchDbPathOverride = dbPath;
     File(dbPath).writeAsStringSync('stub');
+    final eraCurrent = File('${tmp.path}/search.era/CURRENT');
+    eraCurrent.parent.createSync(recursive: true);
+    eraCurrent.writeAsStringSync('search-0001.eraindex');
 
     final ex = _ControlledExecutor(service);
     final buildFuture = service.rebuild();
@@ -118,9 +126,10 @@ void main() {
     ex.release.complete();
     await Future.wait<void>([buildFuture, deleteFuture]);
     expect(File(dbPath).existsSync(), isFalse, reason: '构建结束后再删除');
+    expect(eraCurrent.parent.existsSync(), isFalse, reason: 'EraStore 目录也必须删除');
   });
 
-  test('search 在构建中不抛异常（回退 LIKE 返回 null）', () async {
+  test('search 在构建中不抛异常（降级不可用 → 回退 LIKE 返回 null）', () async {
     appPrefsSnapshot = AppPrefs(initialData: {enableLocalSearchIndexKey: true});
     final ex = _ControlledExecutor(service);
 

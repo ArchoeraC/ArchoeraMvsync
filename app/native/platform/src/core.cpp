@@ -30,6 +30,10 @@ AplEvent g_event_slot{};
 // 关机时错过退出。独立槽位只被后续 SESSION_END 重写（语义等价，仍为 1）。
 AplEvent g_session_end_slot{};
 
+// 关闭请求同理：用户点关闭/⌘Q 时不能被紧随的窗口状态事件覆盖（否则 Dart 的
+// 「隐藏到托盘 / 退出」决策会丢）。只被后续关闭请求重写，语义仍等价。
+AplEvent g_close_request_slot{};
+
 }  // namespace
 
 bool isInitialized() {
@@ -68,6 +72,7 @@ void dispatch(const AplEvent& event) {
     void* user;
     AplEvent* slot = &g_event_slot;
     if (event.type == APL_EVENT_SESSION_END) slot = &g_session_end_slot;
+    if (event.type == APL_EVENT_WINDOW_CLOSE_REQUEST) slot = &g_close_request_slot;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         *slot = event;
@@ -100,11 +105,19 @@ AplEvent makeScreenState(bool active) {
     return e;
 }
 
-AplEvent makeWindowState(bool minimized, bool focused) {
+AplEvent makeWindowState(bool minimized, bool focused, bool maximized,
+                         bool fullscreen, bool hidden) {
     AplEvent e{};
     e.type = APL_EVENT_WINDOW_STATE;
     e.u.window.minimized = minimized ? 1 : 0;
     e.u.window.focused = focused ? 1 : 0;
+    int32_t flags = 0;
+    if (minimized) flags |= WINDOW_FLAG_MINIMIZED;
+    if (focused) flags |= WINDOW_FLAG_FOCUSED;
+    if (maximized) flags |= WINDOW_FLAG_MAXIMIZED;
+    if (fullscreen) flags |= WINDOW_FLAG_FULLSCREEN;
+    if (hidden) flags |= WINDOW_FLAG_HIDDEN;
+    e.u.window.flags = flags;
     return e;
 }
 
@@ -156,6 +169,13 @@ AplEvent makeSessionEnd() {
     AplEvent e{};
     e.type = APL_EVENT_SESSION_END;
     e.u.session_end = 1;
+    return e;
+}
+
+AplEvent makeWindowCloseRequest(int32_t reason) {
+    AplEvent e{};
+    e.type = APL_EVENT_WINDOW_CLOSE_REQUEST;
+    e.u.window_close.reason = reason == WINDOW_QUIT ? WINDOW_QUIT : WINDOW_CLOSE;
     return e;
 }
 

@@ -176,6 +176,36 @@ abstract class AppLocalizations {
   /// **'只重绘活动涟漪波带；仅 CPU 回退路径生效'**
   String get settingsRippleDamageClipDesc;
 
+  /// No description provided for @settingsMacOSGPU.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'独立显卡加速'**
+  String get settingsMacOSGPU;
+
+  /// No description provided for @settingsMacOSGPUDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'自动：独显的 Metal 能力不低于集显时才用独显；「优先独立显卡」强制使用（可能降到 Metal 2，AMD 独显上封面取色 / 流体背景会走兜底）。修改后需重启应用'**
+  String get settingsMacOSGPUDesc;
+
+  /// No description provided for @settingsMacOSGPUAuto.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'自动（推荐）'**
+  String get settingsMacOSGPUAuto;
+
+  /// No description provided for @settingsMacOSGPUDiscrete.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'优先独立显卡'**
+  String get settingsMacOSGPUDiscrete;
+
+  /// No description provided for @settingsMacOSGPUIntegrated.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'集成显卡'**
+  String get settingsMacOSGPUIntegrated;
+
   /// No description provided for @settingsLyricsEdgeFade.
   ///
   /// In zh_CN, this message translates to:
@@ -6109,7 +6139,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDeclineText.
   ///
   /// In zh_CN, this message translates to:
-  /// **'本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n'**
+  /// **'本软件（ArchoeraMvsync）以 **AGPL-3.0-or-later** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n'**
   String get settingsDeclineText;
 
   /// No description provided for @settingsDecline1Title.
@@ -6121,7 +6151,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDecline1Body.
   ///
   /// In zh_CN, this message translates to:
-  /// **'本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n'**
+  /// **'本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n'**
   String get settingsDecline1Body;
 
   /// No description provided for @settingsDeclineLicenseTitle.
@@ -6133,7 +6163,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDeclineLicenseBody.
   ///
   /// In zh_CN, this message translates to:
-  /// **'本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n'**
+  /// **'本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0-or-later）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n'**
   String get settingsDeclineLicenseBody;
 
   /// No description provided for @settingsDecline2Title.
@@ -6169,7 +6199,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDecline4Body.
   ///
   /// In zh_CN, this message translates to:
-  /// **'请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款；请勿将本软件用于任何侵害他人合法权益的用途。\n\n'**
+  /// **'请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以 LICENSE 条款为准。\n\n'**
   String get settingsDecline4Body;
 
   /// No description provided for @settingsDeclineLoginTitle.
@@ -8234,6 +8264,42 @@ abstract class AppLocalizations {
   /// **'日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）'**
   String get settingsSearchIndexRomajiDesc;
 
+  /// No description provided for @settingsSearchIndexInitials.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引歌词首字母'**
+  String get settingsSearchIndexInitials;
+
+  /// No description provided for @settingsSearchIndexInitialsDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）'**
+  String get settingsSearchIndexInitialsDesc;
+
+  /// No description provided for @settingsSearchIndexPinyin.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'元数据拼音检索'**
+  String get settingsSearchIndexPinyin;
+
+  /// No description provided for @settingsSearchIndexPinyinDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效'**
+  String get settingsSearchIndexPinyinDesc;
+
+  /// No description provided for @settingsSearchIndexLyricsPinyin.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词拼音检索'**
+  String get settingsSearchIndexLyricsPinyin;
+
+  /// No description provided for @settingsSearchIndexLyricsPinyinDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效'**
+  String get settingsSearchIndexLyricsPinyinDesc;
+
   /// No description provided for @settingsSearchIndexNote.
   ///
   /// In zh_CN, this message translates to:
@@ -8336,6 +8402,101 @@ abstract class AppLocalizations {
   /// In zh_CN, this message translates to:
   /// **'已开始重建索引'**
   String get settingsSearchIndexRebuildStarted;
+
+  /// No description provided for @settingsSearchIndexDiagVersions.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引世代与版本'**
+  String get settingsSearchIndexDiagVersions;
+
+  /// No description provided for @settingsSearchIndexDiagGen.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'世代 {gen}'**
+  String settingsSearchIndexDiagGen({required int gen});
+
+  /// No description provided for @settingsSearchIndexDiagSchema.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'格式 {version}'**
+  String settingsSearchIndexDiagSchema({required int version});
+
+  /// No description provided for @settingsSearchIndexDiagAnalyzer.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'分析器 {version}'**
+  String settingsSearchIndexDiagAnalyzer({required int version});
+
+  /// No description provided for @settingsSearchIndexDiagDataPack.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'搜索数据包'**
+  String get settingsSearchIndexDiagDataPack;
+
+  /// No description provided for @settingsSearchIndexDiagPackId.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'数据包 {id}'**
+  String settingsSearchIndexDiagPackId({required String id});
+
+  /// No description provided for @settingsSearchIndexDiagPackMatch.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'与索引同源'**
+  String get settingsSearchIndexDiagPackMatch;
+
+  /// No description provided for @settingsSearchIndexDiagPackMismatch.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'索引由其它数据包构建'**
+  String get settingsSearchIndexDiagPackMismatch;
+
+  /// No description provided for @settingsSearchIndexDiagPackPresent.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'存在'**
+  String get settingsSearchIndexDiagPackPresent;
+
+  /// No description provided for @settingsSearchIndexDiagPackMissing.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'缺失'**
+  String get settingsSearchIndexDiagPackMissing;
+
+  /// No description provided for @settingsSearchIndexDiagPackFoundation.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'基础表可用'**
+  String get settingsSearchIndexDiagPackFoundation;
+
+  /// No description provided for @settingsSearchIndexDiagPackFoundationBad.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'基础表缺失'**
+  String get settingsSearchIndexDiagPackFoundationBad;
+
+  /// No description provided for @settingsSearchIndexDiagDegraded.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'降级能力 {count} 项'**
+  String settingsSearchIndexDiagDegraded({required int count});
+
+  /// No description provided for @settingsSearchIndexDiagLyrics.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'歌词置信度'**
+  String get settingsSearchIndexDiagLyrics;
+
+  /// No description provided for @settingsSearchIndexDiagConfidence.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'高 {high} · 中 {medium} · 低 {low} · 无 {none}'**
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  });
 
   /// No description provided for @libraryFullScan.
   ///
@@ -9578,6 +9739,12 @@ abstract class AppLocalizations {
   /// In zh_CN, this message translates to:
   /// **'重置均衡器'**
   String get settingsEqReset;
+
+  /// No description provided for @equalizerQuickDesc.
+  ///
+  /// In zh_CN, this message translates to:
+  /// **'播放页快速调整：预设、预增益与 10 段增益，改动即时生效。'**
+  String get equalizerQuickDesc;
 
   /// No description provided for @settingsEqPresetFlat.
   ///

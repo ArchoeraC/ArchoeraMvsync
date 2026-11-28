@@ -45,6 +45,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRippleDamageClipDesc => '只重绘活动涟漪波带；仅 CPU 回退路径生效';
 
   @override
+  String get settingsMacOSGPU => '獨立顯卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：獨顯的 Metal 能力不低於集顯時才用獨顯；「優先獨立顯卡」強制使用（可能降到 Metal 2，AMD 獨顯上封面取色 / 流體背景會走兜底）。修改後需重啟應用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推薦）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '優先獨立顯卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '集成顯卡';
+
+  @override
   String get settingsLyricsEdgeFade => '歌词边缘渐隐';
 
   @override
@@ -3286,21 +3302,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDeclineText =>
-      '本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
+      '本软件（ArchoeraMvsync）以 **AGPL-3.0-or-later** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
 
   @override
   String get settingsDecline1Title => '一、软件性质\n';
 
   @override
   String get settingsDecline1Body =>
-      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。\n\n';
+      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、开源许可与源代码\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
+      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0-or-later）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
 
   @override
   String get settingsDecline2Title => '二、内容来源与版权\n';
@@ -3321,7 +3337,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      '请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。\n\n';
+      '请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以 LICENSE 条款为准。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '五、登录与账号\n';
@@ -4447,6 +4463,27 @@ class AppLocalizationsZh extends AppLocalizations {
       '日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）';
 
   @override
+  String get settingsSearchIndexInitials => '索引歌词首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '元数据拼音检索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌词拼音检索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引是派生数据：默认关闭零成本；开启后首次构建占用时间与磁盘（随曲库增长，约数百 MB @ 万首），构建失败会自动回退基础搜索。';
 
@@ -4510,6 +4547,68 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsSearchIndexRebuildStarted => '已开始重建索引';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '索引世代与版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜索数据包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '数据包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '与索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它数据包构建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基础表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基础表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降级能力 $count 项';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌词置信度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 无 $none';
+  }
 
   @override
   String get libraryFullScan => '全量扫描';
@@ -5142,6 +5241,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsEqReset => '重置均衡器';
+
+  @override
+  String get equalizerQuickDesc => '播放页快速调整：预设、预增益与 10 段增益，改动即时生效。';
 
   @override
   String get settingsEqPresetFlat => '平坦';
@@ -6213,6 +6315,22 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsRippleDamageClipDesc => '只重绘活动涟漪波带；仅 CPU 回退路径生效';
+
+  @override
+  String get settingsMacOSGPU => '独立显卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自动：独显的 Metal 能力不低于集显时才用独显；「优先独立显卡」强制使用（可能降到 Metal 2，AMD 独显上封面取色 / 流体背景会走兜底）。修改后需重启应用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自动（推荐）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '优先独立显卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '集成显卡';
 
   @override
   String get settingsLyricsEdgeFade => '歌词边缘渐隐';
@@ -9456,21 +9574,21 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsDeclineText =>
-      '本软件（ArchoeraMvsync）以 **AGPL-3.0** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
+      '本软件（ArchoeraMvsync）以 **AGPL-3.0-or-later** 开源：遵守其条款即可自由使用、学习、修改与再分发，**合规的开源商业使用同样被许可**；本项目不提供脱离 AGPL 义务的闭源商业授权。使用前请阅读以下声明：\n\n';
 
   @override
   String get settingsDecline1Title => '一、软件性质\n';
 
   @override
   String get settingsDecline1Body =>
-      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n';
+      '本软件为第三方开源客户端，与各音乐平台及其官方客户端无任何关联、合作或授权关系；项目本身不以营利为目的，不接受任何商业合作、广告或赞助内容注入，仅接受不附带任何额外许可权利的自愿打赏（不影响功能与授权条款；代码层面的商业使用仍以 AGPL-3.0-or-later 条款为准）。如需更完善的功能，请下载官方客户端体验。本软件按现状提供，作者不保证其适用性、稳定性或适法性，请您在遵守所在地法律法规的前提下自行决定是否使用。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、开源许可与源代码\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
+      '本软件以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0-or-later）发布。在该许可证范围内，您可以自由运行、研究、修改与再分发本软件，但须一并遵守：保留版权与许可声明；以同一许可证发布您的衍生作品；若通过网络向用户提供本软件（含修改版）的功能，须向这些用户提供对应的完整源代码。本项目不提供任何脱离 AGPL 义务的闭源商业授权。完整条款以随附的 LICENSE 文件及 https://www.gnu.org/licenses/agpl-3.0.html 为准。\n\n';
 
   @override
   String get settingsDecline2Title => '三、内容来源与版权\n';
@@ -9491,7 +9609,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsDecline4Body =>
-      '请勿利用本软件从事商业行为、批量抓取、爬取或转售内容；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款；请勿将本软件用于任何侵害他人合法权益的用途。\n\n';
+      '请勿利用本软件实施侵害他人版权或其他合法权益的行为（包括批量抓取、爬取或转售内容）；请勿在违反当地法律法规或相关平台服务条款的情况下使用本软件；请勿绕过在线平台的技术保护措施、访问控制或服务条款。本条为使用提醒，不构成 AGPL-3.0-or-later 之外的附加许可限制；商业使用以 LICENSE 条款为准。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '六、登录与账号\n';
@@ -10617,6 +10735,27 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
       '日语歌词没有音译时自动生成罗马音，可用罗马字搜索（索引体积约增加一倍）';
 
   @override
+  String get settingsSearchIndexInitials => '索引歌词首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌词也能用拼音首字母搜索（如 wanzg）；关闭可减小索引体积（重建索引后生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '元数据拼音检索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '按拼音或首字母搜索歌名 / 歌手 / 专辑；默认关闭，重建索引后生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌词拼音检索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '按拼音音节搜索歌词；歌词拼音是体积最大的派生列，默认关闭，重建索引后生效';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引是派生数据：默认关闭零成本；开启后首次构建占用时间与磁盘（随曲库增长，约数百 MB @ 万首），构建失败会自动回退基础搜索。';
 
@@ -10680,6 +10819,68 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexRebuildStarted => '已开始重建索引';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '索引世代与版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜索数据包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '数据包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '与索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它数据包构建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基础表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基础表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降级能力 $count 项';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌词置信度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 无 $none';
+  }
 
   @override
   String get libraryFullScan => '全量扫描';
@@ -11312,6 +11513,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get settingsEqReset => '重置均衡器';
+
+  @override
+  String get equalizerQuickDesc => '播放页快速调整：预设、预增益与 10 段增益，改动即时生效。';
 
   @override
   String get settingsEqPresetFlat => '平坦';
@@ -12383,6 +12587,22 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsRippleDamageClipDesc => '只重繪活動漣漪波帶；僅 CPU 回退路徑生效';
+
+  @override
+  String get settingsMacOSGPU => '獨立顯卡加速';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '自動：獨顯的 Metal 能力不低於集顯時才用獨顯；「優先獨立顯卡」強制使用（可能降到 Metal 2，AMD 獨顯上封面取色 / 流體背景會走兜底）。修改後需重啟應用';
+
+  @override
+  String get settingsMacOSGPUAuto => '自動（推薦）';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '優先獨立顯卡';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '整合式顯示卡';
 
   @override
   String get settingsLyricsEdgeFade => '歌詞邊緣漸隱';
@@ -15633,14 +15853,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsDecline1Body =>
-      '本軟體為第三方用戶端，與各音樂平台及其官方用戶端無任何關聯、合作或授權關係；不以營利為目的，不接受任何商業合作、廣告或贊助內容置入，僅接受不附帶任何額外授權權利的自願打賞（不影響功能與授權條款；程式碼層面的商業使用仍以 AGPL-3.0 條款為準）。如需更完善的功能，請下載官方用戶端體驗。\n\n';
+      '本軟體為第三方用戶端，與各音樂平台及其官方用戶端無任何關聯、合作或授權關係；不以營利為目的，不接受任何商業合作、廣告或贊助內容置入，僅接受不附帶任何額外授權權利的自願打賞（不影響功能與授權條款；程式碼層面的商業使用仍以 AGPL-3.0-or-later 條款為準）。如需更完善的功能，請下載官方用戶端體驗。\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '二、開源授權與原始碼\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '本軟體以 GNU Affero 通用公共授權條款第 3 版（AGPL-3.0）發布。在該授權條款範圍內，您可以自由執行、研究、修改與再散布本軟體，但須一併遵守：保留著作權與授權聲明；以同一授權條款發布您的衍生作品；若透過網路向使用者提供本軟體（含修改版）的功能，須向這些使用者提供對應的完整原始碼。本專案不提供任何脫離 AGPL 義務的閉源商業授權。完整條款以隨附的 LICENSE 檔案及 https://www.gnu.org/licenses/agpl-3.0.html 為準。\n\n';
+      '本軟體以 GNU Affero 通用公共授權條款第 3 版（AGPL-3.0-or-later）發布。在該授權條款範圍內，您可以自由執行、研究、修改與再散布本軟體，但須一併遵守：保留著作權與授權聲明；以同一授權條款發布您的衍生作品；若透過網路向使用者提供本軟體（含修改版）的功能，須向這些使用者提供對應的完整原始碼。本專案不提供任何脫離 AGPL 義務的閉源商業授權。完整條款以隨附的 LICENSE 檔案及 https://www.gnu.org/licenses/agpl-3.0.html 為準。\n\n';
 
   @override
   String get settingsDecline2Title => '二、內容來源與版權\n';
@@ -15661,7 +15881,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsDecline4Body =>
-      '請勿利用本軟體從事商業行為、批量抓取、爬取或轉售內容；請勿在違反當地法律法規或相關平台服務條款的情況下使用本軟體；請勿繞過線上平台的技術保護措施、存取控制或服務條款。\n\n';
+      '請勿利用本軟體實施侵害他人版權或其他合法權益的行為（包括批量抓取、爬取或轉售內容）；請勿在違反當地法律法規或相關平台服務條款的情況下使用本軟體；請勿繞過線上平台的技術保護措施、存取控制或服務條款。本條為使用提醒，不構成 AGPL-3.0-or-later 之外的附加許可限制；商業使用以 LICENSE 條款為準。\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '五、登入與帳號\n';
@@ -16788,6 +17008,27 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '日語歌詞沒有音譯時自動產生羅馬音，可用羅馬字搜尋（索引體積約增加一倍）';
 
   @override
+  String get settingsSearchIndexInitials => '索引歌詞首字母';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '歌詞也能用拼音首字母搜尋（如 wanzg）；關閉可縮小索引體積（重建索引後生效）';
+
+  @override
+  String get settingsSearchIndexPinyin => '中繼資料拼音檢索';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '以拼音或首字母搜尋歌名 / 歌手 / 專輯；預設關閉，重建索引後生效';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '歌詞拼音檢索';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '以拼音音節搜尋歌詞；歌詞拼音是體積最大的衍生欄位，預設關閉，重建索引後生效';
+
+  @override
   String get settingsSearchIndexNote =>
       '索引是衍生資料：預設關閉零成本；開啟後首次建立會占用時間與磁碟（隨曲庫成長，約數百 MB @ 萬首），建立失敗會自動回退基本搜尋。';
 
@@ -16851,6 +17092,68 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsSearchIndexRebuildStarted => '已開始重建索引';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '索引世代與版本';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '世代 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '格式 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '分析器 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '搜尋資料包';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '資料包 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '與索引同源';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '索引由其它資料包構建';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '存在';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '缺失';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '基礎表可用';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '基礎表缺失';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '降級能力 $count 項';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '歌詞信賴度';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '高 $high · 中 $medium · 低 $low · 無 $none';
+  }
 
   @override
   String get libraryFullScan => '全量掃描';
@@ -17483,6 +17786,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsEqReset => '重置均衡器';
+
+  @override
+  String get equalizerQuickDesc => '播放頁快速調整：預設、預增益與 10 段增益，改動即時生效。';
 
   @override
   String get settingsEqPresetFlat => '平坦';

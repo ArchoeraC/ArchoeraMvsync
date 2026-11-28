@@ -50,6 +50,22 @@ class AppLocalizationsEs extends AppLocalizations {
       'Redibujar solo las bandas de ondas activas; solo ruta CPU';
 
   @override
+  String get settingsMacOSGPU => 'Aceleración por GPU dedicada';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      'Automático usa la GPU dedicada solo si admite todas las funciones Metal de la integrada; Preferir dedicada la fuerza (puede bajar a Metal 2 y en AMD el color de portada y el fondo fluido usan respaldo). Requiere reiniciar';
+
+  @override
+  String get settingsMacOSGPUAuto => 'Automático (recomendado)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => 'Preferir GPU dedicada';
+
+  @override
+  String get settingsMacOSGPUIntegrated => 'GPU integrada';
+
+  @override
   String get settingsLyricsEdgeFade => 'Desvanecido de bordes de la letra';
 
   @override
@@ -3506,7 +3522,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDecline1Body =>
-      'Este software es un cliente de terceros sin afiliación, cooperación o autorización con ninguna plataforma musical. El proyecto en sí no tiene fines de lucro y no acepta colaboraciones comerciales, publicidad ni contenido patrocinado; solo acepta donaciones voluntarias que no otorgan ningún derecho de licencia adicional (las donaciones no modifican los términos de AGPL-3.0 ni afectan a ninguna función). Para funciones más completas, utiliza el cliente oficial.\n\n';
+      'Este software es un cliente de terceros sin afiliación, cooperación o autorización con ninguna plataforma musical. El proyecto en sí no tiene fines de lucro y no acepta colaboraciones comerciales, publicidad ni contenido patrocinado; solo acepta donaciones voluntarias que no otorgan ningún derecho de licencia adicional (las donaciones no modifican los términos de AGPL-3.0-or-later ni afectan a ninguna función). Para funciones más completas, utiliza el cliente oficial.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle =>
@@ -3514,7 +3530,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDeclineLicenseBody =>
-      'Este software se publica bajo la Licencia Pública General Affero de GNU versión 3 (AGPL-3.0). Dentro del alcance de dicha licencia, usted es libre de ejecutar, estudiar, modificar y redistribuir este software, siempre que: conserve los avisos de derechos de autor y de licencia; publique sus obras derivadas bajo la misma licencia; y, si pone la funcionalidad de este software (incluidas las versiones modificadas) a disposición de los usuarios a través de una red, proporcione a esos usuarios el código fuente completo correspondiente. Este proyecto no ofrece licencias comerciales de código cerrado al margen de las obligaciones de la AGPL. Los términos completos se rigen por el archivo LICENSE adjunto y https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
+      'Este software se publica bajo la Licencia Pública General Affero de GNU versión 3 (AGPL-3.0-or-later). Dentro del alcance de dicha licencia, usted es libre de ejecutar, estudiar, modificar y redistribuir este software, siempre que: conserve los avisos de derechos de autor y de licencia; publique sus obras derivadas bajo la misma licencia; y, si pone la funcionalidad de este software (incluidas las versiones modificadas) a disposición de los usuarios a través de una red, proporcione a esos usuarios el código fuente completo correspondiente. Este proyecto no ofrece licencias comerciales de código cerrado al margen de las obligaciones de la AGPL. Los términos completos se rigen por el archivo LICENSE adjunto y https://www.gnu.org/licenses/agpl-3.0.html.\n\n';
 
   @override
   String get settingsDecline2Title =>
@@ -3537,7 +3553,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      'No usar para actividades comerciales, scraping masivo o reventa; no usar en violación de leyes locales o términos de servicio.\n\n';
+      'No utilice este software para infringir derechos de autor u otros derechos legítimos (incluido el scraping masivo, el rastreo o la reventa de contenidos); no lo utilice en violación de leyes locales o términos de servicio; no eluda medidas técnicas de protección, controles de acceso ni términos de servicio. Esta sección es un recordatorio de uso y no impone restricciones de licencia adicionales a AGPL-3.0-or-later; el uso comercial se rige por la LICENSE.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. Inicio de sesión y cuenta\n';
@@ -4745,6 +4761,27 @@ class AppLocalizationsEs extends AppLocalizations {
       'Generar automáticamente romaji para letras japonesas sin transliteración para poder buscarlas por romaji (el índice ocupa aproximadamente el doble)';
 
   @override
+  String get settingsSearchIndexInitials => 'Indexar iniciales de la letra';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      'Permite buscar letras por iniciales pinyin (p. ej. wanzg); desactívalo para reducir el índice (el cambio requiere reconstruirlo)';
+
+  @override
+  String get settingsSearchIndexPinyin => 'Indexar pinyin de metadatos';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      'Buscar títulos / artistas / álbumes por pinyin o iniciales; desactivado por defecto (se aplica al reconstruir el índice)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => 'Indexar pinyin de la letra';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      'Buscar letras por sílabas pinyin; la columna derivada más grande, desactivada por defecto (se aplica al reconstruir el índice)';
+
+  @override
   String get settingsSearchIndexNote =>
       'El índice es un dato derivado: desactivado por defecto y sin coste; al activarlo consume tiempo y disco en segundo plano (cientos de MB para 10 000 pistas) y, si falla, vuelve automáticamente a la búsqueda básica.';
 
@@ -4811,6 +4848,69 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsSearchIndexRebuildStarted =>
       'Reconstrucción del índice iniciada';
+
+  @override
+  String get settingsSearchIndexDiagVersions =>
+      'Generación y versiones del índice';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return 'Generación $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return 'Esquema $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return 'Analizador $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => 'Paquete de datos de búsqueda';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return 'Paquete $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => 'coincide con el índice';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => 'creado por otro paquete';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => 'presente';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => 'ausente';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => 'tablas base ok';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => 'faltan tablas base';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '$count capacidades degradadas';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => 'Confianza de letras';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return 'Alta $high · Media $medium · Baja $low · Ninguna $none';
+  }
 
   @override
   String get libraryFullScan => 'Escaneo completo';
@@ -5482,6 +5582,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsEqReset => 'Reset equalizer';
+
+  @override
+  String get equalizerQuickDesc =>
+      'Ajustes rápidos desde el reproductor: preajuste, preamplificación y 10 bandas. Los cambios se aplican al instante.';
 
   @override
   String get settingsEqPresetFlat => 'Flat';

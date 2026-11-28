@@ -1,0 +1,409 @@
+# EraStore S3 实测：T3.10 / T3.13 / T3.14 / T3.15
+
+> 日期：2026-11-24（第二轮）
+> 代码：`main` 工作区（EraStore 增量 + 只读 mmap + 生产路径去 FTS）
+> 关联：`docs/local-search-indexer-rewrite-plan.md` §5.4 / §8
+>
+> **最终状态（2026-11-26）**：S0–S4 已全部实施；本文件记录 T3.10 / T3.13 / T3.14 / T3.15
+> 的门禁过程与后续各轮实测。§9 的可本地完成项（Q2 / Q3 / Q4 / Q5 / Q8 / S3 / S6 / S7 / E5）
+> 已在「第十一轮」落地或交付默认关闭的机制；最新数字见该轮，剩余项见「下一步」。
+>
+> **结论先行**：T3.10 的功能已落地（增量 + 墓碑 + 分层合并），T3.13 的生产查询路径已
+> 零 v7/FTS5，T3.15 的切换逻辑已可复现；**T3.14 七项门禁 7/7 通过**（30k，空闲
+> 机器：p50 7.7–9.6 ms、p95 28.5–32.3 ms、匿名 RSS 56.5–58.7 MB）。按 §5.4.4
+> 可以进入 S3 合并评审，合并前仍需 T3.15 的 Windows / macOS 实机验证与全平台 CI。
+
+## 1. 环境与语料
+
+| 项 | 值 |
+|---|---|
+| OS | Linux 7.3.5-zen1 x86_64 |
+| CPU | 13th Gen Intel(R) Core(TM) i9-13980HX |
+| 内存 | 31,141,704 kB（≈29.7 GiB） |
+| .NET | 10.0.114（framework-dependent CLI；NativeAOT 产物另测） |
+| 临时盘 | tmpfs 15 GB |
+| 语料 | `bench/gen_corpus.py`，seed `20261013`，2–8 KB 中文歌词/曲，50% `.lrc` |
+| 档位 | 5,000 / 30,000 / 48,700 曲（§8.6 允许以 48.7k 近似 50k） |
+| 查询集 | `bench/qbench` 固定 14 条（`--limit 10000`，与 §8.0 基线同口径） |
+
+构建命令：
+
+```bash
+python3 app/core/indexer/bench/gen_corpus.py --out /tmp/opencode/t314/corpus30k \
+  --tracks 30000 --seed 20261013 --generation 1
+dotnet app/core/indexer/bin/Release/net10.0/archoera-indexer.dll build \
+  --full --db /tmp/opencode/t314/corpus30k/library.db \
+  --index /tmp/opencode/t314/corpus30k/search.db
+# 生产路径默认不写 search.db；--legacy-fts 仅用于构造 v7 回归夹具。
+```
+
+## 2. 全量构建（生产路径，只写 EraStore）
+
+> 下表为**首轮（v13，2026-11-24）**实测快照；最终数字（DocStore v4 / S4，2026-11-25）
+> 见本节末尾的演进注与「第六轮」。
+
+| 档位 | 曲目 | 构建耗时 | 峰值 RSS | 索引体积 | B/曲 | 段数 |
+|---|---|---|---|---|---|---|
+| 5k | 5,000 | 7.7 s | 152.6 MB | 37.2 MB | 7,445 | 48 |
+| 30k | 30,000 | 40.5 s | 160.0 MB | 229.0 MB | 7,633 | 286 |
+| 48.7k | 48,700 | 59.1 s | 173.3 MB | 372.1 MB | 7,640 | 465 |
+| **NativeAOT** 5k | 5,000 | 7.4 s | **142.3 MB** | — | — | 48 |
+| **NativeAOT** 30k | 30,000 | 40.4 s | **142.0 MB** | — | — | 286 |
+| **NativeAOT** 48.7k | 48,700 | 67.8 s | **147.1 MB** | — | — | 465 |
+
+- 与 S0 基线（30k，FTS5 382.5 MB / 109.1 s / 181 MB）相比：体积 **0.60×**、
+  构建耗时 **0.37×**、峰值 RSS **0.88×**。
+- 体积已接近 EraStore 目标（≤0.60×）。
+- **RSS 以真实 NativeAOT 产物为准**：30k 峰值 142.0 MB（含 Python ctypes 宿主），
+  0.78× 基线 → **通过**；framework-dependent CLI 的 160 MB 是 JIT 高估。
+  48.7k 为 147.1 MB（该档没有 S0 基线，按绝对值记录）。
+**最终（S4 / DocStore v4，2026-11-25）**：同一 30k 语料 `liveBytes` **136.6 MB**
+（`fileBytes` defrag 后同为 136.6 MB），`bytes_per_track` 7.34 → **4.45 KiB（0.35× 基线）**；
+5k 为 22.7 MB。演进：v14 165.75 MB → T3.4 关歌词首字母 128.5 MiB → DocStore v3 归一列
++0.90% → v4 `layer_conf` +1 B/曲。opt-in 打开歌词首字母时回到 165.75 MB；
+构建本体 29.1 s → 30.7 s（+5.6%，在 10% 内）；构建收尾自动压缩 221 → 1 段。
+去重在合成语料上贡献为 0（`gen_corpus` 没有曲内重复行），全部收益来自「歌词字面列
+不建首尾 unigram」；真实库的 ≥20% 去重率仍需真实 `library.db` 抽样验证。
+
+- 段数由 `MaxSegmentBytes = 4 MB`（估算）决定；真实歌词下单段约 4k 曲。
+  这是 **RSS 与查询延迟的核心矛盾**：段越大 RSS 越高，段越小查询越慢。
+
+## 3. 查询（生产路径 `SearchSession → EraStore`）
+
+`bench/qbench` 已从 FTS5 切到 `SearchSession.Run`（`Cache=false`），
+测量完整查询路径（计划编译 + 召回 + bm25 + 桶序 + 分页）。
+
+### 3.1 30k（压缩到 8 段后；接近稳态）
+
+| 指标 | 基线（§8.0） | 目标 | 实测 | 比值 | 判定 |
+|---|---|---|---|---|---|
+| `query_p50` | 30.2 ms | ≤10.57 ms | 7.7–9.6 ms（5 次） | 0.26–0.32× | ✅ |
+| `query_p95` | 69.7 ms | ≤34.85 ms | 28.5–32.3 ms（5 次） | 0.41–0.46× | ✅ |
+| 单条最慢 | — | — | 107–116 ms（偶发系统抖动；p95 不受影响） | — | — |
+
+**本轮查询引擎（从 0.55–0.60× 到 0.26–0.32×）**：
+
+1. **bitset 候选评估**：每个 atom 先建段内文档位图（单词直接扫倒排，词组复用
+   `PhraseIter`），df = popcount；布尔树用 AND/OR 位运算求值。一次倒排扫描同时得到
+   df 与候选，不再「先 CountDocs 再逐 doc 迭代」。
+2. **预计算 tf**：单词 atom 在扫倒排时累计加权 tf（`double[]`，按 atom × 段）；
+   词组仍按位置用游标计算。评分退化为数组查表 + 布尔树遍历。
+3. **固定大小 top-k**：每步上限 `limit + offset`，用最大堆只保留最终候选，
+   不再物化 2.9 万条后全排序；堆缓冲走 `ArrayPool<ScoredHit>`（≈240 KB）。
+   未触发截断时保持原有扫描顺序，触发时集合与「全排序后取前 k」完全一致。
+4. 叠加 df 缓存、`OrIter` 堆化、延后 TrackId、惰性 AND、宽前缀 tf 归并、
+   12 列长度一次切片、候选对象减配。
+
+> **测量条件**：以上 5 次均在机器空闲（无其它常驻 App / 编译器）时测得。
+> 同一二进制约有 1–2 个活跃 CPU 进程时，p50 会漂到 10.6–12.2 ms、p95 33–36 ms
+> （仍接近目标）；正式基线重跑请关闭并发负载，避免把调度抖动当成回归。
+
+### 3.2 5k / 48.7k
+
+| 档位 | 段数 | pooled P50 | pooled P95 | 备注 |
+|---|---|---|---|---|
+| 5k | 48 | 4.8–6.2 ms | 35.5–36.3 ms | 段太小，`compact` 不合并（40 万 doc 预算） |
+| 48.7k | 13 | 13.6–15.0 ms | 43.7–45.0 ms | `compact` 10 轮把 465 → 13 段后测得 |
+
+- 48.7k 未压缩（465 段）时 P50/P95 = **46.7 / 225.2 ms**；`compact` 后降到
+  13.6–15.0 / 43.7–45.0 ms，段数仍是主要放大器。
+- 30k 的 p50/p95 已达 §8.0；48.7k 的绝对值更高（段更大 / 文档更多），但仍比
+  优化前的 26.8–28.8 / 59.3–59.8 ms 快约 2×。
+- 读音 / 模糊趟已降到 2–6 ms（`romaji_reading` 4.4 ms）。
+
+### 3.3 查询期匿名 RSS（`rss_query`）
+
+NativeAOT FFI 进程（Python `ctypes` 宿主 ≈4–5 MB 基线），`/proc/self/smaps_rollup`
+的 `Anonymous:` 口径：
+
+| 阶段 | 5k | 30k | 48.7k |
+|---|---|---|---|
+| 进程基线 | 4.0 MB | 5.4 MB | 5.4 MB |
+| `era_search_open` 后 | 7.0 MB | 6.9 MB | 8.4 MB |
+| 首条 CJK 查询后（回收后） | 56.5 MB | 56.5 MB | 56.5 MB |
+| 重复 100 次轻查询（limit=200） | 56.6 MB | 56.6 MB | 56.6 MB |
+| Latin 查询（加载释义表）后 | 57.9 MB | 57.9 MB | 58.6 MB |
+| 重复 10 次宽查询（limit=10000） | 57.3 MB | 57.3 MB | 57.2 MB |
+
+- **全部 ≤60 MB（含 ≈5.3 MB 的 Python ctypes 宿主）**；与索引体积基本无关，
+  说明不是 mmap 文件页，也不是段数。
+- 单独调用 `era_analyze` 可复现：`我爱你` / `周杰伦` / `愛してる` 一律 +93 MB；
+  拉丁词（`love`）+30 MB。
+- 归因（独立 .NET 进程实测 ToolGood.Words 3.1.0.3）：仅调用
+  `ToSimplifiedChinese` 之后 13 MB，首次 `GetPinyin` 后 **92.9 MB**；强制压缩回收后
+  活对象仍约 43 MB（拼音词库 + 自动机），其余约 8–10 MB 是 Unihan 释义表。
+- **本轮的三个措施**：
+  1. `MemoryTrim.cs`：惰性词库加载后置位，查询响应写完后做一次
+     `GCCollectionMode.Aggressive` 压缩回收（首查 ≈8 ms，只在新词库加载时付）；
+     另每 16 条查询兜底回收一次（≈0.5 ms/查），把堆高水位钉在基线附近。
+  2. **JSON 直写**：`SearchApiJson` 新增 `sink` 路径，响应从线程内复用缓冲直接
+     拷到非托管内存，去掉「JSON string + UTF-8 byte[]」两次 LOH 分配；
+     `SetUtf8(string)` 也改为直接编码到非托管缓冲；>512 KB 的缓冲写出后缩回 64 KB。
+     30k FFI 查询 P50 从 46.3 ms 降到 42.1 ms（未含宽查询回收）。
+  3. **释义表内部化**：`def_hanzi2en` 的 8.3 万引用共享 1.1 万唯一 string，
+     省约 2–3 MB；`LoadGlossCodes` 用 `int[]` 替代 `List<int>`。
+- **代价**：宽响应（≥128 KB，≈1 万条命中）会在返回前触发一次压缩回收（≈9 ms）；
+  常见 UI 页大小（≤200 条）不触发。qbench（门禁延迟口径）不走 FFI，不受影响。
+- 复现：NativeAOT `indexer-ffi` + `ctypes` 宿主，`era_search_open` 后先读
+  `/proc/self/smaps_rollup` 的 `Anonymous:`，再调 `era_search_run` 后重读。
+
+### 3.4 存储层（引擎级基准，不含排序语义）
+
+| 档位 | 体积 B/doc | open（冷/热） | 首查 | pooled P50/P95 |
+|---|---|---|---|---|
+| quick 5k | 1,264 | 6.06 / 0.05 ms | 1.42 ms | 0.013 / 0.112 ms |
+| 30k | 1,227 | 3.94 / 0.05 ms | 1.39 ms | 0.017 / 0.259 ms |
+
+> 存储层本身满足 §8.0 的 `open_ms` / `first_query_ms` / 延迟目标；未通过的是
+> **查询计划 + 逐条 bm25 的托管开销**，不是 EraStore 的读写。
+
+## 4. §8.0 七项门禁（30k，逐项）
+
+| # | 指标 | 基线 | 目标 | 实测 | 判定 |
+|---|---|---|---|---|---|
+| 1 | `bytes_per_track` | 12.75 KB | ≤10.2 KB | **4.45 KB（0.35×）**（磁盘口径；DocStore v3 + v15 + T3.4 默认关） | ✅ |
+| 2 | `open_ms` | 未单独统计 | ≤10 ms | 3.94 ms | ✅ |
+| 3 | `first_query_ms` | ≈1.1 s | ≤100 ms | 1.39 ms | ✅ |
+| 4 | `query_p50` | 30.2 ms | ≤10.57 ms | 7.3–9.6 ms（qbench；v14 复测 7.31–7.36） | ✅ |
+| 5 | `query_p95` | 69.7 ms | ≤34.85 ms | 28.5–32.3 ms（qbench；v14 复测 29.6–32.2） | ✅ |
+| 6 | `rss_peak_build` | 181 MB | ≤144.8 MB | 142.0 MB（NativeAOT） | ✅ |
+| 7 | `rss_query` | 未单独统计 | ≤60 MB（匿名） | 56.5–58.7 MB（5k / 30k / 48.7k） | ✅ |
+
+**判定：7/7 通过（空闲机器）。** 体积 / open / 首查 / p50 / p95 / 构建 RSS /
+查询期匿名 RSS 全部达 §8.0；有并发负载时延迟会抖动到目标边缘，见 §3.1 的测量条件。按 §5.4.4，S3 可以进入合并评审；合并前仍需完成 **T3.15 的
+Windows / macOS 实机验证**（§7.1）与全平台 CI 首次验证。
+
+门禁之外的剩余项（不阻止 S3，但建议跟进）：
+
+1. ~~全量构建收尾的自动 `compact`~~：已实现（行数见 §8）。
+2. O8 位打包 / postings 紧凑化：可把段做得更大、进一步降低查询固定成本，
+   并把 NativeAOT RSS 继续压低。
+3. T3.4–T3.9 的体积 / 召回优化按实测收益排序再做。
+
+## 5. T3.10 增量结果
+
+以 30k 库、稳态 8 段为样本（`UPDATE file_mtime` 制造脏曲）：
+
+| 场景 | 应用阶段 | 合并 | 总耗时 | 备注 |
+|---|---|---|---|---|
+| 1 首脏曲（稳态） | 72 ms | 0 ms | 1.3 s | 其余为进程 / 30k track 探测 / 状态扫描 |
+| 100 首脏曲 | 147 ms | 2.7 s | 5.3 s | 当时 7 段触发合并 |
+| 全量对照 | — | — | 40.5 s | 30k |
+
+- 增量应用（追加新段 + 墓碑）**只与脏曲数相关**：1 首 72 ms、100 首 147 ms；
+  固定成本来自「扫全部 track_id 建映射 / 读取 DocStore v2 状态」。
+- 合并是唯一 O(库) 的部分，已按 2 s 预算 / 4k 源 doc 限界；从 465 段收敛到 13 段
+  共 6 轮 `compact`（每轮 ≤2 s 目标，实测 1–3 s）。
+- **合并策略校准**：设计稿的「段数 ≥8」在真实歌词（单段 ~4k 曲）下会让每次增量
+  重写一个 4k 段（1.2–1.4 s）。已改为「段数 ≥24 + 只归并小段」；死行 ≥20% 仍立即
+  回收。该偏离记录在 §3.8 / §5.4 与本文件。
+- 峰值 RSS（增量）：1 首 ~231 MB、100 首 ~261 MB（含 mmap 文件页）；合并阶段是峰值
+  主要来源，仍需按匿名 RSS 复核。
+
+## 6. T3.13 审计：v7 / FTS5 边界
+
+### 6.1 已迁移（生产查询路径零 FTS）
+
+| 位置 | 处理 |
+|---|---|
+| `era_search_open` / `era_search_health` | 只读 `search.era/CURRENT` + Manifest；`metaVersion` 过旧返回 3 |
+| `era_search_run` | `SearchSession` → `EraQueryPlan`；无 `search.db` 读取 |
+| `era_search_fallback` / `decorate` | 只读 `library.db`（LIKE / 片段 / 高亮），不碰 v7 索引 |
+| CLI `query` | 默认与 `--raw` 都走 `EraStore.EraQueryPlan` |
+| CLI `compact` | EraStore 分层压缩 |
+| 连接串 / ASCII 判定 | 抽到 `LibraryDb`，查询路径不再引用 `FtsStore` |
+| Dart `SearchIndex.open` / `isAvailable` | 改判 `search.era/CURRENT`，不再用 SQLite `search_meta` 探针 |
+| Dart `SearchService._needsFullBuild` | 只看 EraStore 是否就绪（`search.db` 不再是必需文件） |
+| FFI `era_search_run` | 只检查 EraStore CURRENT，不再要求 `search.db` 存在 |
+
+### 6.2 已删除（T3.13b，2026-11-25）
+
+| 位置 | 处理 |
+|---|---|
+| `FtsStore.cs` | **整体删除**（`Put/Delete/Commit/Optimize/Search/ReadMeta/WriteMeta/LoadState/Seal/PeekMeta/EnsureSchema/fts5vocab` 等） |
+| `IndexStore.cs` | 删 `IIndexStore` / `IIndexStoreAdmin` / `SchemaVersionValue` / `UpdatesSinceMerge` / `DocState`；保留 `DocTokens` / `StoreMeta`（查询元数据） |
+| `IndexerEngine` | 删 `IIndexStore` 构造参数、`WriteLegacyFts` 分支与整个旧 `Run`；`RunEraOnly` 改名 `Run` |
+| `Program.cs` | 删 `--legacy-fts` / `--merge-every`；`search.db` 仅作 `search.era/` 的目录锚点 |
+| `Ffi.cs` / `IndexerJson.cs` | 删 `new FtsStore()`、`WriteLegacyFts`、`merge_every_updates`、`Merged` / `UpdatesSinceMerge`（ABI 与 JSON 字段名不变） |
+| `Replay.cs` | 接受 EraStore-only 目录：`CURRENT` 判定、`.eraindex` 字节数、`scheme="erastore"` |
+| 测试 | `EndToEnd` / `SearchLayer` / `SearchApi` / `SearchPlan` / `SearchConcurrency` 迁到 Manifest / `IndexStats` / `EraQueryPlan` / `DocStore`；删 `MergeThreshold`（测 FTS `optimize`）与 `RankingIntegrity`（测旧 bm25 缺陷） |
+
+**边界定义（更新）**：仓库里已无 v7 存储 / 写入代码。查询 IR 仍用
+`{title_tok ...} : "..."` 这套 MATCH 子集语法，但它现在是 `EraStore/Expression.cs`
+的**内部语法**，不是 FTS5；T3.13 的验收口径按此理解。
+
+- 健康检查的 `schemaVersion` 改为 `Manifest.CurrentMetaVersion`（1），`gen` 由 Manifest 实际值派生。
+- 静态检索 `FtsStore|fts5vocab|search_meta|WriteLegacyFts|IIndexStore` 只剩历史注释
+  与 `bench/` 旧报告；`app/lib`、`app/test` 无命中。
+
+### 6.3 索引器路径
+
+- v7 写入路径已整体删除（T3.13b）：构建只写 EraStore，不再产生 `search.db`。
+- 脏集状态：`DocStore v2` 新增 `mtime / lrc_mtime / lrc_size` 三列；读取侧兼容 v1
+  （缺失列按 0）。`StoreReader.LoadTrackState()` 提供 `track_id → 状态`。
+- 版本锚：不再用 `_scanner_meta.generation` 与索引 `gen` 比较（二者语义不同）；
+  只比较 Manifest 的 `analyzer` / `metaVersion` / 选项位。
+
+## 7. T3.15 三端重建 / 占用场景
+
+| 场景 | Linux | Windows | macOS |
+|---|---|---|---|
+| 全量重建 + `CURRENT` 原子切换 | ✅ 自动测试 | ⏳ 需真机 | ⏳ 需真机 |
+| 旧文件被查询句柄占用（删除失败） | ✅ 逻辑测试（删除可成功，异常路径被吞） | ⏳ 需真机验证 `IOException` 分支 | ⏳ 需真机 |
+| 未引用的旧世代（上次删除失败） | ✅ 无变更运行重试清理 | ⏳ 同上 | ⏳ 同上 |
+| 构建中断（Manifest / 槽未提交） | ✅ `EraStoreFuzzTests` 槽前/槽后注入 | 同上（纯托管路径） | 同上 |
+| 增量提交前异常不改旧世代 | ✅ `EraStoreIncrementalTests` | 同上 | 同上 |
+
+实现要点：
+
+- `CleanupEraFiles` 在**每次运行结束**都执行（不再只在全量构建后），保留 `CURRENT`
+  指向的文件；删除失败只记录，下次重试。
+- `StoreReader` / `Merger` 用 `FileStream(FileShare.ReadWrite)` + mmap；Windows 上
+  允许索引写入句柄与查询句柄并存。
+- 未引用的 `.eraindex`（中断残留 / 占用残留）不会影响 `CURRENT` 解析与查询。
+- **待办**：在真实 Windows / macOS 上各跑一次「打开查询句柄 → 全量重建 → 删除旧文件
+  失败 → 再运行一次」；复现命令与判定见 §7.1。
+
+### 7.1 真机复现步骤（Windows / macOS）
+
+以下步骤假定已用平台脚本产出 `archoera-indexer` CLI / `indexer-ffi` 动态库；
+语料可用 `bench/gen_corpus.py` 生成的小库（≥200 曲即可触发多段）。
+
+```bash
+# 0) 准备：生成 200 曲语料
+python3 app/core/indexer/bench/gen_corpus.py --out /tmp/t315 --tracks 200 --seed 7
+cd /tmp/t315
+
+# 1) 首次全量：记录 CURRENT 指向的 .eraindex
+<indexer> build --full --db library.db --index search.db
+cat search.era/CURRENT
+
+# 2) 持有旧世代查询句柄（模拟 App 正在搜索）
+#    Windows: 用 indexer-ffi 打开 era_search_open；macOS: 同上（.dylib）
+#    保持进程不退出，句柄不 close。
+
+# 3) 第二次全量：新世代原子切换，旧文件因句柄占用删除失败（应只告警）
+<indexer> build --full --db library.db --index search.db
+cat search.era/CURRENT          # 必须指向新文件
+ls search.era/*.eraindex        # 旧世代可能仍在（预期）
+
+# 4) 释放句柄后无变更再跑一次：清理未引用的旧世代
+#    先关掉步骤 2 的进程，再执行：
+<indexer> build --db library.db --index search.db
+ls search.era/*.eraindex        # 只应剩 CURRENT 指向的文件
+
+# 5) 构建中断：在步骤 3 进行到一半强制结束进程，重跑 build
+#    断言：CURRENT 仍可解析、查询可用、无半写 Manifest 导致的启动失败。
+```
+
+判定标准：
+
+- 步骤 3 的删除失败**不得**让 `build` 返回非 0，也不得让 `CURRENT` 回退；
+- 步骤 4 之后不得残留未引用的 `.eraindex`（Windows 上若仍残留，说明
+  `StoreReader` / `Merger` 的 `FileShare` 组合仍阻止删除）；
+- 步骤 5 之后查询结果与中断前一致；不一致视为原子性缺陷。
+
+## 8. 交付与后续
+
+> 第一轮–第十轮的代码清单与逐轮实测已归档到
+> [`archive/local-search-indexer-rounds.md`](archive/local-search-indexer-rounds.md)；
+> 本文件只保留当前门禁、最新一轮与待办。
+
+| 轮次 | 日期 | 主题 | 结论 |
+|---|---|---|---|
+| 1–2 | 2026-11-24 | EraStore 读路径；T3.10 / T3.13 / T3.14 / T3.15 | 7/7 门禁；体积 0.60×、p50 7.7–9.6 ms |
+| 3–4 | 2026-11-25 | 位集等价、删 v7 / FTS5、全量收尾 compact | 30k 136.6 MB、4.45 KiB/曲 |
+| 5–6 | 2026-11-25 | T3.11 精确度 + 邻近度、S4 数据包 | 5k narrow P@1 0.333→0.667 |
+| 7–8 | 2026-11-26 | S1 新世代压缩、Q1 歌词整行相等 | 不再 defrag；DocStore v5 |
+| 9–10 | 2026-11-26 | S2 音译免位置、O8 位置打包 | 5k 26.27→25.56 MB；eval 逐项不变 |
+| **11** | **2026-11-26** | **Q2–Q5 / Q8 / S3 / S6 / S7 / E5** | **PASS 4273；5k 25.60 MB；eval 不变** |
+| 复核 | 2026-11-26 | 窗口 ABI v11（非索引器改动，仅回归确认） | C# 4273 / Flutter 1233；5k 与 eval `981bcfaa…` 逐项与第十一轮一致 |
+| **12** | **2026-11-27** | **O11/O12 倒排块紧凑化（S8）** | **Postings −2.46%、file −0.476%；37 题 eval 逐字段一致；旧索引可读** |
+
+- **第十一轮（2026-11-26，Q2–Q5 / Q8 / S3 / S6 / S7 / E5）**：逐项状态与默认边界见 §9。
+  关键数字：C# **PASS 4273**；Flutter **1225 passed / 42 skipped**；`dart analyze` 0；
+  5k `fileBytes 25,603,565`（**5.00 KiB/曲**，含 S6 +8 B/曲）、positions 16,207,455
+  （与 O8 相同）、1 段、`verify ok`；eval `981bcfaa…` 逐项与基线相同（P@1 .973 /
+  NDCG@10 .9778）；延迟 p50 **1.10–1.11 ms** / p95 **19.3–20.0 ms**。
+  **唯一的默认行为变化是 Q4**（A/B 见 §9.1 Q4）。
+
+- **复核（2026-11-26，窗口 ABI v11）**：本轮只动 `app/native/platform` 与窗口 Dart 层，
+  **不触及索引器**；重跑门禁确认无回归：C# **PASS 4273 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**，
+  Flutter **1233 passed / 42 skipped**，`dart analyze lib` 0；5k 重建
+  `fileBytes 25,603,565`（5.00 KiB/曲）、positions 16,207,455、1 段、`verify ok`；
+  eval `query_set.hash 981bcfaa…` 与第十一轮逐项相同（P@1 .973 / NDCG@10 .9778）。
+  ABI 变更细节见 `docs/platform-native-bridge.md`「第三批落地」。
+
+- **第十二轮（2026-11-27，O11/O12：倒排块紧凑化）**：O11 doc 序列位打包（块 flags
+  `0x02 = docs_packed`，逐块取 varint / 位打包较小者）+ O12 tf 位图裁剪
+  （`0x04 = trimmed_bitmap`，位图按 `ceil(doc_count/8)` 截断）；词典 / 位置 / DocStore /
+  查询语义均不变。5k `fileBytes` 25,563,565 → **25,441,844**（−0.476%），Postings
+  4,950,439 → **4,828,719**（−2.46%），Positions 16,207,455 不变；qbench 37 题
+  `queries[]` / `aggregate` 与基线**逐字段相等（0 差异）**；新 reader 可读旧格式，
+  旧二进制拒绝新索引（`倒排块 flags 非法`），`index_format` 仍为 1。C# 回归
+  **PASS 4131 / FAIL 0 / KNOWN-GAP 0 / BLOCKED 3**（与 indexer 分支合并后全量
+  **PASS 4292**）。未做 PForDelta 例外帧 / tf 例外值位打包。明细（块体逐字节断言、
+  体积表、兼容性实测）见
+  [`archive/local-search-indexer-rounds.md`](archive/local-search-indexer-rounds.md)。
+
+**下一步（2026-11-26 收尾后的真实剩余）**：
+
+1. Windows / macOS 实机跑 §7.1 的占用 / 中断场景（T3.15 收尾）——本机只能覆盖 Linux。
+2. T4.1 词表的人工复核：§5.5.4 要求 ≥10% 抽样 + 第二名评审签字（当前标 `seed`）。
+3. N10 / N11 两项仍 BLOCKED（per-track 语言画像 / 单字歌词召回语义），均为产品决策；
+   N18（df 预算）机制已落地但默认关闭，阈值需真实库回放。
+4. `bench/REPORT.md` 长基准重跑（需 `ALLOW_LONG_BENCH=1`）。
+5. Q4 已改变默认方案的短路行为，建议用真实查询日志跑一轮 replay 对比；
+   Q3 / Q8 用真实库分布校准后再决定是否改默认值。
+6. S4 段大小自适应、S5 LRC 分层语言信号：需要真机 / 真实多语 LRC 样本。
+7. 跨语言 T2-7（助词 は/へ/を 双写是否足够）：`query_log` / `query_log_file` 已就位，
+   等真实使用积累后按 `query` 聚合回填矩阵（`docs/cross-lingual-search-upgrade-plan.md`）。
+
+更细的可改进项（含改法与代价）见 §9。
+
+## 9. 可改进项（非门禁；按收益 / 风险）
+
+> **默认生效边界**：默认路径只有 Q2 / Q5 / S3 / S6 / S7 / E5，以及 Q4（仅
+> `default@1` / `fast@1`，属行为变化）。**Q3 / Q8 只交付机制 / 旋钮：默认值不变、且未接入
+> 任何运行配置（UI / 请求 JSON / 方案都读不到，只能改代码启用）**。S2 的
+> `PinyinLyrics` 免位置已测量并**明确不采纳**（5k P@1 0.973 → 0.838）。
+
+### 9.1 排序与召回
+
+| # | 状态 | 要点（证据 / 默认 / 剩余） |
+|---|---|---|
+| Q1 | ✅ 整行相等 | DocStore v5 `lyrics_digest`；前缀 / 包含仍 `none`；+0.68 KiB/曲；旧索引需重建 |
+| Q2 | ✅ 默认 | 邻近度扩到歌词原文 / 译文 / 音译 / Mixed / Reading / Fuzzy，候选 ≤ cap 才读位置块；5k p50 1.80→**1.77 ms**、p95 13.35→**11.33 ms**；音译层免位置、Reading 词元不同源仍算不出 |
+| Q3 | ◐ 旋钮（未接运行配置） | `MinPinyinPrefixTokenLength` 默认 **3**；N=4 时 `pinyin_initials` found@50 4→3（召回降），故不改默认；真实库 3–4 字符分布待校准 |
+| Q4 | ✅ **默认（行为变化）** | `RequireStrongKindForShortCircuit`：只有 `Partial` 时继续跑拼音 / 丢词 / 读音；5k eval 逐题不变；400 曲 64 题 A/B：25 题结果集变化（多为追加结果）、5 处名次、1 题 top-1 互换。要「少而准」一行换回 `SearchPolicy.Default` |
+| Q5 | ✅ 默认（仅 minimal） | `includePrefix` 按方案派生；`minimal@1` 无任何 `*`；fast / default / recall 表达式字节不变 |
+| Q6 | ❌ 未开始（产品） | per-track 语言画像（N10：纯汉字日文标题按中文拼音）；新 DocStore 列 + 重建 + 真实日文库 |
+| Q7 | ❌ 未开始（产品） | 单字 CJK 歌词召回（N11，`RequireMetadataForSingleChar`）；回归面大 |
+| Q8 | ◐ 机制（默认 0 / 未接运行配置） | `TermDf / AtomDf / EstimateDf` + `df_budget` 跳过；估算墓碑无关，阈值需真实库回放 |
+
+### 9.2 索引与存储
+
+| # | 状态 | 要点 |
+|---|---|---|
+| S1 | ✅ | 全量收尾压缩 `MergeToNewGeneration`，成功后跳过 defrag；增量仍同文件追加 |
+| S2 | ✅（部分不采纳） | 音译层默认免位置 + O8 位置块位打包（5k 26.27→25.56 MB，eval 逐项不变）；`PinyinLyrics` / `PinyinMeta` / 歌词首字母免位置**不采纳**（短语精度 / 相邻假阳性） |
+| S3 | ✅ | `TermCodec`：超长词 → `0x01+MD5`（33B），索引 / 查询 / 词表同源；`oversizeTokens` 恒 0；旧索引可读，需该曲重索引；只精确命中 |
+| S4 | ❌ 未开始 | 段大小固定 4 MB；自适应需真机 / 真实曲库多档（S1 已覆盖二次合并） |
+| S5 | ❌ 未开始 | LRC 分层仍按同时间戳行号猜；需真实多语 LRC 样本 |
+| S6 | ✅ | DocStore v6 `meta_hash`（原始 title/artists/album，FNV-1a 64）；`mtime` 不变也能发现直接改库；`metaVersion 5` 旧索引全量重建；+8 B/曲；**仍漏**直接改 `tracks.lyrics` 且不动 mtime |
+| S7 | ✅ | 无脏曲也 `Maintain`（死行 ≥20% 或段 ≥24），未达阈值零写入 |
+| S8 | ✅ | 倒排块 **O11 doc 位打包**（flags `0x02`）+ **O12 tf 位图裁剪**（flags `0x04`），逐块取 varint / 位打包较小者；5k Postings 4,950,439 → 4,828,719（−2.46%）、file −0.476%、qbench 37 题逐字段一致；旧索引可读、旧二进制拒绝新索引；剩余 PForDelta 例外帧 / tf 例外值位打包 |
+
+### 9.3 工程与验证
+
+| # | 状态 | 要点 |
+|---|---|---|
+| E1 | ❌ 未开始（真机） | T3.15 四场景：句柄占用 / 重建 / 删除重试 / 构建中断 |
+| E2 | ❌ 未开始（人工） | T4.1 词表 ≥10% 抽样 + 第二人签字（当前 `seed`） |
+| E3 | ❌ 未开始（环境） | `bench/REPORT.md` 长基准重跑（`ALLOW_LONG_BENCH=1`）；`run_bench.py` 仍 v7 措辞 |
+| E4 | ◐ 预留 | `SearchApi.Busy` 不返回；做后台压缩任务时再启用 |
+| E5 | ✅ | 设置页诊断行（gen / schema / analyzer、dataPack、lyricsConfidence）；后台 isolate 刷新 health |
+| E6 | ✅ | 索引更新后 RSS 逐次上涨：`StoreReader` 的 `FileStream`（`MemoryMappedFile` 用 `leaveOpen: true`）未释放（每次打开 / 换世代漏一个句柄）、`MemoryTrim` 只在进程内第一次构建后回收；现为 `StoreReader.Dispose` 显式关流 + 每次构建前后 compacting GC + 会话释放时断开模糊词表 / 段缓存 / 结果 LRU；新增 `ResourceTests`（`/proc/self/fd` 40 次 open/close 不增长） |
+
+> 顺序：~~S8（倒排块紧凑化）~~（2026-11-27 已完成 O11/O12）→ Q3 / Q8 真实库校准 → Q4 replay → S4 真机分段 → Q6 / Q7 产品评审 →
+> S5 / E1 / E2 / E3 视数据与真机。

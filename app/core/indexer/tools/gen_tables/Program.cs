@@ -31,6 +31,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using ToolGood.Words;
+using Archoera.Indexer;
 using Archoera.Indexer.Tools;
 
 const string accentOutput = "data/accent_fold.tsv";
@@ -39,16 +40,84 @@ const string nfkcOutput = "data/nfkc.tsv";
 const string jaReadingsOutput = "data/ja_readings.tsv";
 const string defEn2HanziOutput = "data/def_en2hanzi.tsv";
 const string defHanzi2EnOutput = "data/def_hanzi2en.tsv";
+const string manifestOutput = "data/manifest.json";
+const string dartPackOutput = "../../lib/services/search/data_pack.g.dart";
 const string unihanZip = "../../../reference/unihan/Unihan.zip";
 
-UnihanTables.WriteNfkcTable(nfkcOutput, UnihanTables.BuildNfkcRows());
-WriteAccentTable(accentOutput, BuildAccentRows());
-WriteVariantTable(variantOutput, BuildVariantRows(unihanZip));
-UnihanTables.WriteJapaneseReadingsTable(jaReadingsOutput, UnihanTables.BuildJapaneseReadingRows(unihanZip));
+// 数据包 manifest 的 Unicode 口径（见 data/README.md）：
+//   · ja_readings / def_* / variant_fold 派生自 reference/unihan/Unihan.zip
+//     （2026-07-31，文件头写 "Unicode Version 18.0.0"）；
+//   · nfkc / accent_fold 由 .NET 运行时归一化（FormKC / FormD）生成，跟随工具链
+//     自带的 ICU 数据（当前 .NET 10 / ICU 78 = Unicode 17.0）。
+// 顶层 unicode 记录 Unihan 派生的 UCD 版本；归一化表的取舍在 README 说明。
+const string unicodeVersion = "18.0.0";
 
-var (en2hanzi, hanzi2en) = UnihanTables.BuildGlossTables(unihanZip);
-UnihanTables.WriteEn2HanziTable(defEn2HanziOutput, en2hanzi);
-UnihanTables.WriteHanzi2EnTable(defHanzi2EnOutput, hanzi2en);
+// 每张表的许可证（§5.5.5 白名单：Unicode License / 自建）。**不许猜**：
+//   · Unicode 派生（Unihan / UCD 归一化事实数据）→ Unicode License；
+//   · kana_romaji 为 Archoera 自研（标准罗马字事实）→ 本项目 AGPL-3.0-or-later。
+var licenseByFile = new Dictionary<string, string>(StringComparer.Ordinal)
+{
+    ["nfkc.tsv"] = "Unicode",
+    ["accent_fold.tsv"] = "Unicode",
+    ["variant_fold.tsv"] = "Unicode",
+    ["ja_readings.tsv"] = "Unicode",
+    ["def_en2hanzi.tsv"] = "Unicode",
+    ["def_hanzi2en.tsv"] = "Unicode",
+    ["kana_romaji.tsv"] = "AGPL-3.0-or-later",
+    // T4.1 策展专名词表：本仓库自建（公开艺人名称的事实性对照），按 CC0-1.0 释出。
+    ["lexicon_cross.tsv"] = "CC0-1.0",
+};
+
+var manifestOnly = args.Contains("--manifest-only");
+// --check：只校验 manifest / Dart 常量是否与当前 data 目录一致（CI / 构建前置用），
+// 不写文件；不一致时退出码 1，避免「改了 tsv 忘记重算 data_pack_id」。
+var checkOnly = args.Contains("--check");
+if (!manifestOnly)
+{
+    UnihanTables.WriteNfkcTable(nfkcOutput, UnihanTables.BuildNfkcRows());
+    WriteAccentTable(accentOutput, BuildAccentRows());
+    WriteVariantTable(variantOutput, BuildVariantRows(unihanZip));
+    UnihanTables.WriteJapaneseReadingsTable(jaReadingsOutput, UnihanTables.BuildJapaneseReadingRows(unihanZip));
+
+    var (en2hanzi, hanzi2en) = UnihanTables.BuildGlossTables(unihanZip);
+    UnihanTables.WriteEn2HanziTable(defEn2HanziOutput, en2hanzi);
+    UnihanTables.WriteHanzi2EnTable(defHanzi2EnOutput, hanzi2en);
+}
+
+// ---- 数据包 manifest + data_pack_id（T4.3 §5.5.1）----------------------
+// 从**实际文件**计算 sha256 / bytes，确定性可重跑；文件顺序按 name 排序。
+// 命令（在 app/core/indexer 下）：
+//   dotnet run --project tools/gen_tables                 # 重生成表 + manifest + Dart 常量
+//   dotnet run --project tools/gen_tables -- --manifest-only  # 只重算 manifest / id / Dart
+var manifest = DataPack.BuildManifestFromDirectory("data", licenseByFile, unicodeVersion);
+var packId = DataPackId.Compute(manifest);
+
+if (checkOnly)
+{
+    var expectedManifest = DataPackGenerator.RenderManifest(manifest);
+    var expectedDart = DataPackGenerator.RenderDartConstant(packId);
+    var manifestOk = File.Exists(manifestOutput)
+        && File.ReadAllBytes(manifestOutput).AsSpan().SequenceEqual(expectedManifest);
+    var dartOk = File.Exists(dartPackOutput)
+        && string.Equals(File.ReadAllText(dartPackOutput), expectedDart, StringComparison.Ordinal);
+    Console.WriteLine($"data_pack_id    : {packId}");
+    Console.WriteLine($"manifest        : {(manifestOk ? "OK" : "STALE")}");
+    Console.WriteLine($"dart constant   : {(dartOk ? "OK" : "STALE")}");
+    if (!manifestOk || !dartOk)
+    {
+        Console.Error.WriteLine("数据包清单/常量与 data/ 不一致：请运行 `dotnet run --project tools/gen_tables -- --manifest-only`");
+        return 1;
+    }
+    return 0;
+}
+
+DataPackGenerator.WriteManifest(manifestOutput, manifest);
+DataPackGenerator.WriteDartConstant(dartPackOutput, packId);
+Console.WriteLine($"data_pack_id    : {packId}");
+Console.WriteLine($"manifest        : {manifestOutput}（{manifest.Files.Count} 个文件）");
+Console.WriteLine($"dart constant   : {dartPackOutput}");
+return 0;
+
 
 static List<(int CodePoint, char Base)> BuildAccentRows()
 {

@@ -60,6 +60,7 @@ extern "C" {
 /* 1u << 13 保留：原 APL_CAP_OPEN_URL（ABI v7 移除，勿复用）。 */
 #define APL_CAP_ELEVATION          (1u << 14) /* 超级用户探测（root / administrator，只读） */
 #define APL_CAP_SESSION_END        (1u << 15) /* 系统会话结束事件（关机/重启/注销；不含休眠/锁屏） */
+#define APL_CAP_WINDOW_CONTROL     (1u << 16) /* 窗口控制 API（尺寸/显隐/最大化/全屏/装饰/拖拽） */
 
 /* ── 生命周期 ───────────────────────────────────────────────────── */
 APL_API int32_t apl_abi_version(void);   /* 契约版本 */
@@ -121,8 +122,68 @@ typedef struct AplTrackMeta {
 APL_API int32_t apl_power_set_sleep_inhibit(int32_t on);
 APL_API int32_t apl_power_set_screen_events(int32_t on);
 
-/* ── SystemWindow ──────────────────────────────────────────────── */
+/* ── SystemWindow ────────────────────────────────────────────────
+ * 窗口状态事件（订阅即推一次快照，之后仅变化时推送）。
+ * u.window 的 minimized/focused 字段保留为 flag 的兼容副本；新代码统一读 flags：
+ *   bit0 minimized（图标化）、bit1 focused（应用在前台）、
+ *   bit2 maximized（最大化 / zoom）、bit3 fullscreen（全屏）、
+ *   bit4 hidden（窗口不可见：托盘隐藏 / 最小化到任务栏之外的隐藏）。
+ * 状态由各平台原生事件驱动（Win32 子类化 / GTK 信号 / NSWindow 通知），
+ * Dart 侧不再用 window_manager 轮询或监听窗口状态。 */
+#define APL_WINDOW_FLAG_MINIMIZED  (1u << 0)
+#define APL_WINDOW_FLAG_FOCUSED    (1u << 1)
+#define APL_WINDOW_FLAG_MAXIMIZED  (1u << 2)
+#define APL_WINDOW_FLAG_FULLSCREEN (1u << 3)
+#define APL_WINDOW_FLAG_HIDDEN     (1u << 4)
+
 APL_API int32_t apl_window_set_events(int32_t on);
+
+/* 窗口控制（能力位 APL_CAP_WINDOW_CONTROL；三端桌面后端均置位）。
+ * 所有尺寸 / 坐标均为**逻辑像素**（DIP，与 Flutter 逻辑像素一致；Windows 后端
+ * 按窗口 DPI 换算）。控制 API 不改变事件订阅状态；未 init / 无窗口时返回负值。 */
+#define APL_WINDOW_DECOR_SYSTEM     0 /* 系统原生标题栏 + 边框 */
+#define APL_WINDOW_DECOR_CAPTION    1 /* 隐藏标题栏，保留可缩放边框；系统窗口按钮能保留则保留，否则由自绘 UI 接管 */
+#define APL_WINDOW_DECOR_BORDERLESS 2 /* 无边框，内容铺满（窗口按钮由自绘 UI 接管） */
+
+/* 缩放热区（与 Dart WindowResizeEdge 顺序一致）。 */
+#define APL_WINDOW_EDGE_TOP_LEFT     0
+#define APL_WINDOW_EDGE_TOP          1
+#define APL_WINDOW_EDGE_TOP_RIGHT    2
+#define APL_WINDOW_EDGE_LEFT         3
+#define APL_WINDOW_EDGE_RIGHT        4
+#define APL_WINDOW_EDGE_BOTTOM_LEFT  5
+#define APL_WINDOW_EDGE_BOTTOM       6
+#define APL_WINDOW_EDGE_BOTTOM_RIGHT 7
+
+APL_API int32_t apl_window_set_size(int32_t w, int32_t h);
+APL_API int32_t apl_window_set_min_size(int32_t w, int32_t h);
+APL_API int32_t apl_window_center(void);
+APL_API int32_t apl_window_show(void);
+APL_API int32_t apl_window_hide(void);
+APL_API int32_t apl_window_minimize(void);
+APL_API int32_t apl_window_restore(void);            /* 还原最小化 */
+APL_API int32_t apl_window_set_maximized(int32_t on);
+APL_API int32_t apl_window_set_fullscreen(int32_t on);
+APL_API int32_t apl_window_set_always_on_top(int32_t on);
+APL_API int32_t apl_window_set_resizable(int32_t on);
+APL_API int32_t apl_window_set_decor(int32_t mode);  /* APL_WINDOW_DECOR_* */
+APL_API int32_t apl_window_get_position(int32_t* x, int32_t* y);
+/* 越界矫正（ABI v11 起的几何恢复依赖它）：目标矩形与任一显示器可用区相交即
+ * 原样应用（多屏 / 负坐标布局不受影响）；完全落在所有显示器之外时，三端都会
+ * 把原点拉回「中心最近」的那块显示器内，避免恢复成看不见的窗口。 */
+APL_API int32_t apl_window_set_position(int32_t x, int32_t y);
+/* ABI v11：读取当前窗口逻辑尺寸（与 apl_window_set_size 同一口径：
+ * Windows 为含边框的外框、Linux/macOS 为内容区）。用于几何持久化 /
+ * 自绘缩放回退；未 init / 无窗口返回负值。 */
+APL_API int32_t apl_window_get_size(int32_t* w, int32_t* h);
+/* 原生标题栏拖拽 / 边缘缩放：在鼠标按下时调用（自绘标题栏 / 无边框窗口）。 */
+APL_API int32_t apl_window_start_drag(void);
+APL_API int32_t apl_window_start_resize(int32_t edge); /* APL_WINDOW_EDGE_* */
+/* 只投递 APL_EVENT_WINDOW_CLOSE_REQUEST，不自行关窗 / 退出；Dart 决定隐藏或退出。 */
+APL_API int32_t apl_window_request_close(void);
+/* 退出前显式摘观察者 / 恢复原生委托；幂等（等价 set_events(0)；Windows 的
+ * wndproc 子类化保留到 apl_shutdown 再还原，避免反复订阅时漂移）。 */
+APL_API int32_t apl_window_stop_events(void);
 
 /* ── SystemMedia ───────────────────────────────────────────────── */
 APL_API int32_t apl_media_set_track(const AplTrackMeta *track); /* NULL = 清除 */
@@ -254,7 +315,14 @@ typedef enum {
      * **明确不包含**休眠 / 待机 / 锁屏 / 熄屏——这些状态必须保持进程存活，
      * 收到事件后的唯一动作是「保存状态并主动退出」，不得弹确认框。 */
     APL_EVENT_SESSION_END       = 13, /* u.session_end=1 */
+    /* 窗口关闭请求（用户点系统关闭按钮 / ⌘Q / Alt+F4 / 标题栏关闭）：
+     * 桥接只上报，不自行关窗；Dart 的托盘关闭策略决定隐藏到托盘还是退出。
+     * u.window_close.reason：0=普通关闭（APL_WINDOW_CLOSE），1=应用退出（APL_WINDOW_QUIT）。 */
+    APL_EVENT_WINDOW_CLOSE_REQUEST = 14, /* u.window_close.reason */
 } AplEventType;
+
+#define APL_WINDOW_CLOSE 0 /* 关闭窗口（Dart 可隐藏到托盘） */
+#define APL_WINDOW_QUIT  1 /* 明确的退出请求（⌘Q / 菜单退出） */
 
 typedef enum {
     APL_CMD_PLAY = 0, APL_CMD_PAUSE, APL_CMD_TOGGLE, APL_CMD_STOP,
@@ -268,7 +336,11 @@ typedef struct AplEvent {
         int32_t command;   /* MEDIA_COMMAND */
         struct { int64_t rel_ms; int64_t abs_ms; } seek;   /* MEDIA_SEEK */
         int32_t active;    /* SCREEN_STATE：1=熄屏/屏保激活 */
-        struct { int32_t minimized; int32_t focused; } window; /* WINDOW_STATE */
+        struct {
+            int32_t minimized; /* 兼容副本 = flags bit0 */
+            int32_t focused;   /* 兼容副本 = flags bit1 */
+            int32_t flags;     /* APL_WINDOW_FLAG_* 位图（权威值） */
+        } window; /* WINDOW_STATE */
         int32_t backend_lost; /* BACKEND_STATE */
         struct { int32_t r; int32_t g; int32_t b; } accent; /* SYSTEM_ACCENT：0-255 */
         struct { int32_t dark; } theme; /* SYSTEM_THEME：1=深色 0=浅色 */
@@ -276,6 +348,7 @@ typedef struct AplEvent {
         int32_t tray;       /* TRAY_CLICK/DOUBLE_CLICK/RIGHT_CLICK：=1 */
         struct { int32_t id; } tray_command; /* TRAY_MENU_COMMAND：菜单项 id */
         int32_t session_end; /* SESSION_END：=1（关机/重启/注销；休眠不产生） */
+        struct { int32_t reason; } window_close; /* WINDOW_CLOSE_REQUEST：APL_WINDOW_CLOSE/QUIT */
     } u;
 } AplEvent;
 

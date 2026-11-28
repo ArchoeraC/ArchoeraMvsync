@@ -121,12 +121,12 @@ NUGETCFG
       # 预取源码：Nix 沙箱内直接 curl ffmpeg.org 在 CI 上会超时；固定输出
       # derivation 会优先命中 cache.nixos.org，失败时再按 urls 顺序回退镜像。
       ffmpegSrc = pkgs.fetchurl {
-        name = "ffmpeg-9.0.1.tar.xz";
+        name = "ffmpeg-9.0.2.tar.xz";
         urls = [
-          "https://mirrors.omnios.org/ffmpeg/ffmpeg-9.0.1.tar.xz"
-          "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz"
+          "https://mirrors.omnios.org/ffmpeg/ffmpeg-9.0.2.tar.xz"
+          "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz"
         ];
-        hash = "sha256-zzjg4ox+VgWULEp3dVNJsBRYBKOXrzfrH7THfLI39jU=";
+        hash = "sha256-jDhQKD6yX6AmSCB4oEBR4L4XNHsJ74GghJvsFaluAC4=";
       };
       mbedtlsSrc = pkgs.fetchurl {
         name = "mbedtls-3.6.2.tar.bz2";
@@ -143,7 +143,9 @@ NUGETCFG
       # ── 1. 最小纯 LGPL·仅音频 FFmpeg ─────────────────────────────────────
       ffmpegMinimal = pkgs.stdenv.mkDerivation {
         pname = "archoera-ffmpeg-minimal";
-        version = "9.0.1";
+        # 必须与 build-ffmpeg-minimal.sh 的默认 FFMPEG_VERSION 一致：脚本会用
+        # ffmpegSrc 解出的源码树 `cd ffmpeg-$VER`，版本不一致会直接 unpack 失败。
+        version = "9.0.2";
         # 只依赖构建脚本本身：编辑 flake 或其它源码都不改变 src 哈希。
         src = lib.cleanSourceWith {
           src = ./app/core;
@@ -493,9 +495,11 @@ NUGETCFG
         src = src;
 
         nativeBuildInputs = with pkgs; [
-          # nixpkgs 的 Flutter 仍是 3.47（Dart 3.13），而本地/CI 已升 3.50（Dart 3.14）。
-          # `window_manager` 因此用区间约束 `>=0.6.0 <0.8.0`：这里是 Dart 3.13 →
-          # pub 解析到 0.6.x；本地/CI（3.50）解析到 0.7.x。见 app/pubspec.yaml 注释。
+          # nixpkgs 的 `flutter` 取「最新 stable」（当前 3.50.1 / Dart 3.14.0），与
+          # 本地/CI 固定的 3.50.1 一致。app/pubspec.yaml 的 SDK 下限已提到
+          # `^3.14.0` / `>=3.50.0`，故 flake.lock 必须锁在含 flutter 3.50 的 nixpkgs
+          # （nixpkgs 的 `.../compilers/flutter/versions/3_50` 自 2026-11 起存在），
+          # 否则这里的 `flutter pub get` 会因 SDK 版本不足直接失败。
           flutter
           clang
           cmake

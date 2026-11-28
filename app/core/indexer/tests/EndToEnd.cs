@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 using System.Text;
+using Archoera.Indexer.EraStore.Iterators;
 using Archoera.Lyrics;
 using Microsoft.Data.Sqlite;
 
@@ -10,11 +11,11 @@ namespace Archoera.Indexer.Tests;
 
 /// <summary>
 /// 端到端 round-trip：用 Microsoft.Data.Sqlite 建一个 <c>library.db</c> fixture，
-/// 跑 <see cref="IndexerEngine"/> 全量 / 增量，直接对 <c>search.db</c>（FTS5）断言：
+/// 跑 <see cref="IndexerEngine"/> 全量 / 增量，直接对 EraStore（<c>search.era/</c>）断言：
 /// <list type="bullet">
-///   <item>全量：世代化产出（无 <c>.tmp</c>）、<c>search_meta</c>、行数、MATCH 命中
+///   <item>全量：CURRENT 指向新快照、Manifest 元数据、活 doc 数、表达式命中
 ///         （中文子串 / 繁体经分析、拼音 / 首字母、拉丁前缀）；</item>
-///   <item>增量：改 mtime 只重算该曲；删除曲目从 <c>search_docs</c>/<c>search_fts</c> 移除；</item>
+///   <item>增量：改 mtime 只重算该曲；删除曲目不再出现在活文档 / 查询结果；</item>
 ///   <item><c>.lrc</c> 子开关开 / 关各一次（并入 / 清理）；</item>
 ///   <item><c>_scanner_meta</c> 缺失时世代按 0、不报错（前向兼容）。</item>
 /// </list>
@@ -32,9 +33,16 @@ internal static class EndToEnd
             LrcReading(root);
             SidecarDirectoryCache(root);
             MultilingualLayers(root);
+            LyricsPreprocessIntegration(root);
+            OversizeTermGuard(root);
             RomajiLyrics(root);
+            InitialsLyricsOption(root);
+            InitialsBigramSearch(root);
+            ProductionRomanizationNoPositions(root);
             RepeatedFullBuild(root);
-            MergeThreshold(root);
+            EraIncremental(root);
+            AutoMaintainWithoutDirty(root);
+            FullBuildCompactionWritesFreshGeneration(root);
         }
         finally
         {
@@ -86,59 +94,60 @@ internal static class EndToEnd
         Program.Check("全量: indexed==4", full.Indexed == 4, full.Indexed.ToString());
         Program.Check("全量: full==true", full.Full);
         Program.Check("全量: generation==5", full.Generation == 5, full.Generation.ToString());
-        Program.Check("全量: search.db 存在", File.Exists(index));
-        Program.Check("世代化: 无 search.db.tmp", !File.Exists(index + ".tmp"));
-        Program.Check("世代化: 无 search.db.tmp-wal", !File.Exists(index + ".tmp-wal"));
+        Program.Check("全量: 不写 v7 search.db（EraStore 唯一写入）", !File.Exists(index),
+            "search.db exists");
+        Program.Check("全量: CURRENT 指向 EraStore 快照",
+            EraStore.CurrentPointer.Read(EraDir(index)) is not null);
 
-        Program.Check("meta.analyzer_version==13", Meta(index, "analyzer_version") == "13", Meta(index, "analyzer_version"));
-        Program.Check("meta.schema_version==7", Meta(index, "schema_version") == "7", Meta(index, "schema_version"));
-        Program.Check("meta.index_lrc==0", Meta(index, "index_lrc") == "0", Meta(index, "index_lrc"));
-        Program.Check("meta.pinyin==1", Meta(index, "pinyin") == "1", Meta(index, "pinyin"));
-        Program.Check("meta.applied_generation==5", Meta(index, "applied_generation") == "5", Meta(index, "applied_generation"));
+        var manifest = ReadManifest(index);
+        Program.Check("meta: analyzer 版本锚",
+            manifest.Anchors.AnalyzerVersion == Analyzer.AnalyzerVersion,
+            manifest.Anchors.AnalyzerVersion.ToString());
+        Program.Check("meta: 元数据版本 >= CurrentMetaVersion",
+            manifest.MetaVersion >= EraStore.Manifest.CurrentMetaVersion,
+            manifest.MetaVersion.ToString());
+        Program.Check("meta: index_lrc==0", !ManifestHas(manifest, EraStore.ManifestOptionsBits.IndexLrc));
+        Program.Check("meta: pinyin==1", ManifestHas(manifest, EraStore.ManifestOptionsBits.Pinyin));
+        // T3.9：v15 首字母列是 bigram，Manifest 必须如实声明该能力（旧索引不得声明）。
+        Program.Check("meta: 宣称 initials_bigram（v15 分析器）",
+            manifest.Capabilities.Contains(IndexCapabilities.InitialsBigram)
+            && manifest.Anchors.AnalyzerVersion >= Analyzer.InitialsBigramMinVersion,
+            string.Join(',', manifest.Capabilities));
 
-        Program.Check("search_docs COUNT==4", Scalar(index, "SELECT COUNT(*) FROM search_docs") == 4,
-            Scalar(index, "SELECT COUNT(*) FROM search_docs").ToString());
-        Program.Check("search_fts 有 4 行", Scalar(index, "SELECT COUNT(*) FROM search_fts") == 4,
-            Scalar(index, "SELECT COUNT(*) FROM search_fts").ToString());
+        Program.Check("EraStore 活 doc==4", DocCount(index) == 4, DocCount(index).ToString());
 
-        // ---- contentless v2 语义 ----
-        Program.Check("contentless: search_docs 8 列（v6 增读音副本）",
-            Scalar(index, "SELECT COUNT(*) FROM pragma_table_info('search_docs')") == 8,
-            Scalar(index, "SELECT COUNT(*) FROM pragma_table_info('search_docs')").ToString());
-        Program.Check("contentless: search_docs 无 token 文本列（title_tok/pinyin_meta_tok）",
-            Scalar(index, "SELECT COUNT(*) FROM pragma_table_info('search_docs') WHERE name IN ('title_tok','pinyin_meta_tok')") == 0);
-        Program.Check("contentless: 列过滤 {title_tok} : (\"晴天\") 命中 t1",
+        Program.Check("Era: 列过滤 {title_tok} : (\"晴天\") 命中 t1",
             MatchContainsTrack(index, "{title_tok} : (\"晴天\")", "t1"));
-        Program.Check("contentless: 短语 \"wo ai ni\" 命中 t1",
+        Program.Check("Era: 短语 \"wo ai ni\" 命中 t1",
             MatchContainsTrack(index, "\"wo ai ni\"", "t1"));
-        Program.Check("contentless: bm25 权重查询可执行",
-            Scalar(index, "SELECT COUNT(*) FROM (SELECT bm25(search_fts,4.0,3.0,2.0,1.5,1.0,0.5,2.0,1.0) "
-                + "FROM search_fts WHERE search_fts MATCH 'hello')") == 1);
-        Program.Check("contentless: FTS optimize 后可查（无内容残影）",
-            Scalar(index, "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH 'hello'") == 1);
+        var helloHits = MatchHits(index, "hello");
+        Program.Check("Era: bm25 打分可执行且非零",
+            helloHits.Count == 1 && helloHits[0].Score != 0,
+            helloHits.Count == 1 ? helloHits[0].Score.ToString("F4") : $"hits={helloHits.Count}");
 
-        // FTS MATCH：中文子串（原始已归一，无需分析器）
-        Program.Check("MATCH '爱你' 命中 2（t1/t2）", MatchCount(index, "爱你") == 2,
+        // 表达式：中文子串（原始已归一，无需分析器）
+        Program.Check("匹配 '爱你' 命中 2（t1/t2）", MatchCount(index, "爱你") == 2,
             MatchCount(index, "爱你").ToString());
-        // 繁体查询：原始 '愛' 命中 0（unicode61 不归一），经分析器归一后命中 t2（及 t1）
-        Program.Check("MATCH 原始 '愛' ==0（需分析器）", MatchCount(index, "愛") == 0,
+        // 繁体查询：原始 '愛' 命中 0（未归一），经分析器归一后命中 t2（及 t1）
+        Program.Check("匹配 原始 '愛' ==0（需分析器）", MatchCount(index, "愛") == 0,
             MatchCount(index, "愛").ToString());
-        Program.Check("MATCH 分析('愛') 命中 t2", MatchCount(index, Analyzed("愛")) >= 1);
+        Program.Check("匹配 分析('愛') 命中 t2", MatchCount(index, Analyzed("愛")) >= 1);
         Program.Check("分析('愛') 命中 t2 的 doc", MatchContainsTrack(index, Analyzed("愛"), "t2"));
-        // 拼音（全拼相邻短语）与首字母（v4：元数据/歌词分列）
-        Program.Check("MATCH pinyin 短语 'wo ai ni' 命中 t1", MatchContainsTrack(index, "\"wo ai ni\"", "t1"));
-        Program.Check("MATCH 首字母 'wanzg' 命中 t1", MatchContainsTrack(index, "wanzg", "t1"));
+        // 拼音（全拼相邻短语）与首字母（v4：元数据/歌词分列；v15：列内是相邻 bigram）
+        Program.Check("匹配 pinyin 短语 'wo ai ni' 命中 t1", MatchContainsTrack(index, "\"wo ai ni\"", "t1"));
+        Program.Check("v15 首字母 bigram 短语 'wa an nz zg' 命中 t1",
+            MatchContainsTrack(index, "{initials_lyrics_tok} : \"wa an nz zg\"", "t1"));
         // v4 分列：**元数据**首字母（晴天 → qt）在 initials_meta_tok；
         // **歌词**首字母（我爱你中国 → wanzg）在 initials_lyrics_tok。
         Program.Check("首字母列过滤 {initials_meta_tok} : 'qt'（标题首字母）命中 t1",
             MatchContainsTrack(index, "{initials_meta_tok} : \"qt\"", "t1"));
-        Program.Check("首字母列过滤 {initials_lyrics_tok} : 'wanzg'（歌词首字母）命中 t1",
-            MatchContainsTrack(index, "{initials_lyrics_tok} : \"wanzg\"", "t1"));
+        Program.Check("首字母列过滤 {initials_lyrics_tok} : 'wa an nz zg'（歌词首字母）命中 t1",
+            MatchContainsTrack(index, "{initials_lyrics_tok} : \"wa an nz zg\"", "t1"));
         Program.Check("歌词首字母不在 initials_meta_tok（v4 分列）",
-            !MatchContainsTrack(index, "{initials_meta_tok} : \"wanzg\"", "t1"));
-        // 首字母串（wan / wanzg…）不在拼音两列 → 拼音列过滤下不命中
-        Program.Check("拼音两列 : 'wanzg' 不命中（首字母已拆出）",
-            !MatchContainsTrack(index, "{pinyin_meta_tok pinyin_lyrics_tok} : \"wanzg\"", "t1"));
+            !MatchContainsTrack(index, "{initials_meta_tok} : \"wa an nz zg\"", "t1"));
+        // 首字母 bigram 不在拼音两列 → 拼音列过滤下不命中
+        Program.Check("拼音两列 : 'wa an nz zg' 不命中（首字母已拆出）",
+            !MatchContainsTrack(index, "{pinyin_meta_tok pinyin_lyrics_tok} : \"wa an nz zg\"", "t1"));
         // v4 分列：歌词拼音不在元数据拼音列 → 元数据范围的列过滤收得住（旧版混列时收不住）
         Program.Check("歌词拼音不在 pinyin_meta_tok（v4 分列）",
             MatchContainsTrack(index, "{pinyin_lyrics_tok} : \"wo ai ni\"", "t1")
@@ -147,11 +156,11 @@ internal static class EndToEnd
         var woaini = Analyzer.AnalyzeQuery("woaini").Pinyin;
         Program.Check("E2E 连写全拼分析 == wo ai ni", string.Join(' ', woaini) == "wo ai ni",
             string.Join(' ', woaini));
-        Program.Check("MATCH 连写全拼短语 \"wo ai ni\" 命中 t1",
+        Program.Check("匹配 连写全拼短语 \"wo ai ni\" 命中 t1",
             MatchContainsTrack(index, "\"wo ai ni\"", "t1"));
         // 拉丁前缀 / 整词
-        Program.Check("MATCH 'hello' 命中 t3", MatchContainsTrack(index, "hello", "t3"));
-        Program.Check("MATCH 前缀 'hel*' 命中 t3", MatchContainsTrack(index, "hel*", "t3"));
+        Program.Check("匹配 'hello' 命中 t3", MatchContainsTrack(index, "hello", "t3"));
+        Program.Check("匹配 前缀 '\"hel\"*' 命中 t3", MatchContainsTrack(index, "\"hel\"*", "t3"));
 
         // ---- 增量：改 t1 的 file_mtime ----
         Exec(db, "UPDATE tracks SET file_mtime = 9999 WHERE id = 't1'");
@@ -161,41 +170,45 @@ internal static class EndToEnd
         Program.Check("增量(改 mtime): deleted==0", inc.Deleted == 0, inc.Deleted.ToString());
         Program.Check("增量(改 mtime): skipped==3", inc.Skipped == 3, inc.Skipped.ToString());
         Program.Check("增量(改 mtime): 仅 1 次内容查询（未全库读歌词）", incQueries == 1, incQueries.ToString());
-        Program.Check("增量: t1 indexed_mtime 已更新", DocScalar(index, "t1", "indexed_mtime") == 9999,
-            DocScalar(index, "t1", "indexed_mtime").ToString());
+        Program.Check("增量: t1 mtime 已更新", DocState(index, "t1").Mtime == 9999,
+            DocState(index, "t1").Mtime.ToString());
 
         // ---- 增量：删除 t4（无脏曲 → 零内容读取）----
         Exec(db, "DELETE FROM tracks WHERE id = 't4'");
         var (del, delQueries) = RunEngineDetailed(db, index, full: false, lrc: false);
         Program.Check("删除: deleted==1", del.Deleted == 1, del.Deleted.ToString());
         Program.Check("删除: 仅删除、无内容查询", delQueries == 0, delQueries.ToString());
-        Program.Check("删除: search_docs COUNT==3", Scalar(index, "SELECT COUNT(*) FROM search_docs") == 3,
-            Scalar(index, "SELECT COUNT(*) FROM search_docs").ToString());
-        Program.Check("删除: t4 不在 search_docs", Scalar(index, "SELECT COUNT(*) FROM search_docs WHERE track_id='t4'") == 0,
-            Scalar(index, "SELECT COUNT(*) FROM search_docs WHERE track_id='t4'").ToString());
+        Program.Check("删除: 活 doc==3", DocCount(index) == 3, DocCount(index).ToString());
+        Program.Check("删除: t4 不再是活文档", !TrackExists(index, "t4"));
         Program.Check("删除: 歌词 '删除' 不再命中", MatchCount(index, Analyzed("删除")) == 0,
             MatchCount(index, Analyzed("删除")).ToString());
-        Program.Check("删除: search_fts 无 t4 残留",
-            Scalar(index, "SELECT COUNT(*) FROM search_fts WHERE rowid NOT IN (SELECT doc_id FROM search_docs)") == 0,
-            Scalar(index, "SELECT COUNT(*) FROM search_fts WHERE rowid NOT IN (SELECT doc_id FROM search_docs)").ToString());
 
-        // ---- .lrc 子开关：开（并入）----
+        // ---- .lrc 子开关：开（选项变化触发全量重建，侧车并入）----
         var lrcOn = RunEngine(db, index, full: false, lrc: true);
-        Program.Check(".lrc 开: t3 被重算（indexed==1）", lrcOn.Indexed == 1, lrcOn.Indexed.ToString());
-        Program.Check(".lrc 开: meta.index_lrc==1", Meta(index, "index_lrc") == "1", Meta(index, "index_lrc"));
-        Program.Check(".lrc 开: indexed_lrc_size>0", DocScalar(index, "t3", "indexed_lrc_size") > 0,
-            DocScalar(index, "t3", "indexed_lrc_size").ToString());
-        Program.Check(".lrc 开: MATCH 侧车文本 '蓝蓝的天' 命中 t3",
-            MatchContainsTrack(index, Analyzed("蓝蓝的天"), "t3"));
+        Program.Check(".lrc 开: 构建选项变化触发全量重建", lrcOn.Full, lrcOn.Full.ToString());
+        Program.Check(".lrc 开: 全量重算 t3 并入侧车", lrcOn.Indexed == 3, lrcOn.Indexed.ToString());
+        Program.Check(".lrc 开: meta.index_lrc==1",
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
+        Program.Check(".lrc 开: indexed_lrc_size>0", DocState(index, "t3").LrcSize > 0,
+            DocState(index, "t3").LrcSize.ToString());
+        Program.Check(".lrc 开: 匹配 侧车文本 '蓝蓝的天' 命中 t3",
+            MatchContainsTrack(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"", "t3"));
 
-        // ---- .lrc 子开关：关（清理）----
+        // ---- .lrc 子开关：关（只写偏好，允许保留现有索引，不强制重建）----
         var lrcOff = RunEngine(db, index, full: false, lrc: false);
-        Program.Check(".lrc 关: t3 被重算（清理）", lrcOff.Indexed == 1, lrcOff.Indexed.ToString());
-        Program.Check(".lrc 关: meta.index_lrc==0", Meta(index, "index_lrc") == "0", Meta(index, "index_lrc"));
-        Program.Check(".lrc 关: indexed_lrc_size==0", DocScalar(index, "t3", "indexed_lrc_size") == 0,
-            DocScalar(index, "t3", "indexed_lrc_size").ToString());
-        Program.Check(".lrc 关: 侧车文本不再命中", MatchCount(index, Analyzed("蓝蓝的天")) == 0,
-            MatchCount(index, Analyzed("蓝蓝的天")).ToString());
+        Program.Check(".lrc 关: 不因关闭而重建（保留现有索引）", !lrcOff.Full, lrcOff.Full.ToString());
+        Program.Check(".lrc 关: 旧索引仍声明侧车能力（重建后收敛）",
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
+
+        // 用户显式全量重建才按新选项收敛：侧车清理。
+        var lrcDrop = RunEngine(db, index, full: true, lrc: false);
+        Program.Check(".lrc 关: 手动全量重建后 meta.index_lrc==0", lrcDrop.Full
+            && !ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.IndexLrc));
+        Program.Check(".lrc 关: 手动全量重建后 indexed_lrc_size==0",
+            DocState(index, "t3").LrcSize == 0, DocState(index, "t3").LrcSize.ToString());
+        Program.Check(".lrc 关: 手动全量重建后侧车文本不再命中",
+            MatchCount(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"") == 0,
+            MatchCount(index, "{lyrics_tok} : \"蓝蓝 蓝的 的天\"").ToString());
 
         // ---- 无变更：全 skipped，且零内容查询（未读歌词）----
         var (idle, idleQueries) = RunEngineDetailed(db, index, full: false, lrc: false);
@@ -205,25 +218,16 @@ internal static class EndToEnd
     }
 
     /* ------------------------------------------------------------------ */
-    /* 世代化替换的**连接池**回归：同一进程内多次全量 + 替换后增量         */
+    /* 世代化替换：同一进程内多次全量 + 替换后增量                         */
     /* ------------------------------------------------------------------ */
 
     /// <summary>
-    /// 回归（实测已修）：同一进程内**连续两次全量构建**都必须能完成，且全量替换后的
-    /// 增量收敛必须真的落进**新**世代。
+    /// 回归：同一进程内**连续两次全量构建**都必须能完成，且全量替换后的增量收敛
+    /// 必须真的落进**新**世代。
     ///
-    /// 成因见 <see cref="FtsStore.ConnectionString"/>：Microsoft.Data.Sqlite 默认连接池
-    /// 在 <c>Close()</c> 后仍保留底层 sqlite3 句柄（按连接串复用），而世代化替换把
-    /// <c>search.db.tmp</c> 改名成 <c>search.db</c>，池里残留的句柄便指向旧 inode：
-    /// <list type="bullet">
-    ///   <item>第二次全量：写入落进正式库（绕过原子替换），随后
-    ///         <c>Fsync(_tmpPath)</c> / <c>File.Move(_tmpPath, …)</c> 找不到 tmp →
-    ///         <c>Could not find file '&lt;…&gt;.tmp'</c>。用户侧表现：设置页「重建索引」
-    ///         只成功一次，之后再点必失败（同一进程内）。</item>
-    ///   <item>替换后的增量：写进已 unlink 的旧 inode → **静默丢失更新**（曲库变更后
-    ///         新曲目搜不到，直到重启进程）。</item>
-    /// </list>
-    /// 本用例按「全量 → 增量 → 全量 → 增量」覆盖两条路径（旧实现第 ③ 步必抛异常）。
+    /// EraStore 的全量构建先写新文件、提交后再原子切换 <c>CURRENT</c>；旧查询句柄
+    /// 指向旧 inode 仍可读完整快照，但新会话必须看到新文件。本用例按
+    /// 「全量 → 增量 → 全量 → 增量」覆盖两条路径。
     /// </summary>
     private static void RepeatedFullBuild(string root)
     {
@@ -241,8 +245,11 @@ internal static class EndToEnd
         // ① 全量：建立第 1 个世代
         var first = RunEngine(db, index, full: true, lrc: false);
         Program.Check("连续全量: 第 1 次 indexed==1", first.Indexed == 1, first.Indexed.ToString());
+        Program.Check("连续全量: 第 1 次后活 doc==1", DocCount(index) == 1, DocCount(index).ToString());
+        var firstCurrent = EraStore.CurrentPointer.Read(EraDir(index));
+        Program.Check("连续全量: 第 1 次后 CURRENT 存在", firstCurrent is not null, firstCurrent ?? "(null)");
 
-        // ② 增量：进程内首次建立 `search.db` 连接串的池项（修复前正是它后来变成陈旧句柄）
+        // ② 增量：新增 r2。
         using (var conn = Open(db))
             InsertTrack(conn, "r2", Path.Combine(dir, "r2.mp3"), "第二首", "[]", null, "海边", 2000);
         var inc1 = RunEngine(db, index, full: false, lrc: false);
@@ -250,76 +257,244 @@ internal static class EndToEnd
         Program.Check("连续全量: 替换前增量可搜到 r2",
             MatchContainsTrack(index, Analyzed("第二首"), "r2"));
 
-        // ③ 第二次全量：修复前必抛 FileNotFoundException（tmp 已被上一次替换吃掉）
+        // ③ 第二次全量：必须能完成并产出新快照。
         IndexerResult? second = null;
         string? error = null;
         try { second = RunEngine(db, index, full: true, lrc: false); }
         catch (Exception ex) { error = ex.Message; }
-        Program.Check("连续全量: 同一进程内第 2 次全量可完成（不得复用旧 inode 的连接）",
-            error is null, error);
+        Program.Check("连续全量: 同一进程内第 2 次全量可完成", error is null, error);
         if (second is null) return;
 
         Program.Check("连续全量: 第 2 次 indexed==2", second.Indexed == 2, second.Indexed.ToString());
-        Program.Check("连续全量: 第 2 次后无 search.db.tmp", !File.Exists(index + ".tmp"));
-        Program.Check("连续全量: 第 2 次后无 search.db.tmp-wal", !File.Exists(index + ".tmp-wal"));
+        Program.Check("连续全量: 第 2 次后活 doc==2", DocCount(index) == 2, DocCount(index).ToString());
+        Program.Check("连续全量: 第 2 次后 CURRENT 有效",
+            EraStore.CurrentPointer.Read(EraDir(index)) is not null);
 
-        // ④ 替换后的增量：必须写进**新**世代（旧池句柄指向已 unlink 的旧 inode → 静默丢失）
+        // ④ 替换后的增量：必须写进**新**世代。
         using (var conn = Open(db))
             InsertTrack(conn, "r3", Path.Combine(dir, "r3.mp3"), "第三首", "[]", null, "星空", 3000);
         var inc2 = RunEngine(db, index, full: false, lrc: false);
         Program.Check("连续全量: 替换后增量 indexed==1", inc2.Indexed == 1, inc2.Indexed.ToString());
         Program.Check("连续全量: 替换后增量落库（r3 可搜到）",
             MatchContainsTrack(index, Analyzed("第三首"), "r3"));
-        Program.Check("连续全量: 三首齐备",
-            Scalar(index, "SELECT COUNT(*) FROM search_docs") == 3,
-            Scalar(index, "SELECT COUNT(*) FROM search_docs").ToString());
+        Program.Check("连续全量: 三首齐备", DocCount(index) == 3, DocCount(index).ToString());
     }
 
-    /// <summary>
-    /// 合并阈值：增量按**累计改写曲数**计数，过阈值才做 FTS5 全段合并（`optimize`）。
-    ///
-    /// 背景：合并是 O(索引) 的全库重写（402MB 实测 4.5–13s），只改 1 首也要付全额；
-    /// 但永远不做又会让 `contentless_delete` 的墓碑累积、宽命中查询退化
-    /// （实测 `爱你`：20 曲 +34%、60 曲 +73%、120 曲 +103%）。故断言两端行为：
-    /// 计数会累加、过阈值后归零、零脏曲不推进也不触发。
-    /// </summary>
-    private static void MergeThreshold(string root)
+    /* ------------------------------------------------------------------ */
+    /* EraStore 增量（T3.10）：脏曲只追加新段 / 墓碑，不再整库重写        */
+    /* ------------------------------------------------------------------ */
+
+    private static void EraIncremental(string root)
     {
-        var db = Path.Combine(root, "mt-library.db");
-        var index = Path.Combine(root, "mt-search.db");
-        var song = Path.Combine(root, "mt-song.mp3");
+        var work = Path.Combine(root, "era-incremental");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
         CreateLibrary(db, generation: 1);
         using (var conn = Open(db))
         {
-            InsertTrack(conn, "m1", song, "晴天", """[{"name":"周杰伦"}]""", null, "我爱你", 1);
+            InsertTrack(conn, "e1", Path.Combine(dir, "e1.mp3"), "alpha", "[]", null, "first lyric", 1);
+            InsertTrack(conn, "e2", Path.Combine(dir, "e2.mp3"), "bravo", "[]", null, "second lyric", 2);
+            InsertTrack(conn, "e3", Path.Combine(dir, "e3.mp3"), "delta", "[]", null, "third lyric", 3);
         }
 
-        // 阈值调到 2，避免测试里跑 30 次增量。
-        RunEngineDetailed(db, index, full: true, lrc: false, mergeEvery: 2);
-        Program.Check("合并计数: 全量后归零",
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge == 0,
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge.ToString());
+        var prodOptions = new IndexerOptions { IndexLrc = false };
+        var full = RunEngine(db, index, full: true, options: prodOptions);
+        Program.Check("Era 增量: 生产路径不写 search.db（T3.13）", !File.Exists(index),
+            "search.db exists");
+        Program.Check("Era 增量: 全量 written", full.EraWritten && !full.EraIncremental,
+            $"written={full.EraWritten} inc={full.EraIncremental}");
+        Program.Check("Era 增量: 全量 3 活 doc / 1 段",
+            full.EraLiveDocs == 3 && full.EraSegments == 1, $"{full.EraLiveDocs}/{full.EraSegments}");
+        // T3.15：小索引（<24 段）不做全量构建后的自动压缩；before/after 字段仍自洽。
+        Program.Check("Era 增量: 小索引跳过自动压缩",
+            !full.EraCompacted && full.EraSegmentsBeforeCompact == full.EraSegments,
+            $"compacted={full.EraCompacted} before={full.EraSegmentsBeforeCompact}");
 
-        Exec(db, "UPDATE tracks SET file_mtime = file_mtime + 1 WHERE id = 'm1'");
-        RunEngineDetailed(db, index, full: false, lrc: false, mergeEvery: 2);
-        Program.Check("合并计数: 第 1 次增量后 = 1（未达阈值→不合并）",
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge == 1,
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge.ToString());
+        // T3.15：上一次全量留下的「未被 CURRENT 引用」的旧世代（Windows 占用导致删除失败）
+        // 必须在后续任意一次运行里被重试清理，且不影响当前索引可用性。
+        var stale = Path.Combine(work, "search.era", "search-999999.eraindex");
+        File.WriteAllText(stale, "incomplete-build");
+        var idle = RunEngine(db, index, full: false, options: prodOptions);
+        Program.Check("Era 切换: 无变更运行清理残留世代", !File.Exists(stale),
+            File.Exists(stale) ? "stale exists" : "ok");
+        Program.Check("Era 切换: 无变更运行不重建", idle.Indexed == 0 && !idle.EraIncremental,
+            $"indexed={idle.Indexed} inc={idle.EraIncremental}");
 
-        Exec(db, "UPDATE tracks SET file_mtime = file_mtime + 1 WHERE id = 'm1'");
-        RunEngineDetailed(db, index, full: false, lrc: false, mergeEvery: 2);
-        Program.Check("合并计数: 第 2 次增量达阈值后归零（已合并）",
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge == 0,
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge.ToString());
+        // 改一首标题 + 新增一首 + 删除一首。
+        using (var conn = Open(db))
+        {
+            Exec(conn, "UPDATE tracks SET title='zulu', file_mtime=10 WHERE id='e1'");
+            InsertTrack(conn, "e4", Path.Combine(dir, "e4.mp3"), "echo", "[]", null, "fourth lyric", 4);
+            Exec(conn, "DELETE FROM tracks WHERE id='e3'");
+        }
 
-        RunEngineDetailed(db, index, full: false, lrc: false, mergeEvery: 2);
-        Program.Check("合并计数: 零脏曲增量不推进计数",
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge == 0,
-            FtsStore.PeekMeta(index)?.UpdatesSinceMerge.ToString());
+        var inc = RunEngine(db, index, full: false, options: prodOptions);
+        Program.Check("Era 增量: 走增量路径", inc.EraIncremental,
+            $"inc={inc.EraIncremental} written={inc.EraWritten}");
+        Program.Check("Era 增量: 只处理 2 首（改 + 新）", inc.Indexed == 2, inc.Indexed.ToString());
+        Program.Check("Era 增量: 删除 1 首", inc.Deleted == 1, inc.Deleted.ToString());
+        Program.Check("Era 增量: 活 doc 3", inc.EraLiveDocs == 3, inc.EraLiveDocs.ToString());
+        // 2/5 = 40% 死行，已过 20% 阈值 → 同一次增量内自动合并。
+        Program.Check("Era 增量: 死行过阈值触发合并",
+            inc.EraMerged && inc.EraSegments == 1, $"merged={inc.EraMerged} seg={inc.EraSegments}");
+        Program.Check("Era 增量: 墓碑计数 2（旧版 + 删除）", inc.EraDeadDocs == 2, inc.EraDeadDocs.ToString());
 
-        // 合并后索引仍可查询（合并是物理整理，不改内容）。
-        Program.Check("合并后索引仍可命中", MatchContainsTrack(index, Analyzed("我爱你"), "m1"),
-            Analyzed("我爱你"));
+        SearchSession.CloseCached();
+        Program.Check("Era 增量: 新标题可搜到", EraHit(index, db, "zulu", "e1"), "zulu");
+        Program.Check("Era 增量: 旧标题不再命中", !EraHit(index, db, "alpha", "e1"), "alpha");
+        Program.Check("Era 增量: 新增曲可搜到", EraHit(index, db, "echo", "e4"), "echo");
+        Program.Check("Era 增量: 删除曲不再命中", !EraHit(index, db, "delta", "e3"), "delta");
+        Program.Check("Era 增量: 未变曲仍命中", EraHit(index, db, "bravo", "e2"), "bravo");
+
+        // 连续改写同一首：达到段数 / 死行阈值时自动合并，段数不会无限增长。
+        var merged = false;
+        for (var i = 0; i < 10; i++)
+        {
+            using (var conn = Open(db))
+                Exec(conn, $"UPDATE tracks SET file_mtime={100 + i} WHERE id='e2'");
+            var step = RunEngine(db, index, full: false, options: prodOptions);
+            merged |= step.EraMerged;
+        }
+        Program.Check("Era 增量: 连续改写触发合并", merged);
+        var eraStats = EraStore.IndexStats.Collect(Path.Combine(work, "search.era"));
+        Program.Check("Era 增量: 合并后段数 <8", eraStats.Segments < 8, eraStats.Segments.ToString());
+        Program.Check("Era 增量: 合并后 dead_ratio <20%",
+            eraStats.DeadRatio < 0.2, eraStats.DeadRatio.ToString("F4"));
+        Program.Check("Era 增量: 活 doc 仍为 3", eraStats.Docs == 3, eraStats.Docs.ToString());
+    }
+
+    /// <summary>
+    /// S1：全量构建收尾压缩直接写**新世代文件**并切换 CURRENT——
+    /// <c>EraCompacted=true</c> / <c>EraDefragged=false</c>，目录只剩 CURRENT 指向的一个文件，
+    /// <c>fileBytes = liveBytes + Manifest</c>，查询结果与构建内容一致。
+    ///
+    /// <para>用 <see cref="IndexerOptions.FullBuildMaxSegmentBytesOverride"/> 把单段估算上限
+    /// 调到 256 KiB，30 首「每首 3000 个唯一拉丁词」的夹具即可稳定留下 30 个段，触发
+    /// ≥24 段的自动压缩。</para>
+    /// </summary>
+    private static void FullBuildCompactionWritesFreshGeneration(string root)
+    {
+        var work = Path.Combine(root, "compact");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var music = Path.Combine(work, "m");
+        Directory.CreateDirectory(music);
+
+        const int tracks = 30;
+        const int wordsPerTrack = 3000;
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            for (var i = 0; i < tracks; i++)
+            {
+                var lyrics = string.Join(' ', Enumerable.Range(0, wordsPerTrack)
+                    .Select(j => Word(1000 + i * wordsPerTrack + j)));
+                InsertTrack(conn, "c" + i, Path.Combine(music, $"c{i}.mp3"), Word(i),
+                    "[]", null, lyrics, 1000 + i);
+            }
+        }
+
+        var result = RunEngine(db, index, full: true, new IndexerOptions
+        {
+            IndexLrc = false,
+            Pinyin = false,
+            FullBuildMaxSegmentBytesOverride = 256L * 1024,
+        });
+
+        Program.Check("S1 全量压缩: 触发自动压缩", result.EraCompacted,
+            $"compacted={result.EraCompacted} seg={result.EraSegments}");
+        Program.Check("S1 全量压缩: 夹具至少 24 段",
+            result.EraSegmentsBeforeCompact >= EraStore.Merger.MergeTriggerSegments,
+            result.EraSegmentsBeforeCompact.ToString());
+        Program.Check("S1 全量压缩: 压回触发线以下",
+            result.EraSegments < EraStore.Merger.MergeTriggerSegments,
+            $"{result.EraSegmentsBeforeCompact}->{result.EraSegments}");
+        Program.Check("S1 全量压缩: 不再需要 defrag（EraDefragged=false）",
+            !result.EraDefragged, result.EraDefragged.ToString());
+
+        var eraDir = EraDir(index);
+        var current = EraStore.CurrentPointer.Read(eraDir);
+        Program.Check("S1 全量压缩: CURRENT 指向新世代", current is not null, current ?? "(null)");
+        Program.Check("S1 全量压缩: 目录只剩 CURRENT 指向的一个文件",
+            EraGenerationFiles(eraDir).Length == 1, string.Join(',', EraGenerationFiles(eraDir)));
+
+        var stats = EraStore.IndexStats.Collect(eraDir);
+        var manifest = ReadManifest(index);
+        var manifestBytes = manifest.ToJsonBytes().Length;
+        Program.Check("S1 全量压缩: fileBytes = 活数据 + Manifest",
+            stats.FileBytes == stats.LiveBytes + EraStore.EraFormat.DataStart + manifestBytes,
+            $"file={stats.FileBytes} live={stats.LiveBytes} manifest={manifestBytes}");
+        Program.Check("S1 全量压缩: overhead 只剩 Manifest",
+            stats.OverheadBytes == manifestBytes, stats.OverheadBytes.ToString());
+        Program.Check("S1 全量压缩: EraFileBytesAfter 与当前文件一致",
+            result.EraFileBytesAfter == stats.FileBytes,
+            $"{result.EraFileBytesAfter}/{stats.FileBytes}");
+        Program.Check("S1 全量压缩: 活 doc 数不变", stats.Docs == tracks, stats.Docs.ToString());
+
+        Program.Check("S1 全量压缩: 标题仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(0)), "c0"));
+        Program.Check("S1 全量压缩: 歌词唯一词仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(1000)), "c0"));
+        Program.Check("S1 全量压缩: 末曲仍可命中",
+            MatchContainsTrack(index, Analyzed(Word(tracks - 1)), $"c{tracks - 1}"));
+        Program.Check("S1 全量压缩: verify 通过",
+            EraStore.IndexVerifier.Verify(eraDir).Ok,
+            string.Join(" | ", EraStore.IndexVerifier.Verify(eraDir).Errors));
+    }
+
+    /// <summary>生成稳定唯一的纯小写拉丁词（5 字母，base-26）。</summary>
+    private static string Word(int index)
+    {
+        var buffer = new char[5];
+        var value = index;
+        for (var i = buffer.Length - 1; i >= 0; i--)
+        {
+            buffer[i] = (char)('a' + value % 26);
+            value /= 26;
+        }
+        return new string(buffer);
+    }
+
+    /// <summary>走生产查询路径（SearchSession → EraStore）判断某曲是否命中。</summary>
+    private static bool EraHit(string index, string library, string query, string trackId)
+    {
+        try
+        {
+            var result = SearchSession.Run(index, new SearchRequest
+            {
+                Query = query,
+                Limit = 20,
+                Fuzzy = true,
+            }, library);
+            return result.Items.Any(hit => string.Equals(hit.TrackId, trackId, StringComparison.Ordinal));
+        }
+        finally
+        {
+            SearchSession.CloseCached();
+        }
+    }
+
+    /// <summary>走生产查询路径（SearchSession → EraStore）判断某曲是否命中（不做容错）。</summary>
+    private static bool SessionHit(string index, string library, string query, string trackId)
+    {
+        try
+        {
+            var result = SearchSession.Run(index, new SearchRequest
+            {
+                Query = query,
+                Limit = 20,
+            }, library);
+            return result.Items.Any(hit => string.Equals(hit.TrackId, trackId, StringComparison.Ordinal));
+        }
+        finally
+        {
+            SearchSession.CloseCached();
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -338,10 +513,8 @@ internal static class EndToEnd
 
         var result = RunEngine(db, index, full: true, lrc: false);
         Program.Check("无 _scanner_meta: 不报错且 generation==0", result.Generation == 0, result.Generation.ToString());
-        Program.Check("无 _scanner_meta: applied_generation==0", Meta(index, "applied_generation") == "0",
-            Meta(index, "applied_generation"));
-        Program.Check("无 _scanner_meta: 仍建索引", Scalar(index, "SELECT COUNT(*) FROM search_docs") == 1,
-            Scalar(index, "SELECT COUNT(*) FROM search_docs").ToString());
+        Program.Check("无 _scanner_meta: 仍建索引", DocCount(index) == 1,
+            DocCount(index).ToString());
     }
 
     /* ------------------------------------------------------------------ */
@@ -543,16 +716,17 @@ internal static class EndToEnd
         Program.Check("层拆分: indexed==7", result.Indexed == 7, result.Indexed.ToString());
 
         // 内嵌与侧车**完全相同** → 只索引一份（真实曲库 126/151 首属这种情形，否则同一段
-        // 文本在倒排里存两遍）。判定用 FTS 的逐列 token 数（`search_fts_docsize`）：两行除
-        // 侧车外完全一致，故去重生效时 docsize 逐列相同（未去重则歌词 / 拼音列翻倍）。
-        var dupSize = DocSizeHex(index, "tDUP");
-        var oneSize = DocSizeHex(index, "tONE");
-        Program.Check("去重: 内嵌==侧车时 docsize 与仅内嵌完全一致",
-            dupSize.Length > 0 && dupSize == oneSize, $"{dupSize} vs {oneSize}");
+        // 文本在倒排里存两遍）。判定用 EraStore DocStore 的逐列 token 数：两行除
+        // 侧车外完全一致，故去重生效时 12 列长度逐列相同（未去重则歌词 / 拼音列翻倍）。
+        var dupSize = DocLengths(index, "tDUP");
+        var oneSize = DocLengths(index, "tONE");
+        Program.Check("去重: 内嵌==侧车时逐列 token 数与仅内嵌完全一致",
+            dupSize.Length == 12 && dupSize.SequenceEqual(oneSize),
+            $"{string.Join(',', dupSize)} vs {string.Join(',', oneSize)}");
 
         // 内嵌双语（同时间戳 3 行）：原文 / 译文 / 音译分别入列，互不掺混。
         Program.Check("层拆分: 内嵌原文 '我爱你' 命中原文列 tB",
-            MatchContainsTrack(index, "{lyrics_tok} : (" + Analyzed("我爱你") + ")", "tB"));
+            MatchContainsTrack(index, "{lyrics_tok} : \"我爱 爱你\"", "tB"));
         Program.Check("层拆分: 内嵌英文译文 'love' 命中译文列 tB",
             MatchContainsTrack(index, "{lyrics_tr_tok} : \"love\"", "tB"));
         Program.Check("层拆分: 内嵌罗马音 'wo' 命中音译列 tB",
@@ -585,10 +759,11 @@ internal static class EndToEnd
             MatchCount(index, "{lyrics_tr_tok} : \"只此\"") == 0);
 
         // 无译文：原文命中；译文 / 音译层空。
+        // 字面歌词层只入 bigram（T3.7），故表达式用 bigram 短语（不再含单字 unigram）。
         Program.Check("无译文: '没有翻译' 命中原文列 tE",
-            MatchContainsTrack(index, "{lyrics_tok} : (" + Analyzed("没有翻译") + ")", "tE"));
+            MatchContainsTrack(index, "{lyrics_tok} : \"没有 有翻 翻译\"", "tE"));
         Program.Check("无译文: 译文列空（tE 不命中）",
-            !MatchContainsTrack(index, "{lyrics_tr_tok} : (" + Analyzed("没有翻译") + ")", "tE"));
+            !MatchContainsTrack(index, "{lyrics_tr_tok} : \"没有 有翻 翻译\"", "tE"));
 
         // T1 素材就位（查询侧跨语言候选由 Dart 编译，这里验证索引内容可供召回）：
         // 英文词 love 的候选汉字含「爱」；英文查询经候选「爱」可命中含「爱」的中文内容（tB 原文）。
@@ -601,6 +776,212 @@ internal static class EndToEnd
             Analyzer.AnalyzeQuery("爱").CrossLingual.Contains("love"));
         Program.Check("T1 素材: 候选 'love' 命中 tB 译文",
             MatchContainsTrack(index, "{lyrics_tr_tok} : \"love\"", "tB"));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 歌词层预处理（T3.5 去重 / T3.8 V6 护栏）与字面歌词去 unigram（T3.7） */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// 索引路径上的预处理语义：
+    /// <list type="bullet">
+    ///   <item>重复副歌只索引一次（token 数 = 去重后行数 × 每行 bigram 数）；</item>
+    ///   <item>短语仍按行内 bigram 连续匹配（去重不改行内位置）；</item>
+    ///   <item>V6 护栏逐层截断，metric = (曲目, 层) 数、warn 每曲一次；</item>
+    ///   <item>字面歌词列无 unigram（元数据列仍有）；</item>
+    ///   <item><c>library.db</c> 原文不被改写（片段 / 高亮读库）。</item>
+    /// </list>
+    /// </summary>
+    /// <summary>
+    /// 超长词条（&gt; <see cref="EraStore.EraFormat.MaxTermBytes"/>）不再丢弃，而是经
+    /// <see cref="EraStore.TermCodec"/> 换成 <c>0x01 + MD5 hex</c> 的不透明词条后入库（S3）：
+    /// 构建成功、计数为 0、同曲其余字段仍可检索，且**原长词本身仍能被查询命中**。
+    ///
+    /// v15（T3.9）：单行 300 字不再产出 300B 的首字母串——首字母列改为 2 字节 bigram，
+    /// 超长只来自拉丁长词；用例同时锁住「bigram 化顺带消除了首字母超长风险」。
+    /// </summary>
+    private static void OversizeTermGuard(string root)
+    {
+        var work = Path.Combine(root, "oversize-term");
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        var longWord = new string('z', 300);   // 300B 拉丁词（> 255B）
+        var longInitials = new string('爱', 300); // 单行 300 字 → v15 起是 2B bigram，不再超长
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            InsertTrack(conn, "longWord", Path.Combine(dir, "lw.mp3"), "长词", "[]", null,
+                longWord + "\n晴天", 1);
+            InsertTrack(conn, "longInitials", Path.Combine(dir, "li.mp3"), "长首字母", "[]", null,
+                longInitials, 2);
+        }
+
+        var result = RunEngine(db, index, full: true, lrc: false);
+        var canonical = EraStore.TermCodec.Canonicalize(longWord);
+        Program.Check("超长词条: 构建成功且两首全部索引", result.Indexed == 2, result.Indexed.ToString());
+        Program.Check("超长词条: oversizeTokens == 0（改为哈希词条而非丢弃）",
+            result.OversizeTokens == 0, result.OversizeTokens.ToString());
+        Program.Check("超长词条: 规范化词条已入歌词词典",
+            MatchContainsTrack(index, "{lyrics_tok} : " + SearchQuery.Quote(canonical), "longWord"),
+            canonical);
+        // 直接拼原始词条（绕过 Quote 的规范化）验证词典里**没有** 300B 原文键。
+        Program.Check("超长词条: 词典里没有原始 300B 词条",
+            !MatchContainsTrack(index, "{lyrics_tok} : \"" + longWord + "\"", "longWord"),
+            "raw 300B term found");
+        Program.Check("超长词条: 查询原始 300B 词命中该曲（生产查询路径）",
+            SessionHit(index, db, longWord, "longWord"));
+        Program.Check("超长词条: 长首字母曲的首字母 bigram 正常入库",
+            MatchContainsTrack(index, "{initials_lyrics_tok} : \"aa\"", "longInitials"),
+            "aa not found");
+        Program.Check("超长词条: 同曲其余词仍可检索",
+            MatchContainsTrack(index, "{lyrics_tok} : \"晴天\"", "longWord"),
+            "晴天 not found");
+        Program.Check("超长词条: 普通查询仍命中同曲（生产查询路径）",
+            SessionHit(index, db, "晴天", "longWord"));
+        Program.Check("超长词条: 结果 JSON additive 字段",
+            IndexerJson.Result(result).Contains("\"oversizeTokens\":", StringComparison.Ordinal),
+            IndexerJson.Result(result));
+        var stats = EraStore.IndexStats.Collect(EraDir(index));
+        Program.Check("超长词条: 索引仍可统计（2 曲 / 0 死行）",
+            stats.Docs == 2 && stats.DeadDocs == 0, $"{stats.Docs}/{stats.DeadDocs}");
+    }
+
+    private static void LyricsPreprocessIntegration(string root)
+    {
+        var work = Path.Combine(root, "lyrics-preprocess");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        // 重复副歌（非相邻，验证「保序首现」与跨重复段的位置重排）。
+        const string chorusLyrics = "副歌一句\n主歌一句\n副歌一句\n重复句\n副歌一句";
+        var manyLines = string.Join('\n', Enumerable.Range(0, 4097).Select(i => "M" + i));
+        var manyLineTranslations = string.Join('\n', Enumerable.Range(0, 4097).Select(i => "T" + i));
+        var manyBytes = string.Join('\n', Enumerable.Range(0, 4096)
+            .Select(i => new string('歌', 10) + i.ToString("D4")));
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            InsertTrack(conn, "dup", Path.Combine(dir, "dup.mp3"), "副歌测试", "[]", null,
+                chorusLyrics, 1);
+            InsertTrack(conn, "normal", Path.Combine(dir, "normal.mp3"), "普通歌词", "[]", null,
+                "晴天\n雨天", 2);
+            InsertTrack(conn, "guardLines", Path.Combine(dir, "lines.mp3"), "行护栏", "[]", null,
+                manyLines, 3);
+            InsertTrack(conn, "guardBytes", Path.Combine(dir, "bytes.mp3"), "字节护栏", "[]", null,
+                manyBytes, 4);
+            // 同一曲的两层都超限：metric 记 2（层维度），warn 只记 1 次（曲目维度）。
+            InsertTrack(conn, "multi", Path.Combine(dir, "multi.mp3"), "多层护栏", "[]", null,
+                manyLines, 5);
+            SetSidecar(conn, "multi", main: null, trans: manyLineTranslations);
+        }
+
+        // 捕获 stderr（无 sink 时的 Log 回退）验证「每曲最多 warn 一次」。
+        var originalError = Console.Error;
+        var log = new StringWriter();
+        IndexerResult result;
+        Console.SetError(log);
+        try
+        {
+            result = RunEngine(db, index, full: true, options: new IndexerOptions { IndexLrc = true });
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        Program.Check("预处理集成: 5 首全部索引", result.Indexed == 5, result.Indexed.ToString());
+
+        // ---- 去重：副歌 5 行 → 3 行；3 行共 8 个 bigram（3+3+2）----
+        var dupLengths = DocLengths(index, "dup");
+        Program.Check("预处理集成: 重复副歌只索引一次（歌词 token = 8）",
+            dupLengths[4] == 8, dupLengths[4].ToString());
+        Program.Check("预处理集成: 去重后行内短语仍连续",
+            MatchContainsTrack(index, "{lyrics_tok} : \"副歌 歌一 一句\"", "dup"));
+        Program.Check("预处理集成: 首现顺序保留（主歌在重复句前）",
+            MatchContainsTrack(index, "{lyrics_tok} : \"主歌 歌一 一句\"", "dup"));
+
+        // ---- T3.7：字面歌词列无 unigram；元数据列仍有 ----
+        Program.Check("预处理集成: 歌词列不再有单字 unigram",
+            MatchCount(index, "{lyrics_tok} : \"句\"") == 0,
+            MatchCount(index, "{lyrics_tok} : \"句\"").ToString());
+        Program.Check("预处理集成: 元数据列仍有 unigram（标题「副」）",
+            MatchContainsTrack(index, "{title_tok} : \"副\"", "dup"));
+        Program.Check("预处理集成: 正常歌词 token 不变（晴天 + 雨天 = 2 bigram）",
+            DocLengths(index, "normal")[4] == 2, DocLengths(index, "normal")[4].ToString());
+
+        // ---- V6 护栏：逐层截断 + metric + 每曲一次 warn ----
+        Program.Check("预处理集成: metric = (曲目, 层) 4 次",
+            result.LyricsTruncatedLayers == 4, result.LyricsTruncatedLayers.ToString());
+        Program.Check("预处理集成: metric = 受影响曲目 3 首",
+            result.LyricsTruncatedTracks == 3, result.LyricsTruncatedTracks.ToString());
+        Program.Check("预处理集成: 行护栏截到 4096 行（每行字母+数字=2 token）",
+            DocLengths(index, "guardLines")[4] == 8192,
+            DocLengths(index, "guardLines")[4].ToString());
+        Program.Check("预处理集成: 同曲原文 + 译文两层独立截断",
+            DocLengths(index, "multi")[4] == 8192 && DocLengths(index, "multi")[5] == 8192,
+            $"{DocLengths(index, "multi")[4]}/{DocLengths(index, "multi")[5]}");
+
+        var captured = log.ToString();
+        Program.Check("预处理集成: 每曲最多 warn 一次（行护栏）",
+            Occurrences(captured, "track=guardLines") == 1,
+            Occurrences(captured, "track=guardLines").ToString());
+        Program.Check("预处理集成: 每曲最多 warn 一次（字节护栏）",
+            Occurrences(captured, "track=guardBytes") == 1,
+            Occurrences(captured, "track=guardBytes").ToString());
+        Program.Check("预处理集成: 多层超限只 warn 一次（multi）",
+            Occurrences(captured, "track=multi") == 1,
+            Occurrences(captured, "track=multi").ToString());
+        Program.Check("预处理集成: 正常曲目不 warn",
+            Occurrences(captured, "track=dup") == 0
+            && Occurrences(captured, "track=normal") == 0,
+            captured);
+
+        // ---- 结果 JSON：新增字段 additive（不改既有键） ----
+        var resultJson = IndexerJson.Result(result);
+        Program.Check("预处理集成: 结果 JSON 含 lyricsTruncatedLayers/Tracks",
+            resultJson.Contains("\"lyricsTruncatedLayers\":4", StringComparison.Ordinal)
+            && resultJson.Contains("\"lyricsTruncatedTracks\":3", StringComparison.Ordinal)
+            && resultJson.Contains("\"eraLiveDocs\":5", StringComparison.Ordinal),
+            resultJson);
+        var progressJson = IndexerJson.Progress(new IndexerProgress
+        {
+            LyricsTruncatedLayers = 4,
+            LyricsTruncatedTracks = 3,
+        });
+        Program.Check("预处理集成: 进度 JSON 含截断计数",
+            progressJson.Contains("\"lyricsTruncatedLayers\":4", StringComparison.Ordinal)
+            && progressJson.Contains("\"lyricsTruncatedTracks\":3", StringComparison.Ordinal),
+            progressJson);
+
+        // ---- library.db 源文本不变（片段 / 高亮读库原文） ----
+        using (var conn = Open(db))
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT lyrics FROM tracks WHERE id='dup'";
+            var stored = cmd.ExecuteScalar() as string;
+            Program.Check("预处理集成: library.db 原文未被改写",
+                string.Equals(stored, chorusLyrics, StringComparison.Ordinal), stored ?? "(null)");
+        }
+    }
+
+    private static int Occurrences(string text, string needle)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+        return count;
     }
 
     /* ------------------------------------------------------------------ */
@@ -637,7 +1018,7 @@ internal static class EndToEnd
         var off = RunEngine(db, index, full: true, options: new IndexerOptions { IndexLrc = true });
         Program.Check("歌词罗马音: 默认关 indexed==2", off.Indexed == 2, off.Indexed.ToString());
         Program.Check("歌词罗马音: 默认关 meta.romaji_lyrics==0",
-            Meta(index, "romaji_lyrics") == "0", Meta(index, "romaji_lyrics"));
+            !ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
         Program.Check("歌词罗马音: 默认关不生成 tJ 读音 bigram", MatchCount(index, SoraPhrase) == 0,
             MatchCount(index, SoraPhrase).ToString());
         Program.Check("歌词罗马音: 默认关 LRC 音译整词仍在（tK）",
@@ -645,10 +1026,16 @@ internal static class EndToEnd
 
         // ---- 开启（增量请求也会因选项变化升级为全量）----
         var on = RunEngine(db, index, full: false,
-            options: new IndexerOptions { IndexLrc = true, RomajiLyrics = true });
+            options: new IndexerOptions
+            {
+                IndexLrc = true,
+                Pinyin = true,
+                LyricsPinyin = true,
+                RomajiLyrics = true,
+            });
         Program.Check("歌词罗马音: 开关变化触发全量", on.Full);
         Program.Check("歌词罗马音: 开启 meta.romaji_lyrics==1",
-            Meta(index, "romaji_lyrics") == "1", Meta(index, "romaji_lyrics"));
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
         Program.Check("歌词罗马音: tJ 生成读音 bigram 可命中", MatchContainsTrack(index, SoraPhrase, "tJ"));
         Program.Check("歌词罗马音: 用户音译未被覆盖（tK 整词仍在）",
             MatchContainsTrack(index, "{lyrics_rom_tok} : \"sora\"", "tK"));
@@ -656,17 +1043,429 @@ internal static class EndToEnd
         Program.Check("歌词罗马音: 查询侧读音趟命中生成列",
             readingExpr is not null && MatchContainsTrack(index, readingExpr, "tJ"), readingExpr ?? "(null)");
 
-        // ---- 再关闭：清理生成内容 ----
+        // ---- 再关闭：只写偏好，保留现有索引 ----
         var back = RunEngine(db, index, full: false, options: new IndexerOptions { IndexLrc = true });
-        Program.Check("歌词罗马音: 关闭触发全量", back.Full);
-        Program.Check("歌词罗马音: 关闭后 tJ 读音 bigram 归零", MatchCount(index, SoraPhrase) == 0,
-            MatchCount(index, SoraPhrase).ToString());
+        Program.Check("歌词罗马音: 关闭不强制重建", !back.Full, back.Full.ToString());
+        Program.Check("歌词罗马音: 旧索引仍可命中生成列（重建后才会清）",
+            MatchContainsTrack(index, SoraPhrase, "tJ"));
+
+        // 用户显式全量重建才清理生成内容。
+        var drop = RunEngine(db, index, full: true, options: new IndexerOptions { IndexLrc = true });
+        Program.Check("歌词罗马音: 手动全量重建后 bigram 归零", drop.Full
+            && MatchCount(index, SoraPhrase) == 0, MatchCount(index, SoraPhrase).ToString());
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 生产路径派生转写层免位置（S2）                                      */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>
+    /// 生产路径只在**显式音译层**免位置（S2 修正，2026-11-26）：
+    /// <see cref="IndexerEngine"/> 全量 / 增量使用 <see cref="EraStore.BuildDefaults"/>，
+    /// 其中只有 <c>LyricsRomanization</c>；<c>PinyinLyrics</c> / <c>PinyinMeta</c> 必须
+    /// 保留位置（5k qbench eval 证明拼音短语降级为 AND 会显著掉 P@1 / NDCG）。
+    /// </summary>
+    private static void ProductionRomanizationNoPositions(string root)
+    {
+        var work = Path.Combine(root, "production-no-pos");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        // t0 的音译 / 拼音里 qing 与 tian 相邻；t1 故意插两个音节，用来证明
+        // 无位置音译的短语降级为 AND，而拼音短语仍按位置精确匹配。
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            InsertTrack(conn, "np0", Path.Combine(dir, "np0.mp3"), "晴天", "[]", null, "晴天", 1000);
+            InsertTrack(conn, "np1", Path.Combine(dir, "np1.mp3"), "雨天", "[]", null, "晴爱你天", 2000);
+        }
+        using (var conn = Open(db))
+        {
+            SetSidecar(conn, "np0", "[00:01.00]晴天\n", romaji: "[00:01.00]qing tian\n");
+            SetSidecar(conn, "np1", "[00:01.00]晴爱你天\n", romaji: "[00:01.00]qing ai ni tian\n");
+        }
+
+        var result = RunEngine(db, index, full: true,
+            options: new IndexerOptions
+            {
+                IndexLrc = true,
+                Pinyin = true,
+                LyricsPinyin = true,
+                RomajiLyrics = true,
+            });
+        Program.Check("生产免位置: indexed==2", result.Indexed == 2, result.Indexed.ToString());
+        Program.Check("生产免位置: romaji 选项已开",
+            ManifestHas(ReadManifest(index), EraStore.ManifestOptionsBits.RomajiLyrics));
+
+        Program.Check("生产免位置: BuildDefaults 只含歌词音译层",
+            EraStore.BuildDefaults.NoPositionFields.SequenceEqual(new[]
+            {
+                EraStore.FieldId.LyricsRomanization,
+            }),
+            string.Join(',', EraStore.BuildDefaults.NoPositionFields));
+
+        var sawRoman = false;
+        var sawPinyinLyrics = false;
+        var sawPinyinMeta = false;
+        var sawRomanPhrase = false;
+        var sawPinyinPhrase = false;
+
+        using var reader = new EraStore.StoreReader(EraFile(index));
+        foreach (var seg in reader.OpenPerSegment())
+        {
+            if (seg.Dict.TryFind(EraStore.FieldId.LyricsRomanization, "qing", out var roman))
+            {
+                sawRoman = true;
+                Program.Check("生产免位置: LyricsRomanization 词条 flags bit0=0",
+                    !roman.HasPositions, $"flags=0x{roman.Flags:X2}");
+                var cursor = seg.Postings.Open(roman.PostOffset, roman.Df);
+                Program.Check("生产免位置: LyricsRomanization 游标 HasPositions=false",
+                    cursor.Next() && !cursor.HasPositions,
+                    $"hasPos={cursor.HasPositions} tf={cursor.CurrentTf}");
+                if (PhraseDocs(seg, EraStore.FieldId.LyricsRomanization, "qing", "tian",
+                        out var positioned) is { } docs)
+                {
+                    sawRomanPhrase = true;
+                    Program.Check("生产免位置: 歌词音译短语 qing tian 降级 AND（doc0+doc1 / Positioned=false）",
+                        docs == "0,1" && !positioned, $"{docs}/{positioned}");
+                }
+            }
+
+            if (seg.Dict.TryFind(EraStore.FieldId.PinyinLyrics, "qing", out var pinyinLyrics))
+            {
+                sawPinyinLyrics = true;
+                Program.Check("生产免位置: PinyinLyrics 仍带位置",
+                    pinyinLyrics.HasPositions, $"flags=0x{pinyinLyrics.Flags:X2}");
+                var cursor = seg.Postings.Open(pinyinLyrics.PostOffset, pinyinLyrics.Df);
+                Program.Check("生产免位置: PinyinLyrics 游标 HasPositions=true",
+                    cursor.Next() && cursor.HasPositions,
+                    $"hasPos={cursor.HasPositions} tf={cursor.CurrentTf}");
+                if (PhraseDocs(seg, EraStore.FieldId.PinyinLyrics, "qing", "tian",
+                        out var positioned) is { } docs)
+                {
+                    sawPinyinPhrase = true;
+                    Program.Check("生产免位置: 歌词拼音短语仍校验相邻（只有 doc0 / Positioned=true）",
+                        docs == "0" && positioned, $"{docs}/{positioned}");
+                }
+            }
+
+            if (seg.Dict.TryFind(EraStore.FieldId.PinyinMeta, "qing", out var pinyinMeta))
+            {
+                sawPinyinMeta = true;
+                var cursor = seg.Postings.Open(pinyinMeta.PostOffset, pinyinMeta.Df);
+                Program.Check("生产免位置: PinyinMeta 仍带位置（短语精度不回退）",
+                    pinyinMeta.HasPositions && cursor.Next() && cursor.HasPositions,
+                    $"flags=0x{pinyinMeta.Flags:X2} hasPos={cursor.HasPositions}");
+            }
+        }
+
+        Program.Check("生产免位置: 两个字段都出现在词典", sawRoman && sawPinyinLyrics,
+            $"roman={sawRoman} pinyinLyrics={sawPinyinLyrics}");
+        Program.Check("生产免位置: 元数据拼音仍带位置", sawPinyinMeta, sawPinyinMeta.ToString());
+        Program.Check("生产免位置: 音译降级 / 拼音保位置都已覆盖",
+            sawRomanPhrase && sawPinyinPhrase, $"roman={sawRomanPhrase} pinyin={sawPinyinPhrase}");
+
+        var verify = EraStore.IndexVerifier.Verify(EraFile(index));
+        Program.Check("生产免位置: IndexVerifier.Verify 通过", verify.Ok,
+            string.Join("; ", verify.Errors));
+    }
+
+    /// <summary>
+    /// 在单段内跑 <c>qing tian</c> 短语：返回命中 doc 序列（找不到词条时 null）。
+    /// <c>positioned</c> 是 <see cref="PhraseIter.Positioned"/> 的最终事实。
+    /// </summary>
+    private static string? PhraseDocs(
+        EraStore.SegmentReaders seg, EraStore.FieldId field, string first, string second,
+        out bool positioned)
+    {
+        positioned = true;
+        if (!seg.Dict.TryFind(field, first, out _) || !seg.Dict.TryFind(field, second, out _))
+            return null;
+
+        var terms = new IDocIter[]
+        {
+            new TermIter(seg.Dict, seg.Postings, field, first),
+            new TermIter(seg.Dict, seg.Postings, field, second),
+        };
+        using var phrase = new PhraseIter(terms, positioned: true);
+        var docs = new List<int>();
+        while (phrase.Next()) docs.Add(phrase.Current);
+        positioned = phrase.Positioned;
+        return string.Join(',', docs);
+    }
+
+    /// <summary>
+    /// T3.4 V4：歌词首字母默认关。
+    ///
+    /// 默认：<c>initials_lyrics_tok</c> 无词条、Manifest 不写选项位 / 不宣称能力、
+    /// 健康元数据报 false，但歌词**拼音**与元数据首字母照旧可召回；
+    /// 开启：开关位翻转触发全量重建，列有词条、能力 / 健康元数据同步，查询命中；
+    /// 再关闭：反向触发全量并清空歌词首字母。
+    /// </summary>
+    private static void InitialsLyricsOption(string root)
+    {
+        var work = Path.Combine(root, "initials-lyrics");
+        Directory.CreateDirectory(work);
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+            InsertTrack(conn, "il1", Path.Combine(dir, "il1.mp3"), "测试", "[]", null, "我爱你中国", 1000);
+
+        // v15：首字母列是相邻 bigram，整段查询写成短语。
+        const string LyricsInitials = "{initials_lyrics_tok} : \"wa an nz zg\"";
+        const string LyricsPinyin = "{pinyin_lyrics_tok} : \"wo ai ni\"";
+
+        // ---- 默认关 ----
+        var off = RunEngine(db, index, full: true,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
+        Program.Check("歌词首字母: 默认关 indexed==1", off.Indexed == 1, off.Indexed.ToString());
+        var offManifest = ReadManifest(index);
+        Program.Check("歌词首字母: 默认关 meta.initials_lyrics==0",
+            !ManifestHas(offManifest, EraStore.ManifestOptionsBits.InitialsLyrics));
+        Program.Check("歌词首字母: 默认关不宣称 initials_lyrics 能力",
+            !offManifest.Capabilities.Contains(IndexCapabilities.InitialsLyrics),
+            string.Join(',', offManifest.Capabilities));
+        Program.Check("歌词首字母: 默认关 initials_lyrics_tok 无词条",
+            MatchCount(index, LyricsInitials) == 0, MatchCount(index, LyricsInitials).ToString());
+        Program.Check("歌词首字母: 默认关歌词拼音仍可召回",
+            MatchContainsTrack(index, LyricsPinyin, "il1"));
+        Program.Check("歌词首字母: 默认关元数据首字母不受影响",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"cs\"", "il1"));
+        Program.Check("歌词首字母: 默认关查询路径不命中歌词首字母串",
+            !SessionHit(index, db, "wanzg", "il1"));
+        var offHealth = SearchApiJson.HealthReady(SearchSession.MetaFromManifest(offManifest));
+        Program.Check("歌词首字母: 默认关健康元数据报 false",
+            offHealth.Contains("\"initialsLyrics\":false", StringComparison.Ordinal), offHealth);
+
+        // ---- 开启（增量请求也会因选项变化升级为全量）----
+        var on = RunEngine(db, index, full: false,
+            options: new IndexerOptions
+            {
+                Pinyin = true,
+                LyricsPinyin = true,
+                InitialsLyrics = true,
+            });
+        Program.Check("歌词首字母: 开关翻转触发全量重建", on.Full, $"full={on.Full}");
+        var onManifest = ReadManifest(index);
+        Program.Check("歌词首字母: 开启 meta.initials_lyrics==1",
+            ManifestHas(onManifest, EraStore.ManifestOptionsBits.InitialsLyrics));
+        Program.Check("歌词首字母: 开启宣称 initials_lyrics 能力",
+            onManifest.Capabilities.Contains(IndexCapabilities.InitialsLyrics),
+            string.Join(',', onManifest.Capabilities));
+        Program.Check("歌词首字母: 开启后列有词条",
+            MatchContainsTrack(index, LyricsInitials, "il1"));
+        Program.Check("歌词首字母: 开启后查询命中歌词首字母串",
+            SessionHit(index, db, "wanzg", "il1"));
+        var onHealth = SearchApiJson.HealthReady(SearchSession.MetaFromManifest(onManifest));
+        Program.Check("歌词首字母: 开启健康元数据报 true",
+            onHealth.Contains("\"initialsLyrics\":true", StringComparison.Ordinal), onHealth);
+
+        // ---- 再关闭：只写偏好，保留现有索引 ----
+        var back = RunEngine(db, index, full: false,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
+        Program.Check("歌词首字母: 关闭不强制重建", !back.Full, $"full={back.Full}");
+        Program.Check("歌词首字母: 旧索引仍保留词条（重建后才会清）",
+            MatchCount(index, LyricsInitials) > 0, MatchCount(index, LyricsInitials).ToString());
+
+        // 用户显式全量重建才清空。
+        var drop = RunEngine(db, index, full: true,
+            options: new IndexerOptions { Pinyin = true, LyricsPinyin = true });
+        Program.Check("歌词首字母: 手动全量重建后列词条归零", drop.Full
+            && MatchCount(index, LyricsInitials) == 0, MatchCount(index, LyricsInitials).ToString());
+    }
+
+    /// <summary>
+    /// T3.9：首字母 bigram 召回（元数据列；歌词列由 <see cref="InitialsLyricsOption"/> 覆盖）。
+    ///
+    /// 用例矩阵：
+    /// <list type="bullet">
+    ///   <item>段中间两字（<c>nz</c>）可命中 —— 整段 token 时代只有前缀能命中；</item>
+    ///   <item>整段（<c>wanzg</c>）/ 段首子串（<c>wan</c>）仍命中；</item>
+    ///   <item>同一批 bigram 的乱序 / 非相邻排列不命中（短语而不是 AND）；</item>
+    ///   <item>title 末尾 bigram 不能与 artist 开头 bigram 拼成假短语（边界词元）；</item>
+    ///   <item>纯拉丁 / 数字标题不产生任何首字母词元。</item>
+    /// </list>
+    /// </summary>
+    private static void InitialsBigramSearch(string root)
+    {
+        var work = Path.Combine(root, "initials-bigram");
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            InsertTrack(conn, "ib1", Path.Combine(dir, "ib1.mp3"), "我爱你中国",
+                """[{"name":"李雷"}]""", null, null, 10);
+            // nz 在段中间（an nz zb）——旧整段 token "anzb" 只能前缀命中。
+            InsertTrack(conn, "ib2", Path.Combine(dir, "ib2.mp3"), "啊你中吧",
+                """[{"name":"某某"}]""", null, null, 20);
+            InsertTrack(conn, "ib3", Path.Combine(dir, "ib3.mp3"), "你中",
+                """[{"name":"某"}]""", null, null, 30);
+            // 与 ib3 的 bigram 相同、顺序相反：nz 不得命中。
+            InsertTrack(conn, "ib4", Path.Combine(dir, "ib4.mp3"), "中你",
+                """[{"name":"某"}]""", null, null, 40);
+            // 纯拉丁 / 数字：不得产生首字母词元。
+            InsertTrack(conn, "ib5", Path.Combine(dir, "ib5.mp3"), "Hello",
+                """[{"name":"ADELE"}]""", """{"name":"25"}""", null, 50);
+            // 跨边界：title "我爱你"（wa an）+ artist "中国"（zg）。
+            InsertTrack(conn, "ib6", Path.Combine(dir, "ib6.mp3"), "我爱你",
+                """[{"name":"中国"}]""", null, null, 60);
+            // 歌手名的段中间 bigram（阿你中 → an nz）同样可命中。
+            InsertTrack(conn, "ib7", Path.Combine(dir, "ib7.mp3"), "无关",
+                """[{"name":"阿你中"}]""", null, null, 70);
+        }
+
+        var result = RunEngine(db, index, full: true, lrc: false);
+        Program.Check("首字母 bigram: 全量 7 曲", result.Indexed == 7, result.Indexed.ToString());
+
+        // 段中间两字：bigram 词元直接命中（旧整段 token 时代不可能）。
+        Program.Check("首字母 bigram: 段中间 'nz' 命中 ib2",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"nz\"", "ib2"));
+        Program.Check("首字母 bigram: 'nz' 命中段首 ib3",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"nz\"", "ib3"));
+        Program.Check("首字母 bigram: 'nz' 命中歌手段中间 ib7",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"nz\"", "ib7"));
+        Program.Check("首字母 bigram: 'nz' 不命中反序 ib4（zn）",
+            !MatchContainsTrack(index, "{initials_meta_tok} : \"nz\"", "ib4"));
+        Program.Check("首字母 bigram: 单字母词元不存在（'z' 命中 0）",
+            MatchCount(index, "{initials_meta_tok} : \"z\"") == 0,
+            MatchCount(index, "{initials_meta_tok} : \"z\"").ToString());
+
+        // 整段 / 段首子串仍命中。
+        Program.Check("首字母 bigram: 整段 'wa an nz zg' 命中 ib1",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"wa an nz zg\"", "ib1"));
+        Program.Check("首字母 bigram: 段首子串 'wa an' 命中 ib1",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"wa an\"", "ib1"));
+        Program.Check("首字母 bigram: 段中子串 'an nz' 命中 ib1",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"an nz\"", "ib1"));
+
+        // 顺序 / 相邻性：同一批 bigram 反序或非相邻都不得命中。
+        Program.Check("首字母 bigram: 反序短语 'nz wa' 命中 0",
+            MatchCount(index, "{initials_meta_tok} : \"nz wa\"") == 0,
+            MatchCount(index, "{initials_meta_tok} : \"nz wa\"").ToString());
+        Program.Check("首字母 bigram: 非相邻短语 'wa nz' 命中 0",
+            MatchCount(index, "{initials_meta_tok} : \"wa nz\"") == 0,
+            MatchCount(index, "{initials_meta_tok} : \"wa nz\"").ToString());
+        Program.Check("首字母 bigram: 'an nz' 命中 ib2（中间段）",
+            MatchContainsTrack(index, "{initials_meta_tok} : \"an nz\"", "ib2"));
+
+        // 跨字段边界：title 的 an 与 artist 的 zg 之间有边界词元，不能拼成短语。
+        Program.Check("首字母 bigram: title/artist 边界阻断 'an zg'",
+            MatchCount(index, "{initials_meta_tok} : \"an zg\"") == 0,
+            MatchCount(index, "{initials_meta_tok} : \"an zg\"").ToString());
+        Program.Check("首字母 bigram: ib6 自身整段不成立（wa an # zg）",
+            !MatchContainsTrack(index, "{initials_meta_tok} : \"wa an zg\"", "ib6"));
+
+        // 拉丁 / 数字不进首字母列：ib5 (Hello / ADELE / 25) 没有任何 bigram 词元。
+        foreach (var bg in new[] { "he", "el", "ll", "lo", "ad", "de", "le" })
+        {
+            Program.Check($"首字母 bigram: 拉丁/数字不产 '{bg}'",
+                !MatchContainsTrack(index, $"{{initials_meta_tok}} : \"{bg}\"", "ib5"),
+                bg);
+        }
+
+        // 生产查询路径：直接键入的拉丁首字母串按 bigram 分解后仍可召回。
+        Program.Check("首字母 bigram: 查询 'wanzg' 命中 ib1",
+            SessionHit(index, db, "wanzg", "ib1"));
+        Program.Check("首字母 bigram: 查询 'wan' 命中 ib1",
+            SessionHit(index, db, "wan", "ib1"));
+        Program.Check("首字母 bigram: 查询 'nz' 命中段中间 ib2",
+            SessionHit(index, db, "nz", "ib2"));
+        Program.Check("首字母 bigram: 查询 'nz' 不命中反序 ib4",
+            !SessionHit(index, db, "nz", "ib4"));
+    }
+
+    /// <summary>
+    /// S7：没有脏曲时仍按阈值做有界维护（回收墓碑行 / 小段），达标后重复运行零写入。
+    /// </summary>
+    private static void AutoMaintainWithoutDirty(string root)
+    {
+        var work = Path.Combine(root, "auto-maintain");
+        var db = Path.Combine(work, "library.db");
+        var index = Path.Combine(work, "search.db");
+        var dir = Path.Combine(work, "m");
+        Directory.CreateDirectory(dir);
+
+        CreateLibrary(db, generation: 1);
+        using (var conn = Open(db))
+        {
+            for (var i = 1; i <= 4; i++)
+            {
+                InsertTrack(conn, HexId(i), Path.Combine(dir, $"m{i}.mp3"), $"维护歌{i}",
+                    "[]", null, $"歌词行{i}", i);
+            }
+        }
+
+        var full = RunEngine(db, index, full: true, lrc: false);
+        Program.Check("维护: 全量构建压缩到 1 段", full.EraSegments == 1, full.EraSegments.ToString());
+
+        var eraDir = EraDir(index);
+        var current = EraStore.CurrentPointer.Read(eraDir);
+        Program.Check("维护: CURRENT 可解析", current is not null, eraDir);
+        var eraPath = Path.Combine(eraDir, current!);
+
+        // 直接改写 2 首（同 track / 同 mtime，引擎不会判脏）并关闭合并：
+        // 制造 2/6 = 33% 死行，超过 Merger.DeadRatioTrigger 的 20%。
+        var upserts = new[]
+        {
+            MaintainDoc(1, "标题1", 1),
+            MaintainDoc(2, "标题2", 2),
+        };
+        var applied = EraStore.IncrementalUpdater.Apply(
+            eraPath, upserts, Array.Empty<byte[]>(), new EraStore.IncrementalOptions
+            {
+                Merge = false,
+                DocsPerSegment = 100,
+            });
+        Program.Check("维护: 构造 2 段 + 2 死行",
+            applied.SegmentCount == 2 && applied.DeadDocs == 2,
+            $"{applied.SegmentCount}/{applied.DeadDocs}");
+
+        // 无脏曲运行：Maintain 看到死行比例过阈值 → 合并回收。
+        var maintained = RunEngine(db, index, full: false, lrc: false);
+        var stats = EraStore.IndexStats.Collect(eraPath);
+        Program.Check("维护: 无脏曲也触发合并", maintained.EraMerged && maintained.EraWritten,
+            $"{maintained.EraMerged}/{maintained.EraWritten}");
+        Program.Check("维护: 合并后回到 1 段 / 0 死行",
+            maintained.EraSegments == 1 && stats.DeadDocs == 0,
+            $"{maintained.EraSegments}/{stats.DeadDocs}");
+        Program.Check("维护: 活 doc 仍为 4", stats.Docs == 4, stats.Docs.ToString());
+
+        // 达标后再次运行：Maintain 只读 Manifest，不写文件。
+        var clean = RunEngine(db, index, full: false, lrc: false);
+        Program.Check("维护: 达标后重复运行零写入", !clean.EraWritten && clean.EraSegments == 1,
+            $"{clean.EraWritten}/{clean.EraSegments}");
+    }
+
+    private static string HexId(int n) => n.ToString("x32");
+
+    private static EraStore.AnalyzedDoc MaintainDoc(int n, string title, long mtime)
+    {
+        var track = Convert.FromHexString(HexId(n));
+        var tokens = new Dictionary<EraStore.FieldId, string[]>
+        {
+            [EraStore.FieldId.Title] = new[] { "维护词" + n },
+        };
+        // S6：手工构造的 AnalyzedDoc 必须带与 DB 原始列一致的元数据哈希，
+        // 否则引擎会把它判成脏曲，走不到「无脏曲维护」分支。
+        var metaHash = EraStore.MetaHash.Compute("维护歌" + n, "[]", "");
+        return new EraStore.AnalyzedDoc(
+            track, new byte[16], 0, 0, tokens, title, "", "", mtime, MetaHash: metaHash);
     }
 
     /* ------------------------------------------------------------------ */
     /* 引擎 / fixture 辅助                                                 */
     /* ------------------------------------------------------------------ */
-
     internal static IndexerResult RunEngine(string db, string index, bool full, bool lrc)
         => RunEngineDetailed(db, index, full, lrc).Result;
 
@@ -677,22 +1476,25 @@ internal static class EndToEnd
     private static (IndexerResult Result, int ContentQueries) RunEngineDetailed(
         string db, string index, bool full, IndexerOptions options)
     {
-        using var store = new FtsStore();
-        var engine = new IndexerEngine(store);
+        var engine = new IndexerEngine();
         var result = engine.Run(db, index, full, options);
         return (result, engine.ContentQueries);
     }
 
     /// <summary>运行引擎并回传阶段二「取内容」SQL 次数（用于断言未全库读歌词）。</summary>
     private static (IndexerResult Result, int ContentQueries) RunEngineDetailed(
-        string db, string index, bool full, bool lrc, int mergeEvery = 0)
+        string db, string index, bool full, bool lrc)
     {
-        using var store = new FtsStore();
-        var engine = new IndexerEngine(store);
-        var options = new IndexerOptions { IndexLrc = lrc, Pinyin = true };
-        if (mergeEvery > 0) options.MergeEveryUpdates = mergeEvery;
-        var result = engine.Run(db, index, full, options);
-        return (result, engine.ContentQueries);
+        // 主流程夹具沿用 v4 口径：歌词首字母开启，覆盖首字母分列断言；
+        // 默认关闭（T3.4 V4）由 InitialsLyricsOption 单独覆盖。
+        var options = new IndexerOptions
+        {
+            IndexLrc = lrc,
+            Pinyin = true,
+            LyricsPinyin = true,
+            InitialsLyrics = true,
+        };
+        return RunEngineDetailed(db, index, full, options);
     }
 
     internal static void CreateLibrary(string path, long? generation)
@@ -763,10 +1565,9 @@ internal static class EndToEnd
 
     internal static SqliteConnection Open(string path)
     {
-        // 走 FtsStore.ConnectionString（Pooling=False）：断言必须读**当前**文件。
-        // 若沿用连接池，世代化替换（tmp → search.db 改名）后池里仍留着指向旧 inode
-        // 的句柄，断言会静默读到替换前的旧世代。
-        var conn = new SqliteConnection(FtsStore.ConnectionString(path));
+        // 走 LibraryDb.ConnectionString（Pooling=False）：断言必须读**当前**文件。
+        // 若沿用连接池，库被替换后池里仍留着指向旧 inode 的句柄，断言会静默读到旧快照。
+        var conn = new SqliteConnection(LibraryDb.ConnectionString(path));
         conn.Open();
         return conn;
     }
@@ -784,82 +1585,88 @@ internal static class EndToEnd
         Exec(conn, sql);
     }
 
-    private static string? Meta(string index, string key)
+    /* ------------------------------------------------------------------ */
+    /* EraStore 断言辅助                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>与索引器同一目录约定：<c>&lt;index 目录&gt;/search.era</c>。</summary>
+    internal static string EraDir(string index)
+        => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(index)) ?? ".", IndexerEngine.EraStoreDirName);
+
+    private static string EraFile(string index)
     {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT value FROM search_meta WHERE key = @k";
-        cmd.Parameters.AddWithValue("@k", key);
-        return cmd.ExecuteScalar() as string;
+        var dir = EraDir(index);
+        var name = EraStore.CurrentPointer.Read(dir)
+            ?? throw new InvalidOperationException($"EraStore CURRENT 缺失: {dir}");
+        return Path.Combine(dir, name);
     }
 
-    private static long Scalar(string index, string sql)
+    /// <summary>索引目录里的世代文件名（升序），用于断言「只剩 CURRENT 一个文件」。</summary>
+    private static string[] EraGenerationFiles(string dir) =>
+        Directory.GetFiles(dir, "search-*.eraindex")
+            .Select(Path.GetFileName)
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>读取当前快照的 Manifest（CURRENT + 提交槽恢复）。</summary>
+    internal static EraStore.Manifest ReadManifest(string index)
+        => EraStore.StoreReader.TryReadManifest(EraFile(index))
+            ?? throw new InvalidOperationException($"EraStore Manifest 不可读: {index}");
+
+    private static bool ManifestHas(EraStore.Manifest manifest, int bit) => (manifest.OptionsBits & bit) != 0;
+
+    /// <summary>活 doc 数（Manifest 口径）。</summary>
+    private static uint DocCount(string index)
+        => EraStore.IndexStats.Collect(EraDir(index)).Docs;
+
+    /// <summary>单曲 DocStore 状态；不存在（已删除 / 死行）时 Found=false。</summary>
+    internal static (bool Found, long Mtime, long LrcMtime, long LrcSize, ushort[] Lengths)
+        DocState(string index, string trackId)
     {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        var value = cmd.ExecuteScalar();
-        return value is null || value is DBNull ? 0 : Convert.ToInt64(value);
+        using var reader = new EraStore.StoreReader(EraFile(index));
+        foreach (var seg in reader.OpenPerSegment())
+        {
+            for (var doc = 0; doc < seg.Docs.Count; doc++)
+            {
+                if (!seg.IsLive(doc)) continue;
+                if (!string.Equals(seg.Docs.TrackId(doc), trackId, StringComparison.Ordinal)) continue;
+                var lengths = new ushort[12];
+                for (var i = 0; i < 12; i++)
+                    lengths[i] = seg.Docs.DocLen(doc, (EraStore.FieldId)(i + 1));
+                return (true, seg.Docs.Mtime(doc), seg.Docs.LrcMtime(doc), seg.Docs.LrcSize(doc), lengths);
+            }
+        }
+        return (false, 0, 0, 0, Array.Empty<ushort>());
     }
 
-    private static long DocScalar(string index, string trackId, string column)
+    private static bool TrackExists(string index, string trackId) => DocState(index, trackId).Found;
+
+    private static ushort[] DocLengths(string index, string trackId) => DocState(index, trackId).Lengths;
+
+    private static List<EraStore.EraCandidate> MatchHits(string index, string expression)
     {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {column} FROM search_docs WHERE track_id = @t";
-        cmd.Parameters.AddWithValue("@t", trackId);
-        var value = cmd.ExecuteScalar();
-        return value is null || value is DBNull ? 0 : Convert.ToInt64(value);
+        using var reader = new EraStore.StoreReader(EraFile(index));
+        return EraStore.EraQueryPlan.Execute(reader, expression, -1);
     }
 
-    private static int MatchCount(string index, string matchExpr)
-    {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH @q";
-        cmd.Parameters.AddWithValue("@q", matchExpr);
-        var value = cmd.ExecuteScalar();
-        return value is null || value is DBNull ? 0 : Convert.ToInt32(value);
-    }
+    private static int MatchCount(string index, string expression)
+        => MatchHits(index, expression)
+            .Select(hit => hit.TrackIdHex)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
 
-    private static bool MatchContainsTrack(string index, string matchExpr, string trackId)
-    {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT COUNT(*) FROM search_fts f
-            JOIN search_docs d ON d.doc_id = f.rowid
-            WHERE search_fts MATCH @q AND d.track_id = @t
-            """;
-        cmd.Parameters.AddWithValue("@q", matchExpr);
-        cmd.Parameters.AddWithValue("@t", trackId);
-        var value = cmd.ExecuteScalar();
-        return value is not null && value is not DBNull && Convert.ToInt32(value) > 0;
-    }
-
-    /// <summary>与 CLI <c>query</c> 同构：把“人话”经分析器归一为空格连接的 MATCH 表达式。</summary>
-    /// <summary>FTS 逐列 token 数（`search_fts_docsize.size` 的十六进制），用于判「是否重复索引」。</summary>
-    private static string DocSizeHex(string index, string trackId)
-    {
-        using var conn = new SqliteConnection(FtsStore.ConnectionString(index, readOnly: true));
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "SELECT hex(sz) FROM search_fts_docsize "
-            + "WHERE id = (SELECT doc_id FROM search_docs WHERE track_id = @t)";
-        cmd.Parameters.AddWithValue("@t", trackId);
-        return cmd.ExecuteScalar()?.ToString() ?? "";
-    }
+    private static bool MatchContainsTrack(string index, string expression, string trackId)
+        => MatchHits(index, expression).Any(hit =>
+            string.Equals(hit.TrackIdHex, trackId, StringComparison.Ordinal));
 
     private static string Analyzed(string text)
     {
         var tokens = Analyzer.AnalyzeQuery(text).Lexical.Where(t => t.Length > 0).ToList();
-        return tokens.Count == 0 ? "\"\"" : string.Join(' ', tokens);
+        return tokens.Count == 0
+            ? "\"\""
+            : string.Join(" AND ", tokens.Select(SearchQuery.Quote));
     }
 
     internal static void TryDelete(string dir)

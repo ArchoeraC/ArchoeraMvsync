@@ -28,6 +28,17 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- macOS 3.47+ 默认走 Impeller（Metal）；显式写 true 是为了防止未来
+	     Flutter 默认值调整或有人复制模板时把 GPU 渲染悄悄关掉。 -->
+	<key>FLTEnableImpeller</key>
+	<true/>
+	<!-- Intel 双显卡（例如 MacBook Pro 的 Intel iGPU + AMD dGPU）：true = 允许系统
+	     自动切换（不把 app 钉死在独显上）。「到底用哪块 GPU」由设置页
+	     「性能 / 渲染 → 独立显卡加速」+ GPUSelection.m 决定；这里保持 true，
+	     否则关闭该开关时系统仍会保留独显驱动屏幕，「省电」形同虚设。
+	     Apple Silicon 只有一块统一内存 GPU，本 key 不产生任何影响。 -->
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

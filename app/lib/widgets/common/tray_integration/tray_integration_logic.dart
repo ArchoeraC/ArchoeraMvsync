@@ -22,11 +22,18 @@ extension _TrayIntegrationLogic on _TrayIntegrationState {
       _disposeTray();
       return;
     }
-    // 关闭拦截是托盘常驻的附加能力：获取/监听窗口失败只降级为直接关闭，
-    // 不影响托盘本身（例如无窗口环境/原生库不可用）。
+    // 关闭拦截是托盘常驻的附加能力：窗口关闭请求经原生桥接上报（桥接已
+    // 拦截系统关闭，不会自行退出），失败只降级为直接关闭，不影响托盘本身
+    // （例如无窗口环境 / 原生库不可用）。
     try {
-      _window = WindowManager.instance.getCurrent();
-      _windowListenerId = _window?.addListener(_onWindowEvent);
+      final window = ref.read(platformCapabilitiesProvider).window;
+      _window = window;
+      if (!await window.setEvents(true)) {
+        Log.w('tray', '窗口状态订阅不可用（关闭请求将无法拦截）');
+      }
+      _closeSub = window.closeRequests.listen((request) {
+        unawaited(_onCloseRequest(request));
+      });
     } catch (e) {
       Log.w('tray', '窗口关闭拦截不可用，关闭将直接退出: $e');
     }
@@ -122,28 +129,41 @@ extension _TrayIntegrationLogic on _TrayIntegrationState {
   Future<void> _showWindow() async {
     final window = _window;
     if (window == null) return;
-    window.show();
-    window.focus();
-    // nativeapi 不再派发 hide/show 事件：显式通知节能服务恢复前台档。
+    window.setVisible(true);
+    window.activate();
+    // 桥接在部分合成器上不保证派发 show 事件：显式通知节能服务恢复前台档。
     ref.read(powerSaverProvider).setHidden(false);
   }
 
-  /// 隐藏到托盘（nativeapi 无 hide 事件，显式通知节能服务降到 0 帧档）。
+  /// 隐藏到托盘（显式通知节能服务降到 0 帧档；桥接同时会推送 hidden flag）。
+  ///
+  /// 隐藏失败（桥接无控制能力）时保持窗口可见并**不**切后台档：窗口仍在
+  /// 屏幕上却停止渲染会表现成「卡死」，不如维持前台正常播放。
   void _hideToTray() {
-    _window?.hide();
+    final window = _window;
+    if (window == null) return;
+    if (!window.setVisible(false)) {
+      Log.w('tray', '窗口隐藏失败（桥接无控制能力），保持窗口可见');
+      return;
+    }
+    // 隐藏到托盘后进程会长期常驻，可能被系统直接杀掉而走不到统一退出；
+    // 这里先落一次几何（最大化 / 全屏不写），下次启动才能回到原位。
+    saveWindowGeometry(ProviderScope.containerOf(context));
     ref.read(powerSaverProvider).setHidden(true);
   }
 
-  /// 窗口关闭请求：先取消默认关闭，再按「关闭应用时」偏好处理。
+  /// 窗口关闭请求：桥接已拦截系统关闭，这里只按「关闭应用时」偏好处理。
   ///
-  /// nativeapi 以可取消的 [EventRequest] 表达关闭请求；未取消则窗口关闭。
-  /// 旧版 `setPreventClose(true)` 的语义由这里显式接管。
-  Future<void> _onWindowEvent(WindowEvent event) async {
-    if (event is! WindowCloseRequestedEvent) return;
-    event.request.cancel();
+  /// `reason=quit`（macOS ⌘Q / 应用菜单 Quit）语义就是退出，不再询问「后台常驻」；
+  /// 普通关窗（关闭按钮 / Alt+F4）仍走统一策略。
+  Future<void> _onCloseRequest(WindowCloseRequest request) async {
     if (_handlingClose) return;
     _handlingClose = true;
     try {
+      if (request.reason == WindowCloseReason.quit) {
+        await _quit();
+        return;
+      }
       await _handleWindowClose();
     } finally {
       _handlingClose = false;
@@ -220,9 +240,9 @@ extension _TrayIntegrationLogic on _TrayIntegrationState {
                           l10n.commonCloseConfirmRemember,
                           style: TextStyle(
                             fontSize: 12.5,
-                            color: Theme.of(
-                              dialogContext,
-                            ).colorScheme.onSurfaceVariant,
+                            color: Theme.of(dialogContext)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ),

@@ -2,22 +2,30 @@
 // Copyright (C) 2026 Archoera && BetaStudio2
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:archoera_mvsync/services/search/search_models.dart';
 import 'package:archoera_mvsync/services/search/search_service.dart';
 import 'package:archoera_mvsync/stores/app_prefs.dart';
 
-/// 总开关门控：**关闭时不加载 indexer / 不触碰 search.db**，搜索返回 null
-/// （调用方回退 `LIKE`）。这里不提供真实 indexer，仅验证门控短路。
+/// 总开关门控：关闭时不构建 / 不触碰 search.db；`search` 仍会尝试 C# 参数化
+/// LIKE 降级（T2.11 决定，可能加载原生模块），库缺失时返回 null（调用方回退
+/// 既有 LIKE）。本文件把 `library.db` 指向不存在的路径，保持确定性。
 void main() {
-  setUp(() => appPrefsSnapshot = null);
+  setUp(() {
+    appPrefsSnapshot = null;
+    SearchService.debugLibraryDbPathOverride =
+        '${Directory.systemTemp.path}/archoera-gate-no-library.db';
+  });
   tearDown(() {
     appPrefsSnapshot = null;
     SearchService.instance.debugReindexOverride = null;
+    SearchService.debugLibraryDbPathOverride = null;
   });
 
-  test('快照缺失 / 总开关关：enabled=false，search 返回 null（回退 LIKE）', () async {
+  test('快照缺失 / 总开关关：enabled=false，降级库缺失 → search 返回 null', () async {
     final service = SearchService.instance;
     expect(service.enabled, isFalse);
     expect(await service.search('周杰伦'), isNull);

@@ -446,6 +446,11 @@ class _ThanksItem {
 
 const List<_ThanksItem> _kThanksDesign = [
   _ThanksItem(
+    'ArchoeraMusic-UI (UI design spec)',
+    'MIT (early: AGPL-3.0-or-later)',
+    'https://github.com/ArchoeraC/ArchoeraMusic-UI',
+  ),
+  _ThanksItem(
     'KuGouMusicApi',
     'MIT',
     'https://github.com/MakcRe/KuGouMusicApi',
@@ -462,7 +467,7 @@ const List<_ThanksItem> _kThanksDesign = [
   ),
   _ThanksItem(
     'AMLL (Apple Music-like Lyrics)',
-    'MIT',
+    'MIT (legacy)',
     'https://github.com/Steve-xmh/applemusic-like-lyrics',
   ),
 ];

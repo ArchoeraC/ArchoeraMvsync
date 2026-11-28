@@ -20,6 +20,7 @@ internal static class SearchLayerTests
     public static void Run()
     {
         CompilerGolden();
+        InitialsBigramQueries();
         QueryGates();
         EscapingSafety();
         CjkVariants();
@@ -28,7 +29,6 @@ internal static class SearchLayerTests
         LanguageProfile();
         QueryResultCache();
         FuzzyVocabularyRecall();
-        RankingIntegrity();
     }
 
     /* ------------------------------------------------------------------ */
@@ -40,7 +40,7 @@ internal static class SearchLayerTests
         var tokens = Analyzer.AnalyzeQuery("我爱你");
         const string expected = "(\"我爱 爱你\" AND (\"我\" OR \"我\"*) AND (\"你\" OR \"你\"*)"
             + " OR {pinyin_meta_tok pinyin_lyrics_tok} : \"wo ai ni\""
-            + " OR ({initials_meta_tok initials_lyrics_tok} : (\"wan\" OR \"wan\"*)))";
+            + " OR ({initials_meta_tok initials_lyrics_tok} : \"wa an\"))";
         var match = SearchQuery.CompileMatch(tokens, metadata: false);
         Program.Check("查询编译器: 我爱你 主趟", match == expected, match ?? "<null>");
 
@@ -49,6 +49,14 @@ internal static class SearchLayerTests
             "{title_tok artist_tok album_tok filename_tok pinyin_meta_tok initials_meta_tok reading_meta_tok} : ";
         Program.Check("查询编译器: metadata 列过滤",
             meta == metaPrefix + expected, meta ?? "<null>");
+
+        // T3.4 V4：歌词首字母关闭时首字母支只扫元数据列，拼音支不变。
+        const string prunedExpected = "(\"我爱 爱你\" AND (\"我\" OR \"我\"*) AND (\"你\" OR \"你\"*)"
+            + " OR {pinyin_meta_tok pinyin_lyrics_tok} : \"wo ai ni\""
+            + " OR ({initials_meta_tok} : \"wa an\"))";
+        var pruned = SearchQuery.CompileMatch(tokens, metadata: false, lyricsInitials: false);
+        Program.Check("查询编译器: 歌词首字母关闭 → 首字母支只扫元数据列",
+            pruned == prunedExpected, pruned ?? "<null>");
 
         var loose = SearchQuery.CompilePinyinLoose(Analyzer.AnalyzeQuery("周伦"), metadata: false);
         Program.Check("查询编译器: 周伦 拼音宽松含 n/l 模糊音",
@@ -128,6 +136,43 @@ internal static class SearchLayerTests
     }
 
     /// <summary>
+    /// T3.9 首字母 bigram 查询编译：段中间两字可命中、≥3 字为相邻短语、
+    /// 单字母仍被 <see cref="SearchQuery.MinInitialsBranchLength"/> 拦下、
+    /// 多段 AND（不能拼成跨段短语）、列收窄保持 T3.4 行为。
+    /// </summary>
+    private static void InitialsBigramQueries()
+    {
+        var middle = SearchQuery.CompileMatch(Tokens(initials: "nz"), metadata: false);
+        Program.Check("首字母 bigram: 段中间两字 → 单词元",
+            middle == "({initials_meta_tok initials_lyrics_tok} : \"nz\")",
+            middle ?? "<null>");
+
+        var whole = SearchQuery.CompileMatch(Tokens(initials: "wanzg"), metadata: false);
+        Program.Check("首字母 bigram: 整段 → 相邻短语",
+            whole == "({initials_meta_tok initials_lyrics_tok} : \"wa an nz zg\")",
+            whole ?? "<null>");
+
+        var prefix = SearchQuery.CompileMatch(Tokens(initials: "wan"), metadata: false);
+        Program.Check("首字母 bigram: 段首子串 → 相邻短语（不再是前缀 *）",
+            prefix == "({initials_meta_tok initials_lyrics_tok} : \"wa an\")",
+            prefix ?? "<null>");
+
+        var twoRuns = SearchQuery.CompileMatch(Tokens(initials: "wan zgl"), metadata: false);
+        Program.Check("首字母 bigram: 多段各自成短语并以 AND 连接",
+            twoRuns == "({initials_meta_tok initials_lyrics_tok} : \"wa an\" AND \"zg gl\")",
+            twoRuns ?? "<null>");
+
+        var pruned = SearchQuery.CompileMatch(Tokens(initials: "nz"), metadata: false, lyricsInitials: false);
+        Program.Check("首字母 bigram: 歌词首字母关闭仍只扫元数据列",
+            pruned == "({initials_meta_tok} : \"nz\")", pruned ?? "<null>");
+
+        Program.Check("首字母 bigram: 单字母段不生成该支",
+            SearchQuery.CompileMatch(Tokens(initials: "w"), metadata: false) is null);
+        Program.Check("首字母 bigram: 两段单字母也不生成该支",
+            SearchQuery.CompileMatch(Tokens(initials: "w z"), metadata: false) is null);
+    }
+
+    /// <summary>
     /// v13 查询门控：单字列限制、读音支脚本分流、缺读音跳过、跨语言单字裁剪、
     /// 丢词降级与模糊短词 / 首字符约束。
     /// </summary>
@@ -137,6 +182,14 @@ internal static class SearchLayerTests
         var singleCjk = SearchQuery.CompileMatch(Analyzer.AnalyzeQuery("爱"), metadata: false);
         Program.Check("门控: 单字 CJK 限定可见文本列 + 前缀",
             singleCjk == "{title_tok artist_tok album_tok filename_tok} : ((\"爱\" OR \"爱\"*))",
+            singleCjk ?? "<null>");
+        // 回归（analyzer v14 / T3.7）：字面歌词列不再存 unigram，单字查询也不得进入
+        // lyrics_tok / lyrics_tr_tok / lyrics_rom_tok——两边语义必须一致。
+        Program.Check("门控: 单字不进入歌词列（v14 无歌词 unigram 的前提）",
+            singleCjk is not null
+            && !singleCjk.Contains("lyrics_tok", StringComparison.Ordinal)
+            && !singleCjk.Contains("lyrics_tr_tok", StringComparison.Ordinal)
+            && !singleCjk.Contains("lyrics_rom_tok", StringComparison.Ordinal),
             singleCjk ?? "<null>");
 
         // 单字拉丁：是真实的首字母检索，保留首字母列但跳过拼音支。
@@ -238,10 +291,10 @@ internal static class SearchLayerTests
         Program.Check("转义: 含引号类 bigram 不合并成短语",
             quoted == "\"我\"\"\" AND \"\"\"爱\"", quoted ?? "<null>");
 
-        // 首字母串含引号 / 空格：列过滤仍闭合（列过滤前缀不被词元内容带偏）。
-        var initials = SearchQuery.CompileMatch(Tokens(initials: "a\"b"), metadata: false);
-        Program.Check("转义: 首字母含引号仍闭合列过滤",
-            initials == "({initials_meta_tok initials_lyrics_tok} : (\"a\"\"b\" OR \"a\"\"b\"*))",
+        // 首字母支（v15）：整段首字母分解为 bigram 短语；列过滤仍闭合。
+        var initials = SearchQuery.CompileMatch(Tokens(initials: "wanzg"), metadata: false);
+        Program.Check("转义: 首字母 bigram 短语 + 列过滤闭合",
+            initials == "({initials_meta_tok initials_lyrics_tok} : \"wa an nz zg\")",
             initials ?? "<null>");
 
         // 跨语言候选含引号：同样按字面量转义。
@@ -358,21 +411,18 @@ internal static class SearchLayerTests
             var built = EndToEnd.RunEngine(db, index, full: true, lrc: false);
             Program.Check("查询层: 建库 12 首", built.Indexed == 12, built.Indexed.ToString());
 
-            // T1-8：模糊词典直接读索引自身的 FTS 词表（不落盘、不改 schema）。
-            using (var store = new FtsStore())
-            {
-                store.OpenReadOnly(index);
-                var meta = store.ReadMeta();
-                Program.Check("语言画像: 混合库四项齐全",
-                    meta.HasJapanese && meta.HasKorean && meta.HasHan && meta.HasLatin,
-                    $"{meta.HasJapanese}/{meta.HasKorean}/{meta.HasHan}/{meta.HasLatin}");
+            // T1-8：模糊词典直接读 EraStore 词典（不落盘、不改 schema）。
+            var manifest = EndToEnd.ReadManifest(index);
+            var meta = SearchSession.MetaFromManifest(manifest);
+            Program.Check("语言画像: 混合库四项齐全",
+                meta.HasJapanese && meta.HasKorean && meta.HasHan && meta.HasLatin,
+                $"{meta.HasJapanese}/{meta.HasKorean}/{meta.HasHan}/{meta.HasLatin}");
 
-                var vocabulary = store.LoadFuzzyVocabulary();
-                Program.Check("模糊词典: 从 FTS 词表加载", vocabulary.Count > 10,
-                    vocabulary.Count.ToString());
-                Program.Check("模糊词典: 只含 ASCII 词元",
-                    vocabulary.All(t => t.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))));
-            }
+            var vocabulary = EraVocabulary(index);
+            Program.Check("模糊词典: 从 EraStore 词典加载", vocabulary.Count > 10,
+                vocabulary.Count.ToString());
+            Program.Check("模糊词典: 只含 ASCII 词元",
+                vocabulary.All(t => t.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))));
 
             // 1) 主趟精确：中文标题命中且不付兜底成本。
             var sunny = Run(index, "晴天");
@@ -528,14 +578,10 @@ internal static class SearchLayerTests
             }
             EndToEnd.RunEngine(db, index, full: true, lrc: false);
 
-            using (var store = new FtsStore())
-            {
-                store.OpenReadOnly(index);
-                var meta = store.ReadMeta();
-                Program.Check("语言画像: 纯拉丁库只置拉丁位",
-                    !meta.HasJapanese && !meta.HasKorean && !meta.HasHan && meta.HasLatin,
-                    $"{meta.HasJapanese}/{meta.HasKorean}/{meta.HasHan}/{meta.HasLatin}");
-            }
+            var meta = SearchSession.MetaFromManifest(EndToEnd.ReadManifest(index));
+            Program.Check("语言画像: 纯拉丁库只置拉丁位",
+                !meta.HasJapanese && !meta.HasKorean && !meta.HasHan && meta.HasLatin,
+                $"{meta.HasJapanese}/{meta.HasKorean}/{meta.HasHan}/{meta.HasLatin}");
 
             // 读音趟：库内无日 / 韩内容 → 直接跳过，不编译也不执行。
             var kurarin = Run(index, "kurarin", fuzzy: true);
@@ -730,83 +776,40 @@ internal static class SearchLayerTests
     private static string Join(IReadOnlyList<string> values) => string.Join(',', values);
 
     /// <summary>
-    /// **排序完整性回归**（守一个曾经静默失效的生产 bug）。
-    ///
-    /// 历史：`FtsStore.Search` 早期用
-    /// <c>WHERE rowid IN (SELECT rowid ... MATCH ? LIMIT @cap) ORDER BY bm25(...)</c>
-    /// 实现「候选集上限」。FTS5 的 <c>bm25()</c> **只在含 MATCH 的查询块内求值**，
-    /// 该写法的外层查询不匹配 → 每行分数恒为 <c>0</c>，排序退化成 rowid 顺序，
-    /// **不报错也不抛异常**，等于相关性排序整体失效（默认 cap=5000 时对所有查询生效）。
-    ///
-    /// 本用例用「文档相关度差异明显」的语料断言**顺序**（而非仅命中集合），
-    /// 一旦有人重新引入同类写法，分数会退化为相同值、顺序断言立刻失败。
+    /// 从 EraStore 词典加载可检索的 ASCII 拉丁 / 数字词条（与生产模糊词典同口径：
+    /// 只扫文本列，拼音 / 首字母 / 读音列由各自的查询支处理）。
     /// </summary>
-    private static void RankingIntegrity()
+    private static List<string> EraVocabulary(string index)
     {
-        var root = Path.Combine(
-            Path.GetTempPath(), "archoera-ranking-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var db = Path.Combine(root, "library.db");
-            var index = Path.Combine(root, "search.db");
-            var media = Path.Combine(root, "media");
-            Directory.CreateDirectory(media);
+        var dir = EndToEnd.EraDir(index);
+        var name = EraStore.CurrentPointer.Read(dir)
+            ?? throw new InvalidOperationException("EraStore CURRENT 缺失");
+        using var reader = new EraStore.StoreReader(Path.Combine(dir, name));
 
-            EndToEnd.CreateLibrary(db, generation: 1);
-            using (var conn = EndToEnd.Open(db))
+        ReadOnlySpan<EraStore.FieldId> wanted = stackalloc[]
+        {
+            EraStore.FieldId.Title,
+            EraStore.FieldId.Artist,
+            EraStore.FieldId.Album,
+            EraStore.FieldId.Filename,
+            EraStore.FieldId.Lyrics,
+            EraStore.FieldId.LyricsTranslation,
+        };
+        var terms = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var segment in reader.OpenPerSegment())
+        {
+            foreach (var info in segment.Dict.ReadAll())
             {
-                // 三首歌的区别只在「标题命中」vs「仅歌词命中」的次数，便于用 bm25 列权重
-                // 拉开差距：标题命中（权重 4.0）应稳定排在仅歌词命中（0.6）之前。
-                EndToEnd.InsertTrack(conn, "title", Path.Combine(media, "t.mp3"), "晴天",
-                    """[{"name":"A"}]""", null, null, 1000);
-                EndToEnd.InsertTrack(conn, "lyrics", Path.Combine(media, "l.mp3"), "别的名字",
-                    """[{"name":"B"}]""", null, "晴天", 2000);
-                EndToEnd.InsertTrack(conn, "both", Path.Combine(media, "b.mp3"), "晴天",
-                    """[{"name":"C"}]""", null, "晴天 晴天 晴天", 3000);
+                if (info.Key.Length == 0) continue;
+                if (!wanted.Contains((EraStore.FieldId)info.Key[0])) continue;
+                var term = System.Text.Encoding.UTF8.GetString(
+                    info.Key, 1, info.Key.Length - 1);
+                if (LibraryDb.IsAsciiWord(term)) terms.Add(term);
             }
-            EndToEnd.RunEngine(db, index, full: true, lrc: false);
-            SearchSession.CloseCached();
-
-            using var store = new FtsStore();
-            store.OpenReadOnly(index);
-
-            // 直查 FtsStore：分数的**区分度**是排序有效性的直接证据。
-            var expression = SearchQuery.CompileMatch(Analyzer.AnalyzeQuery("晴天"), metadata: false);
-            Program.Check("排序完整性: 表达式可编译", expression is not null, expression ?? "<null>");
-            var rows = store.Search(expression!, limit: 100, offset: 0,
-                candidateCap: FtsStore.DefaultCandidateCap);
-            Program.Check("排序完整性: 命中 3 首", rows.Count == 3, rows.Count.ToString());
-
-            var distinct = rows.Select(r => Math.Round(r.Score, 6)).Distinct().Count();
-            Program.Check(
-                "排序完整性: bm25 分数有区分度（退化时全为 0）",
-                distinct > 1,
-                $"不同分值 {distinct} 个：" + string.Join(',', rows.Select(r => r.Score.ToString("F4"))));
-
-            // 顺序：标题命中（权重更高）必须排在仅歌词命中之前。
-            var trackIds = store.ResolveTrackIds(rows.Select(r => r.DocId).ToList());
-            var order = rows.Select(r => trackIds[r.DocId]).ToList();
-            var titleRank = order.IndexOf("title");
-            var lyricsRank = order.IndexOf("lyrics");
-            Program.Check(
-                "排序完整性: 标题命中排在仅歌词命中之前",
-                titleRank >= 0 && lyricsRank >= 0 && titleRank < lyricsRank,
-                "顺序=" + string.Join(',', order));
-
-            // candidateCap 不应改变结果（该参数保留仅为 ABI 兼容）。
-            var capped = store.Search(expression!, limit: 100, offset: 0, candidateCap: 500);
-            var cappedIds = store.ResolveTrackIds(capped.Select(r => r.DocId).ToList());
-            Program.Check(
-                "排序完整性: candidateCap 不再裁剪候选（结果一致）",
-                capped.Select(r => cappedIds[r.DocId]).SequenceEqual(order),
-                string.Join(',', capped.Select(r => cappedIds[r.DocId])));
         }
-        finally
-        {
-            SearchSession.CloseCached();
-            EndToEnd.TryDelete(root);
-        }
+        var list = terms.ToList();
+        list.Sort(StringComparer.Ordinal);
+        return list;
     }
 
     private static string Dump(SearchResult result)

@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import '../../stores/app_prefs.dart';
 import '../log/log.dart';
 import '../scanner/library_scanner.dart';
+import 'data_pack_check.dart';
 import 'indexer_ffi.dart';
 import 'query_log.dart';
 import 'query_log_file.dart';
@@ -26,19 +27,19 @@ import 'search_models.dart';
 ///     indexer 模块、**不建库**、**不查询**，[search] 直接返回 null（调用方
 ///     回退现有 `LIKE`），零成本；
 ///   - 开启时按需加载 indexer（NativeAOT 常驻、不 unload），`search.db` 缺失或
-///     schema 版本不符时在**后台 isolate** 跑 `indexer_run`（全量 / 增量），
+///     schema 版本不符时在**后台 isolate** 跑 `era_index_run`（全量 / 增量），
 ///     完成后以只读连接打开 [SearchIndex]；
 ///   - 任何失败（模块缺失 / 构建失败 / 查询异常）都降级为返回 null，**绝不抛到
 ///     UI**（索引是派生数据，可随时重建）。
 ///
 /// **构建串行化（build gate）**：`rebuild` / `reindex` / `deleteIndex` 以及
 /// [ensureIndex] 的「构建 + 重开」关键段都是**互斥**的——全部经单一异步门
-/// [_serialize] 排队，后到者等待而非并发执行。并发调用 NativeAOT `indexer_run`
+/// [_serialize] 排队，后到者等待而非并发执行。并发调用 NativeAOT `era_index_run`
 /// （同一 `search.db` / `-wal` / `-shm`）会互相破坏，故必须串行。
 /// 该门只是 Dart 侧 `Future` 链式串行（不是内核等待式竞态判定），门内**绝不**
 /// 调用会再次取门的公开方法，避免自锁。
 ///
-/// 路径：`search.db` = `<数据目录>/database/search.db`；`library.db` 走
+/// 路径：索引目录 = `<数据目录>/database/search.era/`（`search.db` 仅作目录锚点）；`library.db` 走
 /// [LibraryScanner.defaultDbPath]（与 scanner 同一真值库）。
 class SearchService {
   SearchService._();
@@ -46,7 +47,7 @@ class SearchService {
   /// 全局单例（进程内一个 indexer 句柄 / 一份只读连接）。
   static final SearchService instance = SearchService._();
 
-  /// `search.db` 缺省路径（与 `library.db` 同目录）。
+  /// 索引目录锚点（与 `library.db` 同目录；实际数据在 `search.era/`）。
   static String defaultSearchDbPath() {
     final override = debugSearchDbPathOverride;
     if (override != null && override.isNotEmpty) return override;
@@ -120,6 +121,11 @@ class SearchService {
   @visibleForTesting
   bool Function()? debugCancelOverride;
 
+  /// 测试接缝：非空时用这个假 health 载荷替代 `era_search_health`（T4.3）。
+  /// 供单测验证「数据包不一致 → 设置页可操作提示」的接线，不触碰原生库。
+  @visibleForTesting
+  Map<String, dynamic>? Function()? debugDataPackHealthOverride;
+
   /// 启动预构建是否已触发（幂等门：仅首次 [warmUpOnStartup] 真正生效）。
   bool _startupWarmUpTriggered = false;
 
@@ -129,7 +135,56 @@ class SearchService {
   /// 最近一次构建结果摘要（诊断 / 设置页展示用）。
   IndexerRunResult? lastResult;
 
-  /// 最近一次构建失败的**具体**原因（`indexer_run` 退出信息 / isolate 异常文本）；
+  /// 最近一次 `era_search_health` 的原始载荷（设置页诊断块的数据来源）。
+  ///
+  /// 在索引打开 / 数据包校验时填充（[_checkDataPackLocked]），**UI 线程只读缓存**，
+  /// 不在 `build` 里发起 FFI / IO。未就绪或调用失败时为 null。
+  Map<String, dynamic>? _healthSnapshot;
+
+  /// 健康快照（只读；可为 null）。供 `SearchIndexDiagnostics.fromHealth` 解析。
+  Map<String, dynamic>? get healthSnapshot => _healthSnapshot;
+
+  /// 刷新健康快照（诊断用）：在**后台 isolate**读 `era_search_health`，
+  /// 绝不抛异常。
+  ///
+  /// - 未启用 / 模块未加载 / 构建门被占用：只返回现有缓存（可能为 null），
+  ///   不抢占构建资源；
+  /// - 读取失败：记录 warn 后返回旧缓存；成功则替换缓存。
+  ///
+  /// 生产常态是：索引打开时 [_checkDataPackLocked] 已填充快照，这里只用于
+  /// 「设置页打开 / 重建完成」时按需补一次，避免 UI 线程做 IO。
+  Future<Map<String, dynamic>?> refreshHealth() async {
+    if (_disposed) return _healthSnapshot;
+
+    // 测试接缝优先：用假载荷直接填充，不触碰原生库（与数据包校验同一 seam）。
+    final override = debugDataPackHealthOverride;
+    if (override != null) {
+      try {
+        _healthSnapshot = override();
+      } catch (err) {
+        Log.w('search', '健康快照接缝失败（保留旧值）: $err');
+      }
+      return _healthSnapshot;
+    }
+
+    if (!enabled || _gateBusy) return _healthSnapshot;
+    final soPath = _soPath;
+    if (soPath == null) return _healthSnapshot;
+    try {
+      final snapshot = await IndexerLibrary.healthInIsolate(
+        soPath: soPath,
+        indexPath: defaultSearchDbPath(),
+      );
+      if (_disposed) return null;
+      _healthSnapshot = snapshot;
+      return snapshot;
+    } catch (err) {
+      Log.w('search', '健康快照刷新失败（保留旧值）: $err');
+      return _healthSnapshot;
+    }
+  }
+
+  /// 最近一次构建失败的**具体**原因（`era_index_run` 退出信息 / isolate 异常文本）；
   /// 未构建或成功时为 null。
   ///
   /// 由 [_buildAndOpenLocked] 转述进 [status]（error 态的 `message`），使设置页
@@ -149,8 +204,35 @@ class SearchService {
   /// `.lrc` 侧车歌词子开关（仅总开关开启时才有意义）。
   bool get indexLrc => appPrefsSnapshot?.indexLrc ?? false;
 
+  /// 元数据拼音子开关（默认关；仅总开关开启时才有意义）。
+  bool get pinyin => appPrefsSnapshot?.pinyin ?? false;
+
+  /// 歌词拼音子开关（默认关；独立于元数据拼音）。
+  bool get lyricsPinyin => appPrefsSnapshot?.lyricsPinyin ?? false;
+
   /// 歌词罗马音生成子开关（仅总开关开启时才有意义；T2-9）。
   bool get romajiLyrics => appPrefsSnapshot?.romajiLyrics ?? false;
+
+  /// 歌词首字母列子开关（仅总开关开启时才有意义；T3.4 V4，默认关）。
+  bool get initialsLyrics => appPrefsSnapshot?.initialsLyrics ?? false;
+
+  /// 构建期传给索引器的 `options_json`（纯函数，供单测断言接线）。
+  ///
+  /// 键名与 FFI 解析一致：`initialsLyrics` 为 T3.4 V4 新增（缺省 false）。
+  @visibleForTesting
+  static Map<String, dynamic> buildOptionsMap({
+    required bool indexLrc,
+    required bool pinyin,
+    required bool lyricsPinyin,
+    required bool romajiLyrics,
+    required bool initialsLyrics,
+  }) => {
+    'index_lrc': indexLrc,
+    'pinyin': pinyin,
+    'lyrics_pinyin': lyricsPinyin,
+    'romaji_lyrics': romajiLyrics,
+    'initialsLyrics': initialsLyrics,
+  };
 
   /// 搜索：返回命中的 `trackId`（已按相关度排序）；未开启 / 未就绪 / 失败
   /// 一律返回 null，调用方回退 `LIKE`。空关键字同样返回 null（等于原列表）。
@@ -159,34 +241,31 @@ class SearchService {
   /// 直接返回 null 回退 `LIKE`（构建完成后再次搜索即命中）；其余情况经
   /// [ensureIndex] 走构建门。任何异常都降级返回 null，**绝不抛到 UI**。
   ///
-  /// [fuzzy]（默认开）启用**两趟容错**（设计文档 §4.6）：精确命中不足 [fuzzyMinExact]
-  /// 且查询含拉丁词元时，追加编辑距离 ≤ 1 的模糊查询。失败仍降级返回 null，不抛到 UI。
+  /// [scope] 取 `all` / `metadata` / `lyrics`，直接映射为请求 JSON 的 `scope`。
+  ///
+  /// 服务端默认 `default@1` 方案已启用兜底（渐进趟 / 容错 / 跨语言），行为与旧
+  /// `fuzzy: true` 一致；Dart 不再传 `fuzzy` / `minExact` / `offset` 等废弃字段。
+  /// 失败仍降级返回 null，不抛到 UI。
   Future<List<LocalSearchHit>?> search(
     String query, {
     LocalSearchScope scope = LocalSearchScope.all,
     int limit = 200,
-    int offset = 0,
-    bool fuzzy = true,
-    int fuzzyMinExact = 1,
   }) async {
-    // 总开关关闭：第一道门，零成本回退（不触碰模块 / search.db）。
-    if (!enabled) return null;
+    // 总开关关闭：仍尝试 C# 参数化 LIKE 降级（T2.11 决定，接受加载原生库），
+    // 失败再返回 null 让调用方回退既有 LIKE。分页器在关闭态本就不会走到这里，
+    // 故生产路径仍保持零成本。
+    if (!enabled) return await searchFallback(query, limit: limit);
     final keyword = query.trim();
     if (keyword.isEmpty) return null;
     try {
       final index = await _resolveIndexForSearch();
-      if (index == null) return null;
+      // 索引未就绪（构建中 / 构建失败 / 版本不符）：走 C# 参数化 LIKE 降级（T2.12），
+      // 而不是回 Dart 拼 SQL；本次降级失败才返回 null 让调用方走既有 LIKE。
+      if (index == null) return await searchFallback(keyword, limit: limit);
       final started = QueryLogger.enabled ? DateTime.now() : null;
       // 计数器是累加值：记录前先取快照，查询后再求差，才能得到**本次**实际趟次。
       final before = index.passCounts;
-      final hits = index.search(
-        keyword,
-        scope: scope,
-        limit: limit,
-        offset: offset,
-        fuzzy: fuzzy,
-        minExact: fuzzyMinExact,
-      );
+      final hits = index.search(keyword, scope: scope, limit: limit);
       if (started != null) {
         _recordQuery(
           keyword,
@@ -200,6 +279,69 @@ class SearchService {
     } catch (err) {
       Log.w('search', '本地索引搜索失败，回退 LIKE: $err');
       _status = LocalSearchStatus.error('$err');
+      return null;
+    }
+  }
+
+  /// 无索引时的降级检索（`era_search_fallback`，T2.12）：由 C# 只读 `library.db`，
+  /// 参数化 LIKE + 字段权重（title > artist > album），Dart 不再拼 SQL。
+  ///
+  /// - 空关键字 / 原生模块不可用 / 库不存在 → 返回 null；
+  /// - 返回 null 表示调用方应回退既有 Dart LIKE；空列表是**真实空结果**。
+  ///
+  /// 不检查总开关（T2.11）：开关关闭时也允许显式调用本方法（会加载原生库），
+  /// 是否调用由上层决定。
+  ///
+  /// 任何异常都降级返回 null，绝不抛到 UI。
+  Future<List<LocalSearchHit>?> searchFallback(
+    String query, {
+    int limit = 200,
+  }) async {
+    if (_disposed) return null;
+    final keyword = query.trim();
+    if (keyword.isEmpty) return null;
+    final lib = _ensureLib();
+    if (lib == null) return null;
+    final libraryDb =
+        debugLibraryDbPathOverride ?? LibraryScanner.defaultDbPath();
+    if (!File(libraryDb).existsSync()) return null;
+    try {
+      final request = jsonEncode({
+        'api': IndexerLibrary.apiVersion,
+        'query': keyword,
+        'scope': 'metadata',
+        'limit': limit,
+        'total': 'exact',
+        'explain': false,
+        'highlight': false,
+        'snippet': false,
+      });
+      final (code, text) = lib.fallbackSearch(libraryDb, request);
+      if (code != 0) {
+        Log.w('search', '降级检索失败（code=$code），回退 Dart LIKE: $text');
+        return null;
+      }
+      final root = jsonDecode(text) as Map<String, dynamic>;
+      if (root['api'] != IndexerLibrary.apiVersion) return null;
+      final items = root['items'];
+      if (items is! List) return const [];
+      final hits = <LocalSearchHit>[];
+      for (final raw in items) {
+        if (raw is! Map<String, dynamic>) continue;
+        final trackId = raw['trackId'];
+        final score = raw['score'];
+        if (trackId is! String || score is! num) continue;
+        hits.add(
+          LocalSearchHit(
+            trackId: trackId,
+            score: score.toDouble(),
+            pass: LocalSearchPass.fromName(raw['pass']),
+          ),
+        );
+      }
+      return hits;
+    } catch (err) {
+      Log.w('search', '降级检索异常，回退 Dart LIKE: $err');
       return null;
     }
   }
@@ -230,20 +372,65 @@ class SearchService {
     }
   }
 
-  /// 分析文本得到与索引同构的词元；供**结果高亮**（拼音 / 首字母命中）复用同一
-  /// 原生分析器（保证与索引 / 查询侧一致）。
+  /// 按 trackId 批量补高亮 / 歌词片段（`era_search_decorate`，T2.11）。
   ///
-  /// 复用已加载的 indexer 句柄（[_lib]），**不**触发加载 / 构建 / 查询——
-  /// 高亮是展示层增强，未就绪（总开关关闭、模块未加载）时返回 null，
-  /// 调用方降级为仅字面高亮。任何异常都返回 null，绝不抛到 UI。
-  AnalyzerTokens? analyze(String text) {
-    if (!enabled || _disposed) return null;
-    final lib = _lib;
+  /// 由分页器在载入一页（≤300 行）后调用：只读 `library.db`，不重跑排名。
+  /// 返回 null 表示装饰不可用（模块 / 库缺失或调用失败），调用方保持无高亮。
+  /// 片段已按「元数据已命中不展示片段」过滤（与旧 Dart 行为一致）。
+  Future<SearchDecorations?> decorate(
+    String query,
+    List<String> trackIds,
+  ) async {
+    if (_disposed) return null;
+    final keyword = query.trim();
+    if (keyword.isEmpty || trackIds.isEmpty) return null;
+    final lib = _ensureLib();
     if (lib == null) return null;
+    final libraryDb =
+        debugLibraryDbPathOverride ?? LibraryScanner.defaultDbPath();
+    if (!File(libraryDb).existsSync()) return null;
     try {
-      return lib.analyze(text);
+      final request = jsonEncode({
+        'api': IndexerLibrary.apiVersion,
+        'query': keyword,
+        'trackIds': trackIds,
+        'snippet': true,
+      });
+      final (code, text) = lib.decorateSearch(libraryDb, request);
+      if (code != 0) {
+        Log.w('search', '结果装饰失败（code=$code），保持无高亮: $text');
+        return null;
+      }
+      final root = jsonDecode(text) as Map<String, dynamic>;
+      if (root['api'] != IndexerLibrary.apiVersion) return null;
+
+      final highlights = <String, LocalTrackHighlight>{};
+      final rawHighlights = root['highlights'];
+      if (rawHighlights is Map) {
+        for (final entry in rawHighlights.entries) {
+          final id = entry.key;
+          if (id is! String) continue;
+          final parsed = LocalTrackHighlight.tryParse(entry.value);
+          if (parsed != null) highlights[id] = parsed;
+        }
+      }
+
+      final snippets = <String, String>{};
+      final rawSnippets = root['snippets'];
+      if (rawSnippets is Map) {
+        for (final entry in rawSnippets.entries) {
+          final id = entry.key;
+          if (id is! String) continue;
+          final parsed = LocalLyricSnippet.tryParse(entry.value);
+          if (parsed == null) continue;
+          final highlight = highlights[id];
+          if (highlight != null && highlight.hasMetadataMatch) continue;
+          snippets[id] = parsed.text;
+        }
+      }
+      return SearchDecorations(highlights: highlights, snippets: snippets);
     } catch (err) {
-      Log.w('search', '分析器调用失败（高亮降级）: $err');
+      Log.w('search', '结果装饰异常，保持无高亮: $err');
       return null;
     }
   }
@@ -319,7 +506,7 @@ class SearchService {
     });
   }
 
-  /// 请求取消进行中的构建（透传 `indexer_cancel`）。
+  /// 请求取消进行中的构建（透传 `era_index_cancel`）。
   bool cancel() {
     final override = debugCancelOverride;
     if (override != null) return override();
@@ -355,7 +542,7 @@ class SearchService {
   /// **不删除** `search.db`（派生数据默认保留，避免每次开关都全量重建）；
   /// 需要释放空间走 [deleteIndex]。总开关关闭后 [search] 本就返回 null，
   /// 这里额外：
-  /// - 经 [cancel] 请求取消在途 `indexer_run`（透传 `indexer_cancel`；无在途
+  /// - 经 [cancel] 请求取消在途 `era_index_run`（透传 `era_index_cancel`；无在途
   ///   构建时为 no-op）——**不绕过构建门**，只是取消信号，门内关键段仍串行；
   /// - 释放连接；进行中的构建会在其门内段结束时发现总开关已关（`!enabled`）
   ///   而**放弃重开**（不复活连接），状态回到 [LocalSearchStatus.disabled]。
@@ -363,6 +550,7 @@ class SearchService {
     if (_disposed) return;
     cancel();
     _closeIndexLocked();
+    _healthSnapshot = null;
     _status = LocalSearchStatus.disabled;
   }
 
@@ -373,7 +561,18 @@ class SearchService {
     await _serialize(() async {
       if (_disposed) return;
       _closeIndexLocked();
+      _healthSnapshot = null;
       final path = defaultSearchDbPath();
+      // T3.13 起索引本体是 search.era/（CURRENT + 世代文件）；旧的 search.db
+      // 及其 WAL 侧车只作残留清理，不能只删 search.db。
+      final eraDir = Directory(
+        '${File(path).parent.path}${Platform.pathSeparator}search.era',
+      );
+      try {
+        if (eraDir.existsSync()) eraDir.deleteSync(recursive: true);
+      } catch (_) {
+        // 删除失败不阻断（下次构建覆盖 / 交由用户处理）
+      }
       for (final suffix in const ['', '-wal', '-shm']) {
         try {
           final file = File('$path$suffix');
@@ -388,19 +587,24 @@ class SearchService {
 
   /// 关闭只读连接并释放回调。
   ///
-  /// 设置关闭标志（后续入口拒绝开新连接）、请求取消在途 `indexer_run`；在途
+  /// 设置关闭标志（后续入口拒绝开新连接）、请求取消在途 `era_index_run`；在途
   /// 关键段发现已关闭后**不再开新连接**。绝不抛异常。
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     cancel();
     _closeIndexLocked();
+    _healthSnapshot = null;
     if (!_progressDisposed) {
       _progressDisposed = true;
       progress.dispose();
     }
     _status = LocalSearchStatus.disabled;
   }
+
+  /// 测试接缝：直接设置状态（仅单测使用；供 UI 断言错误文案）。
+  @visibleForTesting
+  void debugSetStatus(LocalSearchStatus status) => _status = status;
 
   /// 测试接缝：把单例恢复到初始可用状态（仅单测使用）。
   ///
@@ -418,9 +622,11 @@ class SearchService {
     _status = LocalSearchStatus.disabled;
     lastResult = null;
     _buildFailure = null;
+    _healthSnapshot = null;
     debugReindexOverride = null;
     debugBuildExecutor = null;
     debugCancelOverride = null;
+    debugDataPackHealthOverride = null;
     debugSearchDbPathOverride = null;
     debugLibraryDbPathOverride = null;
     _startupWarmUpTriggered = false;
@@ -429,11 +635,8 @@ class SearchService {
 
   // ---------------------------------------------------------------- 内部
 
-  /// `search.db` 缺失 / schema 不符 → 需要全量构建。
-  bool _needsFullBuild() {
-    final searchDb = defaultSearchDbPath();
-    return !File(searchDb).existsSync() || !SearchIndex.isAvailable(searchDb);
-  }
+  /// EraStore 缺失 / 未就绪 → 需要全量构建。
+  bool _needsFullBuild() => !SearchIndex.isAvailable(defaultSearchDbPath());
 
   /// 构建 + 开库关键段（**必须**在构建门内调用；自身不取门）。
   ///
@@ -507,9 +710,8 @@ class SearchService {
   void _closeIndexLocked() {
     _index?.close();
     _index = null;
-    // C# 侧按 search.db 路径缓存只读查询会话：重建 / 删除 / 关闭前显式释放，
-    // 否则 Windows 上残留句柄会阻塞 search.db 的替换（File.Move）。
-    _lib?.closeQuery();
+    // 查询句柄由 [SearchIndex.close]（→ `era_search_close`）释放：重建 / 删除 /
+    // 关闭前必须显式关闭，否则 Windows 上残留句柄会阻塞 search.db 的替换。
   }
 
   SearchIndex? _openIndexLocked() {
@@ -519,9 +721,24 @@ class SearchService {
       return null;
     }
     _closeIndexLocked();
-    final index = SearchIndex.open(defaultSearchDbPath(), lib: lib);
+    final libraryDb =
+        debugLibraryDbPathOverride ?? LibraryScanner.defaultDbPath();
+    final index = SearchIndex.open(
+      defaultSearchDbPath(),
+      lib: lib,
+      libraryDbPath: libraryDb,
+    );
     if (index == null) {
-      _status = LocalSearchStatus.error('search.db 不可用（schema 不符或损坏）');
+      _status = LocalSearchStatus.error('EraStore 索引不可用（缺失或元数据不符）');
+      return null;
+    }
+    // T4.3 §5.5.3：数据包与索引 / 原生库必须同源（只比 id，不在 Dart 重算哈希）。
+    // 不一致时不使用该索引（关闭句柄 → 搜索回退 LIKE），并在设置页给出可操作提示。
+    final dataPackProblem = _checkDataPackLocked();
+    if (dataPackProblem != null) {
+      index.close();
+      _status = LocalSearchStatus.error(dataPackProblem);
+      Log.w('search', '数据包校验失败，索引停用: $dataPackProblem');
       return null;
     }
     _index = index;
@@ -529,7 +746,37 @@ class SearchService {
     return index;
   }
 
-  /// 在后台 isolate 跑 `indexer_run`；进度经 [progress] 暴露（不阻塞 UI）。
+  /// 数据包一致性检查（T4.3）：Dart 只比 id，不重算哈希。
+  ///
+  /// 返回 `null` 表示一致 / 无法校验（旧原生库无 `dataPack` 字段：记一条 warn 后放行，
+  /// 不阻断既有行为）；否则返回设置页要展示的可操作文案。
+  String? _checkDataPackLocked() {
+    final override = debugDataPackHealthOverride;
+    if (override != null) {
+      final payload = override();
+      // 无论是否一致都保留载荷：设置页诊断块需要它展示版本 / 数据包状态。
+      _healthSnapshot = payload;
+      return payload == null ? null : checkDataPackHealth(payload);
+    }
+    final lib = _lib;
+    if (lib == null) return null;
+    try {
+      final health = lib.health(defaultSearchDbPath());
+      // 打开 / 校验即缓存健康快照，UI 只读缓存（不在设置页做 IO）。
+      _healthSnapshot = health;
+      if (health == null) {
+        Log.w('search', 'era_search_health 无可用载荷：跳过数据包校验');
+        return null;
+      }
+      return checkDataPackHealth(health);
+    } catch (err) {
+      _healthSnapshot = null;
+      Log.w('search', '数据包校验异常（已忽略）: $err');
+      return null;
+    }
+  }
+
+  /// 在后台 isolate 跑 `era_index_run`；进度经 [progress] 暴露（不阻塞 UI）。
   ///
   /// isolate 入口是 [IndexerLibrary.runInIsolate]（**静态**）：`Isolate.run` 的闭包
   /// 若留在本实例方法内，会经上下文链连带捕获本服务（持有 `_gateTail`（Future）等
@@ -548,14 +795,19 @@ class SearchService {
         debugLibraryDbPathOverride ?? LibraryScanner.defaultDbPath();
     final searchDb = defaultSearchDbPath();
     File(searchDb).parent.createSync(recursive: true);
-    final optionsJson = jsonEncode({
-      'index_lrc': indexLrc,
-      'pinyin': true,
-      'romaji_lyrics': romajiLyrics,
-    });
+    final optionsJson = jsonEncode(
+      buildOptionsMap(
+        indexLrc: indexLrc,
+        pinyin: pinyin,
+        lyricsPinyin: lyricsPinyin,
+        romajiLyrics: romajiLyrics,
+        initialsLyrics: initialsLyrics,
+      ),
+    );
 
-    final callable =
-        NativeCallable<Void Function(Pointer<Void>)>.listener(_handleProgress);
+    final callable = NativeCallable<Void Function(Pointer<Void>)>.listener(
+      _handleProgress,
+    );
     _setProgress(null);
     _buildFailure = null;
     try {
@@ -570,12 +822,13 @@ class SearchService {
       );
       if (_disposed) return false;
       if (code != 0) {
-        _buildFailure = text.isEmpty ? 'indexer_run 退出码 $code' : text;
+        _buildFailure = _buildErrorMessage(code, text);
         Log.w('search', '索引构建失败（exit=$code）: $text');
         return false;
       }
-      lastResult =
-          IndexerRunResult.fromJson(jsonDecode(text) as Map<String, dynamic>);
+      lastResult = IndexerRunResult.fromJson(
+        jsonDecode(text) as Map<String, dynamic>,
+      );
       return true;
     } catch (err) {
       _buildFailure = '$err';
@@ -585,6 +838,23 @@ class SearchService {
       callable.close();
       _setProgress(null);
     }
+  }
+
+  /// 构建失败文本：ABI v2 返回错误 JSON 时取 `error.message`，否则用原始文本。
+  static String _buildErrorMessage(int code, String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        final error = decoded['error'];
+        if (error is Map<String, dynamic>) {
+          final message = error['message'];
+          if (message is String && message.isNotEmpty) return message;
+        }
+      }
+    } catch (_) {
+      // 非 JSON：退回原始文本。
+    }
+    return text.isEmpty ? 'era_index_run 退出码 $code' : text;
   }
 
   /// 仅在未关闭时写进度（`dispose` 后 [progress] 已释放，写入会抛）。

@@ -149,6 +149,130 @@ String kgTrackId(Map<String, dynamic> item, String hash) {
   return '';
 }
 
+/// 搜索结果条目（歌单 / 专辑 / 歌手）的详情 id。
+///
+/// 歌单**优先 `gid`（即 `global_collection_id`）**：`/v1/search/special`
+/// 同时返回数字 `specialid` 与 `gid`，把数字 id 当 `global_collection_id`
+/// 请求歌单歌曲会得到 `error_code=20010 invalid param`（数字 id 需先经
+/// mobilecdn `special/info` 换成 `global_specialid`）。其余字段别名对齐
+/// KuGouMusicApi 与 SPlayer Desktop-only `apis/kugou/modules/search.ts`。
+///
+/// [type] 为 `special` / `album` / `author` 时按该类型优先取字段，避免
+/// 不同分类里的同名字段（如零散 `gid`）盖过真正的专辑/歌手 id。
+String kgSearchItemId(Map<String, dynamic> item, {String? type}) {
+  final keys = switch (type) {
+    'special' => const [
+      'gid',
+      'Gid',
+      'global_collection_id',
+      'GlobalCollectionID',
+      'global_specialid',
+      'specialid',
+      'SpecialID',
+    ],
+    'album' => const ['albumid', 'AlbumID', 'album_id', 'AlbumId'],
+    'author' => const ['AuthorId', 'AuthorID', 'authorid', 'author_id'],
+    _ => const [
+      'gid',
+      'Gid',
+      'global_collection_id',
+      'GlobalCollectionID',
+      'global_specialid',
+      'specialid',
+      'SpecialID',
+      'albumid',
+      'AlbumID',
+      'AuthorId',
+      'AuthorID',
+      'authorid',
+    ],
+  };
+  for (final k in keys) {
+    final v = item[k]?.toString().trim() ?? '';
+    if (v.isNotEmpty) return v;
+  }
+  return '';
+}
+
+/// `/v7/get_all_list` 单条 → [KugouLibraryItem]（纯解析，便于单测）。
+///
+/// 字段语义对齐 kugou_sdk `UserPlaylist`：
+/// - `global_collection_id` 是**本人副本**的公开 id（读歌曲/详情优先）；
+/// - `list_create_gid` 是收藏来源（原作者歌单）的公开 id（兜底）；
+/// - `listid` 是用户本地歌单 id（个人增删接口用）；
+/// - `is_def`：1=默认收藏，2=我喜欢（红心写入目标）；
+/// - `authors` 存在表示「收藏的专辑」。
+///
+/// 返回 `null` 表示条目缺名称或缺少可用 id（调用方跳过）。
+KugouLibraryItem? kgLibraryItemFromKg(
+  Map<String, dynamic> p, {
+  required String myUserid,
+}) {
+  final name = p['name']?.toString() ?? '';
+  if (name.isEmpty) return null;
+  final isDef = int.tryParse('${p['is_def']}');
+  final isLiked = isDef == 2 || name == '我喜欢';
+  final isMine = p['list_create_userid']?.toString() == myUserid || isLiked;
+  final isAlbum = p['authors'] != null;
+  final gid = (p['global_collection_id'] ?? p['globalCollectionId'] ?? p['gid'])
+      ?.toString()
+      .trim();
+  final createGid = (p['list_create_gid'] ?? p['create_gid'])
+      ?.toString()
+      .trim();
+  final listid = p['listid']?.toString();
+  final id =
+      (gid != null && gid.isNotEmpty ? gid : null) ??
+      (createGid != null && createGid.isNotEmpty ? createGid : null) ??
+      (isLiked ? listid ?? '' : '');
+  if (id.isEmpty) return null;
+  return KugouLibraryItem(
+    type: isMine
+        ? KugouLibraryType.createdPlaylist
+        : isAlbum
+        ? KugouLibraryType.collectedAlbum
+        : KugouLibraryType.collectedPlaylist,
+    id: id,
+    title: name,
+    cover: kgFillCover(p['pic']?.toString(), 300),
+    trackCount: int.tryParse('${p['count']}') ?? 0,
+    listid: listid,
+    isLiked: isLiked,
+  );
+}
+
+/// `/v2/getSearchTip` 的 `data` 分组 → 提示文本（`(label, text)`）。
+///
+/// 实测新结构为 List：`[{LableName, RecordCount, RecordDatas:[{HintInfo,…}]}]`
+/// （label 为空 = 关键词，另有 `MV` / `专辑` 分组），条目只有 `HintInfo`
+/// **没有 songid/albumid**；旧结构才是 Map（`music_tip` / `album_tip`）。
+/// 去重并保持服务端顺序。
+List<({String label, String text})> kgSuggestHints(dynamic data) {
+  final out = <({String label, String text})>[];
+  if (data is! List) return out;
+  final seen = <String>{};
+  for (final g in data.whereType<Map>()) {
+    final label = g['LableName']?.toString().trim() ?? '';
+    final rows = g['RecordDatas'];
+    if (rows is! List) continue;
+    for (final e in rows.whereType<Map>()) {
+      final text = (e['HintInfo'] ?? e['name'] ?? '').toString().trim();
+      if (text.isEmpty || !seen.add(text)) continue;
+      out.add((label: label, text: text));
+    }
+  }
+  return out;
+}
+
+/// `/v2/getSearchTip` 里可作为「歌曲关键词」的提示文本。
+///
+/// 只有**空标签**分组是歌曲/关键词建议；`MV` 分组是 MV 标题、`专辑` 分组
+/// 是专辑名（实测 2026-11），把它们当歌名搜索会播到无关曲目，故跳过。
+List<String> kgSuggestSongKeywords(dynamic data) => [
+  for (final h in kgSuggestHints(data))
+    if (h.label.isEmpty) h.text,
+];
+
 /// 从「歌单/榜单/推荐/搜索」通用条目结构构建 [Track]（source == 'kugou'）。
 ///
 /// 兼容字段别名（对齐接口实际字段）：
@@ -257,7 +381,7 @@ Track kgTrackFromKgPlain(
   // 此处仅保留元数据供移除/去重等场景使用）。
   final fileid = item['fileid'];
   final albumId = item['album_id'];
-  final mixSongId = item['mixsongid'];
+  final mixSongId = item['mixsongid'] ?? item['album_audio_id'];
   final sort = item['sort'];
 
   return Track(

@@ -30,6 +30,7 @@ import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/playback/playback_notifier.dart';
+import '../../../services/render/gpu_readback.dart';
 import '../../list/cover_image.dart';
 import 'fluid_cover.dart';
 import 'fluid_mesh.dart';
@@ -341,11 +342,14 @@ class _FluidBackgroundState extends ConsumerState<FluidBackground>
       bytes = null;
     }
     if (bytes == null || !mounted || version != _version) return;
-    final processed = processFluidCover(
-      bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
-      img.width,
-      img.height,
+    final raw = bytes.buffer.asUint8List(
+      bytes.offsetInBytes,
+      bytes.lengthInBytes,
     );
+    // 独显（AMD）上 toByteData 可能全 0（flutter#196265）：当作读回失败，
+    // 保留非流体背景，避免整块流体被渲染成纯黑。
+    if (isBlankReadback(raw)) return;
+    final processed = processFluidCover(raw, img.width, img.height);
     final cover = await decodeFluidCover(processed);
     if (!mounted || version != _version) {
       cover.dispose();

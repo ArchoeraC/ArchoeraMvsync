@@ -6,8 +6,8 @@
 ///
 /// - 搜索：mobilecdn.kugou.com（带封面，http）→ 兜底 songsearch.kugou.com
 /// - 取 URL：gateway.kugou.com/v5/url（android 签名 + key + 真实 dfid）
-///   设备身份 [KugouDevice] 与 dfid 均安装级持久化；status=2（需验证）时用
-///   同一设备重新 register_dev 重试一次，不换 GUID/MID（见 kugou_device.dart）
+///   设备身份 [KugouDevice] 与 dfid 均安装级持久化；`status=2` 表示当前
+///   账号对该曲目没有全曲权益（需登录 / VIP / 已购），与设备无关
 /// - 歌词：lyrics.kugou.com 两步走（search → download），krc 用
 ///   XOR+zlib 解码（对齐 lx-music 的 KRC 逻辑）
 ///
@@ -125,6 +125,7 @@ class KugouApi extends ChangeNotifier {
   void saveSession(String token, String userid, {String? nickname}) {
     session = KugouSession(token: token, userid: userid, nickname: nickname);
     _likeListId = null;
+    _likeGid = null;
     getRuntime().sessionStore.save(_kugouSessionPlatform, session!.toJson());
     notifyListeners();
   }
@@ -175,14 +176,9 @@ class KugouApi extends ChangeNotifier {
   }
 
   /// 取真实 dfid：优先复用持久化值；并发调用合并为一次注册。
-  ///
-  /// [refresh] 为 true 时丢弃旧 dfid，用**同一设备身份**重新注册（不会换
-  /// GUID/MID），避免 `status=2` 时不断生成新设备。
-  Future<String> _getDfid({bool refresh = false}) {
-    if (!refresh) {
-      final cached = _device.dfid;
-      if (cached.isNotEmpty) return Future.value(cached);
-    }
+  Future<String> _getDfid() {
+    final cached = _device.dfid;
+    if (cached.isNotEmpty) return Future.value(cached);
     final pending = _dfidFuture;
     if (pending != null) return pending;
     final failedAt = _dfidFailedAt;
@@ -194,7 +190,7 @@ class KugouApi extends ChangeNotifier {
         kgRegisterDevice(
               mid: _device.mid,
               guid: _device.guid,
-              dfid: refresh ? '-' : _device.dfid,
+              dfid: _device.dfid,
             )
             .then((dfid) {
               _dfidFailedAt = null;
@@ -634,9 +630,23 @@ class KugouApi extends ChangeNotifier {
       headers: {'x-router': 'searchtip.kugou.com'},
     );
     final data = resp is Map ? resp['data'] : null;
+    final songs = <SuggestSongItem>[];
+    final albums = <SuggestSimpleItem>[];
+
+    // 新结构（实测 2026-11）：`data` 是 List 分组
+    // `[{LableName, RecordDatas:[{HintInfo}]}]`，条目**没有 songid/albumid**。
+    // 只有空标签分组是歌曲/关键词建议；`MV`/`专辑` 分组是其它实体，当歌名
+    // 搜索会播到无关曲目，跳过（[kgSuggestSongKeywords]）。命中后点击由
+    // [suggestSongToTrack] 按名称搜歌补 hash。
+    if (data is List) {
+      for (final text in kgSuggestSongKeywords(data)) {
+        songs.add(SuggestSongItem(id: text, name: text, source: 'kugou'));
+      }
+      return SuggestData(songs: songs);
+    }
+
     if (data is! Map) return const SuggestData();
 
-    final songs = <SuggestSongItem>[];
     final musicTip = data['music_tip'];
     if (musicTip is List) {
       for (final m in musicTip.whereType<Map<String, dynamic>>()) {
@@ -659,7 +669,6 @@ class KugouApi extends ChangeNotifier {
       }
     }
 
-    final albums = <SuggestSimpleItem>[];
     final albumTip = data['album_tip'];
     if (albumTip is List) {
       for (final a in albumTip.whereType<Map<String, dynamic>>()) {
@@ -720,9 +729,11 @@ class KugouApi extends ChangeNotifier {
     KugouTrackInfo info, {
     String quality = 'hq',
   }) => _withRiskVerify(() async {
+    // 档位 → 取链回退顺序。SQ 对应 128k、HQ 对应 320k（与
+    // [KugouTrackInfo.keyFor] 的精确档位一致）；缺档时才逐步降级。
     const chains = <String, List<String>>{
       'lq': ['128k'],
-      'sq': ['320k', '128k'],
+      'sq': ['128k'],
       'hq': ['320k', '128k'],
       'lossless': ['flac', '320k', '128k'],
       'hi-res': ['flac24bit', 'flac', '320k', '128k'],
@@ -732,7 +743,12 @@ class KugouApi extends ChangeNotifier {
       final qualityParam = KugouTrackInfo.qualityParam(q);
       if (hash == null || hash.isEmpty || qualityParam == null) continue;
       try {
-        final url = await _tryUrl(hash, qualityParam);
+        final url = await _tryUrl(
+          hash,
+          qualityParam,
+          albumId: info.albumId,
+          mixSongId: info.mixSongId,
+        );
         if (url != null) return url;
       } on KgRiskVerifyException {
         // 风控不是“网络错误”，必须冒泡到验证流程，不能静默降级。
@@ -745,12 +761,15 @@ class KugouApi extends ChangeNotifier {
   });
 
   /// 单档 URL 请求（dfid 用 register_dev 真实值，对齐 MoeKouMusic 后端
-  /// 先 /register/dev 再 /song/url 的链路；status=2 需验证时用同一设备
-  /// 重新注册 dfid 并重试一次）。
+  /// 先 /register/dev 再 /song/url 的链路）。
+  ///
+  /// `status=2` 表示当前账号对该曲目无全曲权益；`IsFreePart=1` 可取 128k
+  /// 试听片段（实测同一设备切换该参数即从 2 变 1），与 dfid 无关。
   Future<String?> _tryUrl(
     String hash,
     String qualityParam, {
-    bool retried = false,
+    int? albumId,
+    int? mixSongId,
   }) async {
     final dfid = await _getDfid();
     final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -758,6 +777,10 @@ class KugouApi extends ChangeNotifier {
 
     final params = <String, dynamic>{
       ...kgSongUrlBase,
+      // 带上曲目真实专辑/混音 id（对齐上游 song_url.js）；恒为 0 时部分
+      // 曲目的授权/试听分支可能取不到直链。
+      'album_id': albumId ?? 0,
+      'album_audio_id': mixSongId ?? 0,
       'dfid': dfid,
       'mid': _device.mid,
       'uuid': '-',
@@ -807,16 +830,10 @@ class KugouApi extends ChangeNotifier {
       }
       return null;
     }
-    if (status == 2 && !retried) {
-      // 需要验证：用**同一设备**重新注册 dfid 再试一次。绝不能换
-      // GUID/MID 装成新设备——那正是风控最敏感的行为。
-      try {
-        await _getDfid(refresh: true);
-        return await _tryUrl(hashLc, qualityParam, retried: true);
-      } catch (_) {
-        return null;
-      }
-    }
+    // status=2：该曲目对当前账号没有全曲权益（需登录 / VIP / 已购），
+    // **不是设备失效**。实测同一设备把 `IsFreePart` 置 1 会立刻变成
+    // status=1 并返回 128k 试听直链，重新注册 dfid 不会改变结果；反复
+    // 注册反而制造风控信号，因此这里不再重试。
     return null;
   }
 
@@ -966,10 +983,11 @@ class KugouApi extends ChangeNotifier {
       '/v2/special_recommend',
       method: 'POST',
       body: {
-        // 对齐 top_playlist.js：body 内用标准版 appid/clientver（与 lite 注入的 query 并存）
-        'appid': 1005,
+        // 对齐 top_playlist.js：body 与查询串/key 统一用当前客户端身份（lite），
+        // 不再混用标准版 appid/clientver。
+        'appid': kgLiteAppid,
         'mid': _device.mid,
-        'clientver': 20489,
+        'clientver': kgLiteClientver,
         'platform': 'android',
         'clienttime': ts,
         'userid': int.tryParse(session?.userid ?? '') ?? 0,
@@ -1001,7 +1019,16 @@ class KugouApi extends ChangeNotifier {
         : (resp is Map ? resp['special_list'] : null);
     if (list is! List) return const [];
     return list.whereType<Map<String, dynamic>>().map((p) {
-      final id = p['global_collection_id']?.toString() ?? '';
+      // 推荐位字段兼容：global_collection_id / global_specialid / gid 都是
+      // 公开歌单 id，缺字段才退回数字 specialid（后续由
+      // _globalCollectionId 归一）。
+      final id =
+          (p['global_collection_id'] ??
+                  p['global_specialid'] ??
+                  p['gid'] ??
+                  p['specialid'])
+              ?.toString() ??
+          '';
       return CoverItem(
         id: id,
         title: p['specialname']?.toString() ?? '',
@@ -1011,14 +1038,48 @@ class KugouApi extends ChangeNotifier {
     }).toList();
   }
 
+  /// `specialid`（纯数字旧 id）→ `global_specialid` 缓存。
+  final Map<String, String> _globalCollectionIds = <String, String>{};
+
+  /// 把歌单 id 归一成公开歌单接口需要的 `global_collection_id`。
+  ///
+  /// 搜索歌单（`/v1/search/special`）与旧版歌单给的是纯数字 `specialid`，
+  /// 直接塞进 `global_collection_id` 会得到 `error_code=20010 invalid param`。
+  /// 数字 id 先查 mobilecdn `special/info` 取 `global_specialid`（对齐
+  /// SPlayer Desktop-only `apis/kugou/modules/playlist.ts` 的兼容逻辑）；
+  /// 已经是 `collection_...` 的 id 原样返回。
+  Future<String> _globalCollectionId(String id) async {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty || !RegExp(r'^\d+$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+    final cached = _globalCollectionIds[trimmed];
+    if (cached != null) return cached;
+    final body = await kgGet(
+      Uri.parse(kgSpecialInfoUrl)
+          .replace(queryParameters: {'specialid': trimmed, 'format': 'json'}),
+    );
+    final data = body is Map<String, dynamic> ? body['data'] : null;
+    final raw = data is Map
+        ? (data['global_specialid'] ?? data['global_collection_id'])
+        : null;
+    final gid = raw?.toString().trim() ?? '';
+    if (gid.isEmpty) {
+      throw KgApiException('KG 歌单 $trimmed 不存在或不可访问');
+    }
+    _globalCollectionIds[trimmed] = gid;
+    return gid;
+  }
+
   /// 歌单详情（v3/get_list_info）。
   Future<Map<String, dynamic>?> playlistDetail(String id) async {
+    final gid = await _globalCollectionId(id);
     final resp = await _gateway(
       '/v3/get_list_info',
       method: 'POST',
       body: {
         'data': [
-          {'global_collection_id': id},
+          {'global_collection_id': gid},
         ],
         'userid': int.tryParse(session?.userid ?? '') ?? 0,
         'token': session?.token ?? '',
@@ -1039,6 +1100,7 @@ class KugouApi extends ChangeNotifier {
   /// 用页长判断会提前 break 导致歌单只拉到前若干首。
   Future<List<Track>> playlistTracksAll(String id, {int max = 300}) async {
     const pagesize = 300;
+    final gid = await _globalCollectionId(id);
     final all = <Track>[];
     var page = 1;
     while (all.length < max && page <= 40) {
@@ -1054,7 +1116,7 @@ class KugouApi extends ChangeNotifier {
           'personal_switch': 1,
           'extend_fields': 'abtags,hot_cmt,popularization',
           'pagesize': pagesize,
-          'global_collection_id': id,
+          'global_collection_id': gid,
         },
       );
       // 歌曲与 list_info 在 data 内（实测 gateway 响应统一包在 data 内）
@@ -1123,6 +1185,7 @@ class KugouApi extends ChangeNotifier {
     required int page,
     required int pagesize,
   }) async {
+    final collectionId = await _globalCollectionId(gid);
     final resp = await _gateway(
       '/pubsongs/v2/get_other_list_file_nofilt',
       method: 'GET',
@@ -1134,7 +1197,7 @@ class KugouApi extends ChangeNotifier {
         'personal_switch': 1,
         'extend_fields': 'abtags,hot_cmt,popularization',
         'pagesize': pagesize,
-        'global_collection_id': gid,
+        'global_collection_id': collectionId,
       },
     );
     final data = resp is Map ? resp['data'] : null;
@@ -1272,8 +1335,9 @@ class KugouApi extends ChangeNotifier {
   /// 对齐 `/v7/get_all_list` 的实际返回结构：
   /// - `list_create_userid == 登录 userid` 或 `name == '我喜欢'` → 创建的歌单；
   /// - 其余按 `authors` 字段区分「收藏的歌单」（无）与「收藏的专辑」（有）。
-  /// 详情 id 取 `list_create_gid` 优先 / `global_collection_id` 兜底。
-  /// 保留 [userPlaylists]（id=listid）供「我喜欢」播放链路使用。
+  /// 详情 id 取 `global_collection_id`（本人副本）优先 / `list_create_gid`
+  /// 兜底；「我喜欢」用 `is_def`（2）或名称识别。
+  /// 保留 [userPlaylists]（id=listid）作为轻量歌单列表接口。
   Future<KugouLibrary> userLibrary() async {
     final s = session;
     if (s == null) return const KugouLibrary(items: []);
@@ -1301,37 +1365,13 @@ class KugouApi extends ChangeNotifier {
     final mine = s.userid;
     final items = <KugouLibraryItem>[];
     for (final p in info.whereType<Map<String, dynamic>>()) {
-      final name = p['name']?.toString() ?? '';
-      if (name.isEmpty) continue;
-      final isMine =
-          p['list_create_userid']?.toString() == mine || name == '我喜欢';
-      final isAlbum = p['authors'] != null;
-      // 详情 id：公开歌单用 global_collection_id 系列；「我喜欢」为个人
-      // 歌单，无公开 id 时兜底 listid（点击走 likedTracks 个人链路）
-      final id =
-          p['list_create_gid']?.toString() ??
-          p['global_collection_id']?.toString() ??
-          (name == '我喜欢' ? p['listid']?.toString() ?? '' : '');
-      if (id.isEmpty) continue;
-      items.add(
-        KugouLibraryItem(
-          type: isMine
-              ? KugouLibraryType.createdPlaylist
-              : isAlbum
-              ? KugouLibraryType.collectedAlbum
-              : KugouLibraryType.collectedPlaylist,
-          id: id,
-          title: name,
-          cover: kgFillCover(p['pic']?.toString(), 300),
-          trackCount: p['count'] is num ? (p['count'] as num).toInt() : 0,
-          listid: p['listid']?.toString(),
-        ),
-      );
+      final item = kgLibraryItemFromKg(p, myUserid: mine);
+      if (item != null) items.add(item);
     }
     // 「我喜欢」置顶（官方客户端同样优先展示）
     items.sort((a, b) {
-      final al = a.title == '我喜欢' ? -1 : 0;
-      final bl = b.title == '我喜欢' ? -1 : 0;
+      final al = a.isLiked ? -1 : 0;
+      final bl = b.isLiked ? -1 : 0;
       return al - bl;
     });
     return KugouLibrary(items: items);
@@ -1340,20 +1380,20 @@ class KugouApi extends ChangeNotifier {
   /// 「我喜欢」歌单 listid（进程内缓存；未找到返回 null）。
   String? _likeListId;
 
-  /// 查找「我喜欢」歌单 listid（约定：用户歌单里 `name == '我喜欢'`）。
+  /// 查找「我喜欢」歌单 listid（`is_def == 2` 优先，兼容 name == '我喜欢'）。
   Future<String?> likeListId() async {
     final cached = _likeListId;
     if (cached != null) return cached;
-    final playlists = await userPlaylists();
-    final like = playlists.where((p) => p.title == '我喜欢').toList();
-    _likeListId = like.isEmpty ? null : like.first.id;
+    final lib = await userLibrary();
+    final like = lib.items.where((p) => p.isLiked).toList();
+    _likeListId = like.isEmpty ? null : like.first.listid;
     return _likeListId;
   }
 
   /// 「我喜欢」歌单公开 id（进程内缓存；无公开 id 返回 null）。
   String? _likeGid;
 
-  /// 查找「我喜欢」歌单的公开 id（list_create_gid / global_collection_id，
+  /// 查找「我喜欢」歌单的公开 id（global_collection_id / list_create_gid，
   /// 打开歌单用 global_collection_id 调
   /// `/playlist/track/all` 公开接口，分页顺序稳定「最新收藏在前」）。
   /// 账号数据缺失公开 id 时返回 null（调用方回退 listid 个人接口）。
@@ -1361,7 +1401,7 @@ class KugouApi extends ChangeNotifier {
     final cached = _likeGid;
     if (cached != null) return cached;
     final lib = await userLibrary();
-    final like = lib.items.where((p) => p.title == '我喜欢').toList();
+    final like = lib.items.where((p) => p.isLiked).toList();
     final item = like.isEmpty ? null : like.first;
     // userLibrary 的 id 已 gid 优先；与 listid 相同说明无公开 id
     final gid = item != null && item.id != item.listid ? item.id : null;
@@ -1375,21 +1415,32 @@ class KugouApi extends ChangeNotifier {
     _likeGid = null;
   }
 
+  /// 用户歌单（账号内创建/收藏）曲目：**统一「最新在前」**。
+  ///
+  /// 个人接口（listid，`/v4/get_list_all_file`）返回**最早在前**，反转后
+  /// 与官方 UI 一致（kugou_sdk 协议说明：own-list 为 fileid 升序）；公开
+  /// 接口（gid）本身就是**最新在前**，不能再反转。listid 优先（私有歌单
+  /// 也能拉全量且带 fileid）；缺失时才用 gid。
+  Future<List<Track>> userPlaylistTracks(String? listid, {String? gid}) async {
+    if (listid != null && listid.isNotEmpty) {
+      return (await playlistTracksAllNew(listid)).reversed.toList();
+    }
+    if (gid != null && gid.isNotEmpty) {
+      return playlistTracksAllNew('', gid: gid);
+    }
+    return const [];
+  }
+
   /// 「我喜欢」歌曲列表：**优先 listid 个人接口**（v4/get_list_all_file，
   /// 能拉全量）。**不可用 gid 公开接口**（get_other_list_file_nofilt）——
   /// 它是为普通（公开）歌单设计的：对私有的「我喜欢」歌单服务端只暴露
   /// 前 ~600 首（实测 1271 首歌单仅拉到 596 首，且第二页起 count 字段
   /// 被改写为剩余量）。gid 仅在 listid 缺失时兜底。
-  /// 返回**倒序**（接口按收藏先后排列，最新收藏在最后 → 反转后最新在前，
-  /// 对齐NT [likedSongs] 的展示语义）。
   Future<List<Track>> likedTracks() async {
     final listid = await likeListId();
-    if (listid != null) {
-      return (await playlistTracksAllNew(listid)).reversed.toList();
-    }
+    if (listid != null) return userPlaylistTracks(listid);
     final gid = await likeGid();
-    if (gid == null) return const [];
-    return (await playlistTracksAllNew(gid, gid: gid)).reversed.toList();
+    return userPlaylistTracks(null, gid: gid);
   }
 
   /// KG 红心 hash 集合（轻量：分页只取 hash，不构造/保存 Track、不写库）。
@@ -1672,10 +1723,36 @@ class KugouApi extends ChangeNotifier {
   /// 专辑歌曲（openapi.kugou.com/v1/album_audio/lite）。
   ///
   /// 循环翻页拉全量（60/页，安全上限 200 页），避免「播放全部」只取单页。
+  ///
+  /// 网关 `/v1/album_audio/lite` 在未登录 / 部分设备上返回
+  /// `error_code=20010 invalid param`（实测匿名请求稳定复现），此时回退
+  /// mobilecdn `/api/v3/album/song`（公网无鉴权，对齐 baka 插件）。
   Future<List<Track>> albumTracks(
     String albumId, {
     int page = 1,
     int pagesize = 60,
+  }) async {
+    try {
+      final tracks = await _albumTracksGateway(
+        albumId,
+        page: page,
+        pagesize: pagesize,
+      );
+      // 网关「成功但空」也回退：20010 之前曾表现为空列表而非抛错。
+      if (tracks.isNotEmpty) return tracks;
+    } on KgRiskVerifyException {
+      // 风控验证不能被兜底通道静默吞掉。
+      rethrow;
+    } on KgApiException {
+      // 走 mobilecdn 兜底
+    }
+    return _albumTracksMobile(albumId, page: page);
+  }
+
+  Future<List<Track>> _albumTracksGateway(
+    String albumId, {
+    required int page,
+    required int pagesize,
   }) async {
     final all = <Track>[];
     var p = page;
@@ -1706,6 +1783,11 @@ class KugouApi extends ChangeNotifier {
                 : '';
             final item = <String, dynamic>{
               'hash': hash,
+              'audio_id': s['audio_id'],
+              'album_audio_id': s['album_audio_id'],
+              'album_id':
+                  (albumInfo is Map ? albumInfo['album_id'] : null) ??
+                  s['album_id'],
               'audio_name': base is Map
                   ? base['audio_name']?.toString() ?? ''
                   : '',
@@ -1732,16 +1814,107 @@ class KugouApi extends ChangeNotifier {
     return all;
   }
 
+  /// mobilecdn 专辑歌曲兜底（`/api/v3/album/song`，无需登录）。
+  ///
+  /// 条目字段：`filename`（"歌手 - 歌名"）、`hash`/`320hash`/`sqhash`、
+  /// `album_audio_id`、`duration`（秒）等；按合并名拆分歌名/歌手。
+  Future<List<Track>> _albumTracksMobile(
+    String albumId, {
+    required int page,
+  }) async {
+    const pagesize = 100;
+    final all = <Track>[];
+    var p = page;
+    while (p - page < 200) {
+      final uri = Uri.parse(kgAlbumSongUrl).replace(
+        queryParameters: {
+          'version': '9108',
+          'albumid': albumId,
+          'plat': '0',
+          'pagesize': '$pagesize',
+          'area_code': '1',
+          'page': '$p',
+          'with_res_tag': '0',
+        },
+      );
+      final body = await kgGet(uri);
+      final data = body is Map ? body['data'] : null;
+      final info = data is Map ? data['info'] : null;
+      if (info is! List || info.isEmpty) break;
+      final parsed = info
+          .whereType<Map<String, dynamic>>()
+          .map((s) {
+            final item = <String, dynamic>{
+              ...s,
+              'name': s['filename'] ?? s['remark'] ?? '',
+              'mixsongid': s['album_audio_id'] ?? s['mixsongid'],
+            };
+            return kgTrackFromKgPlain(item, preferMergedName: true);
+          })
+          .where((t) => t.kugou != null)
+          .toList();
+      if (parsed.isEmpty) break;
+      all.addAll(parsed);
+      final total = data is Map ? (data['total'] as num?)?.toInt() ?? 0 : 0;
+      if (total > 0 && all.length >= total) break;
+      if (info.length < pagesize) break;
+      p++;
+    }
+    return all;
+  }
+
   /// 歌手详情（kmr/v3/author）。
   Future<Map<String, dynamic>?> artistDetail(String authorId) async {
+    final id = await _resolveAuthorId(authorId);
     final resp = await _gateway(
       '/kmr/v3/author',
       method: 'POST',
-      body: {'author_id': authorId},
+      body: {'author_id': id},
       headers: {'x-router': 'openapi.kugou.com', 'kg-tid': '36'},
     );
     final data = resp is Map ? resp['data'] : null;
     return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  /// 歌手 id 归一：纯数字直接用；否则按名称查 `/v1/search/author` 取
+  /// 首个 `AuthorId`。
+  ///
+  /// 歌单/搜索曲目里的 [TrackArtist] 只有名字（`kugouArtists` 不解析歌手 id），
+  /// 右键「查看歌手」会把名字当 id 传进来；直接拼进 `author_id` 会让
+  /// `/kmr/v1/audio_group/author` 返回
+  /// `{error_code: 20010, errcode: 20010, errmsg: "invalid param"}`。
+  Future<String> _resolveAuthorId(String idOrName) async {
+    final raw = idOrName.trim();
+    if (raw.isEmpty) throw KgApiException('KG 歌手 id 为空');
+    if (RegExp(r'^\d+$').hasMatch(raw)) return raw;
+    final resp = await _gateway(
+      '/v1/search/author',
+      method: 'GET',
+      query: {
+        'albumhide': 0,
+        'iscorrection': 1,
+        'keyword': raw,
+        'nocollect': 0,
+        'page': 1,
+        'pagesize': 1,
+        'platform': 'AndroidFilter',
+      },
+      headers: {'x-router': 'complexsearch.kugou.com'},
+      baseUrl: 'https://complexsearch.kugou.com',
+    );
+    final data = resp is Map ? resp['data'] : null;
+    final lists = data is Map ? (data['lists'] ?? data['info']) : null;
+    final first = lists is List && lists.isNotEmpty ? lists.first : null;
+    final resolved = first is Map
+        ? (first['AuthorId'] ?? first['AuthorID'] ?? first['authorid'])
+                  ?.toString()
+                  .trim() ??
+              ''
+        : '';
+    if (resolved.isEmpty) {
+      throw KgApiException('KG 歌手「$raw」不存在或不可访问');
+    }
+    return resolved;
   }
 
   /// 歌手单曲（openapi.kugou.com/kmr/v1/audio_group/author）。
@@ -1753,6 +1926,7 @@ class KugouApi extends ChangeNotifier {
     int page = 1,
     int pagesize = 60,
   }) async {
+    final id = await _resolveAuthorId(authorId);
     final all = <Track>[];
     var p = page;
     // 安全上限：60 首/页 × 200 页 = 12000 首，防接口异常时死循环
@@ -1762,12 +1936,13 @@ class KugouApi extends ChangeNotifier {
         '/kmr/v1/audio_group/author',
         method: 'POST',
         body: {
-          'appid': 1005,
-          'clientver': 20489,
+          // body 与查询串/key 统一用 lite 身份（与其余网关请求保持一致）。
+          'appid': kgLiteAppid,
+          'clientver': kgLiteClientver,
           'mid': _device.mid,
           'clienttime': ts,
           'key': kgSignParamsKey('$ts'),
-          'author_id': authorId,
+          'author_id': id,
           'pagesize': pagesize,
           'page': p,
           'sort': sort == 'hot' ? 1 : 2,
@@ -1803,11 +1978,12 @@ class KugouApi extends ChangeNotifier {
     int page = 1,
     int pagesize = 30,
   }) async {
+    final id = await _resolveAuthorId(authorId);
     final resp = await _gateway(
       '/kmr/v1/author/albums',
       method: 'POST',
       body: {
-        'author_id': authorId,
+        'author_id': id,
         'pagesize': pagesize,
         'page': page,
         'sort': sort == 'hot' ? 3 : 1,
@@ -1895,25 +2071,24 @@ class KugouApi extends ChangeNotifier {
             duration: kgDurationMs(s['Duration']),
             cover: kgFillCover(cover, 300),
             source: 'kugou',
-            kugou: KugouTrackInfo(hash: hash, hashes: hashes, sizes: const {}),
+            kugou: KugouTrackInfo(
+              hash: hash,
+              hashes: hashes,
+              sizes: const {},
+              albumId: int.tryParse('${s['AlbumID'] ?? s['album_id'] ?? ''}'),
+              mixSongId: int.tryParse(
+                '${s['MixSongID'] ?? s['mixsongid'] ?? ''}',
+              ),
+            ),
           ),
         );
       }
     } else {
       for (final c in lists.whereType<Map<String, dynamic>>()) {
-        // 字段为 camelCase（对齐 KuGouMusicApi）：歌手 AuthorId/AuthorName/Avatar，
-        // 歌单 specialid/specialname/img/nickname，专辑 albumid/albumname/img。
-        final id =
-            (c['specialid'] ??
-                    c['SpecialID'] ??
-                    c['gid'] ??
-                    c['albumid'] ??
-                    c['AlbumID'] ??
-                    c['AuthorId'] ??
-                    c['AuthorID'] ??
-                    c['authorid'])
-                ?.toString() ??
-            '';
+        // 字段为 camelCase（对齐 KuGouMusicApi / SPlayer Desktop-only
+        // `apis/kugou/modules/search.ts`）；歌单 id 由 [kgSearchItemId]
+        // 优先取 `gid`，避免把数字 `specialid` 当 global_collection_id。
+        final id = kgSearchItemId(c, type: type);
         if (id.isEmpty) continue;
         final title =
             (c['specialname'] ??
@@ -1939,7 +2114,8 @@ class KugouApi extends ChangeNotifier {
             subtitle: type == 'special'
                 ? (c['nickname']?.toString() ?? '')
                 : type == 'album'
-                ? (c['singername']?.toString() ??
+                ? (c['singer']?.toString() ??
+                      c['singername']?.toString() ??
                       c['SingerName']?.toString() ??
                       '')
                 : '',

@@ -8,7 +8,6 @@ import 'dart:ui' show PlatformDispatcher;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'apis/runtime.dart';
 import 'l10n/generated/app_localizations.dart';
@@ -17,6 +16,7 @@ import 'services/log/log.dart';
 import 'services/mcp/mcp_key_store.dart';
 import 'services/platform/platform_capabilities.dart';
 import 'services/platform/window_decor.dart';
+import 'services/platform/window_resize.dart';
 import 'services/deeplink/deep_link_router.dart';
 import 'services/power/frame_governor.dart';
 import 'services/scanner/sqlite_preload.dart';
@@ -44,7 +44,7 @@ Future<void> main(List<String> args) async {
   // 同目录的 `archoerashell.exe`，不经过本 Dart 入口（Dart 版 CLI 已删除）。
   //
   // 全局帧节流 Binding（节能模式渲染层）：必须最先初始化——既是 Flutter
-  // binding，也让后续窗口操作（nativeapi FFI / 单实例分支）可用。
+  // binding，也让后续窗口操作（原生窗口 FFI / 单实例分支）可用。
   PowerSavingFrameBinding.ensureInitialized();
   // 防伪锚点：把 'ARCHOERA DESIGNED' 编译进内核/AOT 快照字符串表
   // （见 app/watermark.dart；勿删，反编译识别非官方重新打包）。
@@ -130,10 +130,11 @@ Future<void> main(List<String> args) async {
     }
     final locale = _startupLocale(prefs);
     // 显示窗口（runner 默认隐藏常驻托盘），再呈现应用风格的警告对话框。
-    final window = WindowManager.instance.getCurrent();
-    window?.setSize(const Size(420, 260).toNative(), false);
-    window?.center();
-    window?.show();
+    // 尺寸为逻辑像素（DIP）；经原生桥接控制，桥接不可用时静默保持默认外观。
+    final window = platformCaps.window;
+    window.setSize(420, 260);
+    window.center();
+    window.setVisible(true);
     final l10n = lookupAppLocalizations(locale);
     runApp(
       _AlreadyRunningApp(
@@ -149,9 +150,20 @@ Future<void> main(List<String> args) async {
   // 保留原生标题栏）：system 用系统标题栏；caption 隐藏标题栏、由自绘标题条
   // （app.dart）+ 边缘缩放接管；borderless 去掉原生边框与系统窗口按钮，内容
   // 铺满、窗口按钮并入顶栏（等价 SPlayer-Next 的 frame: false）。关闭请求仍由
-  // TrayIntegration 的可取消监听接管（后台常驻语义不变）。尽早调用以减少原生
+  // TrayIntegration 订阅桥接关闭请求接管（后台常驻语义不变）。尽早调用以减少原生
   // 装饰闪现；失败时降级为当前原生外观，绝不阻断启动。
   applyWindowDecor(prefs.windowDecor);
+  // 最小尺寸 + 上次窗口几何（ABI v11 `get_size` / `get_position`）：桥接不可用
+  // 时静默跳过；最大化 / 全屏退出不写几何，避免下次启动先恢复成全屏尺寸。
+  final startupWindow = platformCaps.window;
+  startupWindow.setMinSize(kWindowMinWidth, kWindowMinHeight);
+  final geometry = prefs.windowGeometry;
+  if (geometry != null) {
+    startupWindow.setSize(geometry.width, geometry.height);
+    final gx = geometry.x;
+    final gy = geometry.y;
+    if (gx != null && gy != null) startupWindow.setPosition(gx, gy);
+  }
   // 预加载内置 SQLite（libe_sqlite3）：dart sqlite3 包经 hooks 配置
   // source: system 按名 dlopen("libe_sqlite3.so")，这里先按绝对路径加载，
   // 使 dart sqlite3 与 scanner-ffi 共享同一 SQLite 实例（同版本），避免
@@ -206,7 +218,7 @@ Future<void> main(List<String> args) async {
   // null = 无上限仅按张数约束）。
   PaintingBinding.instance.imageCache.maximumSize = 1000;
   // 窗口管理（后台常驻：关闭到托盘需拦截窗口关闭事件，由 TrayIntegration
-  // 在挂载后注册 nativeapi 窗口监听；nativeapi 无需显式初始化）。
+  // 在挂载后订阅桥接的关闭请求；桥接自行拦截系统关闭，不自行退出）。
   // 协议唤醒：启动前按偏好注册 archoera://（仅当前用户，免提权）。
   if (platformCaps.deepLinkAvailable && prefs.registerProtocol) {
     unawaited(platformCaps.deepLink.register('archoera'));

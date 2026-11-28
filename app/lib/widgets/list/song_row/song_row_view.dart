@@ -22,15 +22,17 @@ extension _SongRowView on _SongRowState {
               .watch(maxAsync)
               .maybeWhen(data: (v) => v, orElse: () => null);
     final bestQuality = _bestQuality(item, l10n, maxQuality: maxQuality);
-    // 搜索结果高亮（关闭态 / 非搜索态 highlightOf == null → 零调用、零成本）。
-    final highlightOf = widget.highlightOf;
+    // 搜索结果高亮（关闭态 / 非搜索态 highlight == null → 零调用、零成本）。
+    // 区间来自 C# `era_search_decorate`，按字段取用（artist 展示文本与 Dart 的
+    // `item.artistNames` 同为 " / " 连接，偏移可直接复用）。
+    final highlight = widget.highlight;
     final subtitle = _subtitleText(prefs, l10n);
-    final titleRanges = highlightOf?.call(item.title);
-    final subtitleRanges = highlightOf?.call(subtitle);
+    final titleRanges = highlight?.rangesFor('title');
+    final subtitleRanges = highlight?.rangesFor('artist');
     final hasAlbumName = item.album?.name.isNotEmpty == true;
     final albumText = hasAlbumName ? item.album!.name : l10n.commonUnknownAlbum;
     // 占位「未知专辑」不做高亮（无意义命中）。
-    final albumRanges = hasAlbumName ? highlightOf?.call(albumText) : null;
+    final albumRanges = hasAlbumName ? highlight?.rangesFor('album') : null;
 
     return Listener(
       // 右键 → 自绘上下文菜单（PointerEvent.position 为全局坐标）；
@@ -299,14 +301,14 @@ extension _SongRowView on _SongRowState {
 
 /// 按命中区间渲染文本（搜索结果高亮）。
 ///
-/// [ranges] 为空（含 [SongRow.highlightOf] 未传）时返回与旧实现**逐像素一致**的
+/// [ranges] 为空（含 [SongRow.highlight] 未传）时返回与旧实现**逐像素一致**的
 /// 普通 [Text]（同 style / maxLines / overflow / textAlign）；有命中时改用
 /// [Text.rich]——**不改变字号 / 行高 / 字重**，仅在命中段叠加 `primary` 颜色 +
 /// 轻背景，故不引起布局跳动。
 Widget _highlightedText(
   BuildContext context,
   String text,
-  List<MatchRange>? ranges, {
+  List<LocalHighlightRange>? ranges, {
   TextStyle? style,
   int? maxLines,
   TextOverflow? overflow,

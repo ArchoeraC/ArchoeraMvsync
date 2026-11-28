@@ -14,6 +14,7 @@
 #import <Foundation/Foundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <UserNotifications/UserNotifications.h>
+#import <objc/runtime.h>
 
 #include "backend.h"
 
@@ -26,6 +27,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -34,6 +36,10 @@
 // 系统托盘 target 前置声明（定义见文件后部；全局强引用避免 target 被释放，
 // 因为 NSControl.target / NSMenuItem.target 均为弱引用）。
 @class ArchoeraTrayTarget;
+
+// 窗口关闭委托代理（定义见 ArchoeraPlatformObserver 之后）：程序化挂到主窗口
+// 上，拦截 windowShouldClose:，其余选择器原样转发给原 delegate。
+@class ArchoeraWindowCloseDelegate;
 
 namespace archoera {
 // 进程硬化（SEC-48）：**定义必须置于任何 #if 之外**（理由同 backend_windows.cpp）。
@@ -77,6 +83,25 @@ std::atomic<bool> g_theme_dark{false};
 std::atomic<bool> g_theme_valid{false};
 std::atomic<bool> g_minimized{false};
 std::atomic<bool> g_focused{true};
+std::atomic<bool> g_maximized{false};
+std::atomic<bool> g_fullscreen{false};
+std::atomic<bool> g_hidden{false};
+
+// ── 窗口控制 / 关闭拦截（ABI v10）────────────────────────────────
+// 主窗口事件订阅期间：delegate 代理强引用、原 delegate 保存、终止钩子 IMP。
+// g_terminating 由 shutdown() 置位：已在退出流程中的 terminate: 直接走原实现，
+// 不再上报（避免 session-end → 退出路径自我循环）。
+std::atomic<bool> g_terminating{false};
+id g_original_window_delegate = nil;
+NSWindow* g_event_window = nil;
+ArchoeraWindowCloseDelegate* g_window_close_delegate = nil;
+IMP g_original_terminate_imp = nullptr;
+
+// 关闭拦截函数（定义见文件后部；windowSetEvents 通过它们挂载/卸载）。
+void installCloseInterception();
+void removeCloseInterception();
+void installTerminateHook();
+void removeTerminateHook();
 
 id g_activity = nil;
 bool g_remote_registered = false;
@@ -91,8 +116,12 @@ bool g_tray_visible = true;         // 状态项可见性
 
 void emitWindow() {
     if (!g_window_events.load(std::memory_order_acquire)) return;
-    dispatch(makeWindowState(g_minimized.load(std::memory_order_acquire),
-                             g_focused.load(std::memory_order_acquire)));
+    dispatch(makeWindowState(
+        g_minimized.load(std::memory_order_acquire),
+        g_focused.load(std::memory_order_acquire),
+        g_maximized.load(std::memory_order_acquire),
+        g_fullscreen.load(std::memory_order_acquire),
+        g_hidden.load(std::memory_order_acquire)));
 }
 
 }  // namespace
@@ -210,6 +239,30 @@ static void popUpTrayMenu(NSStatusItem* item, NSMenu* menu) {
     archoera::emitWindow();
 }
 
+/// 通用窗口几何/层叠状态刷新：resize / zoom / 全屏 / order on-off 都走这里。
+/// 通知在 AppKit 主线程派发，故这里可以安全读取 NSWindow 属性；Dart 线程只
+/// 读原子快照（emitWindow 不做任何 AppKit 调用）。
+- (void)onWindowStateChanged:(NSNotification*)note {
+    id object = note.object;
+    if (![object isKindOfClass:[NSWindow class]]) return;
+    NSWindow* window = (NSWindow*)object;
+    // 观察者注册在 object:nil 上（AppKit 没有按窗口订阅的公开 API），必须过滤
+    // 自有主窗口：原生文件对话框 / 菜单窗口的 resize/order 通知不得覆盖主窗口状态。
+    NSWindow* main = [NSApp mainWindow];
+    if (main == nil) main = [NSApp keyWindow];
+    if (main != nil && window != main) return;
+    const bool hidden = window.isVisible == NO;
+    const bool minimized = window.isMiniaturized;
+    const bool maximized = window.isZoomed;
+    const bool fullscreen =
+        (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+    archoera::g_hidden.store(hidden, std::memory_order_release);
+    archoera::g_minimized.store(minimized, std::memory_order_release);
+    archoera::g_maximized.store(maximized, std::memory_order_release);
+    archoera::g_fullscreen.store(fullscreen, std::memory_order_release);
+    archoera::emitWindow();
+}
+
 - (void)onAccent:(NSNotification*)note {
     (void)note;
     if (archoera::g_accent_events.load(std::memory_order_acquire)) {
@@ -298,7 +351,63 @@ static void popUpTrayMenu(NSStatusItem* item, NSMenu* menu) {
 
 @end
 
+// ── 窗口关闭拦截（NSWindowDelegate 代理）────────────────────────────
+// 只覆盖 windowShouldClose:；其余 delegate 方法经 forwardingTargetForSelector:
+// 原样转发给原 delegate（respondsToSelector 同步声明，AppKit 才会调用它们）。
+// NSWindow.delegate 是弱引用，代理由 g_window_close_delegate 强持有。
+@interface ArchoeraWindowCloseDelegate : NSObject <NSWindowDelegate>
+@end
+
+@implementation ArchoeraWindowCloseDelegate
+
+- (id)forwardingTargetForSelector:(SEL)selector {
+    id target = archoera::g_original_window_delegate;
+    if (target != nil && [target respondsToSelector:selector]) return target;
+    return [super forwardingTargetForSelector:selector];
+}
+
+- (BOOL)respondsToSelector:(SEL)selector {
+    if ([super respondsToSelector:selector]) return YES;
+    id target = archoera::g_original_window_delegate;
+    return target != nil && [target respondsToSelector:selector];
+}
+
+- (BOOL)windowShouldClose:(NSWindow*)sender {
+    (void)sender;
+    if (archoera::g_window_events.load(std::memory_order_acquire)) {
+        archoera::dispatch(
+            archoera::makeWindowCloseRequest(archoera::WINDOW_CLOSE));
+    }
+    // NO：阻止 AppKit 走默认关窗（closeForTermination 之类）；隐藏/退出由 Dart
+    // 统一决策。代理未挂载时此方法不会被调用。
+    return NO;
+}
+
+@end
+
+// ⌘Q / 菜单 Quit / terminate AppleEvent 的钩子：只上报「应用退出请求」，
+// 不结束进程；Dart 落盘后走 exit(0)。shutdown 已置 g_terminating 时回到原 IMP。
+static void archoeraTerminateHook(id self, SEL command) {
+    if (archoera::g_terminating.load(std::memory_order_acquire) ||
+        !archoera::g_window_events.load(std::memory_order_acquire) ||
+        archoera::g_original_terminate_imp == nullptr) {
+        if (archoera::g_original_terminate_imp != nullptr) {
+            reinterpret_cast<void (*)(id, SEL)>(archoera::g_original_terminate_imp)(
+                self, command);
+        }
+        return;
+    }
+    archoera::dispatch(
+        archoera::makeWindowCloseRequest(archoera::WINDOW_QUIT));
+}
+
 namespace archoera {
+
+// 自绘缩放热区的本地事件监视器（ABI v10 补齐；定义在文件后部的 windowStartResize）。
+// 退出 / 停事件时显式摘除，避免监视器在引擎销毁后仍被 AppKit 回调。
+id g_resize_monitor = nil;
+void stopResizeMonitor();
+
 namespace {
 
 ArchoeraPlatformObserver* g_observer = nil;
@@ -322,6 +431,91 @@ void observe(NSNotificationCenter* center, NSNotificationName name,
              SEL selector) {
     if (center == nil || name == nil) return;
     [center addObserver:observer() selector:selector name:name object:nil];
+}
+
+void unobserve(NSNotificationCenter* center, NSNotificationName name) {
+    if (center == nil || name == nil) return;
+    [center removeObserver:observer() name:name object:nil];
+}
+
+// ── 主窗口 / 关闭拦截 / 终止钩子（ABI v10）─────────────────────────
+// 主窗口解析：mainWindow → keyWindow → 第一个可见的有序窗口。托盘菜单等
+// 瞬时面板不会长期占据 mainWindow/keyWindow，故优先级足够。
+NSWindow* mainWindow() {
+    NSWindow* w = [NSApp mainWindow];
+    if (w == nil) w = [NSApp keyWindow];
+    if (w == nil) {
+        for (NSWindow* candidate in [NSApp orderedWindows]) {
+            if (candidate.isVisible) {
+                w = candidate;
+                break;
+            }
+        }
+    }
+    return w;
+}
+
+// AppKit 屏幕坐标原点在主屏左下角；Dart 侧坐标按主屏左上角（逻辑点）往返。
+CGFloat primaryScreenHeight() {
+    NSScreen* screen = [[NSScreen screens] firstObject];
+    if (screen == nil) screen = [NSScreen mainScreen];
+    return screen != nil ? screen.frame.size.height : 0;
+}
+
+// 挂载 delegate 代理（必须在主线程改 NSWindow.delegate；原 delegate 可能为 nil）。
+void installCloseInterception() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* w = mainWindow();
+      if (w == nil) return;
+      id current = w.delegate;
+      if (g_window_close_delegate == nil) {
+          g_window_close_delegate =
+              [[ArchoeraWindowCloseDelegate alloc] init];
+      }
+      if (current == (id)g_window_close_delegate) {
+          g_event_window = w;  // 已挂载（重复订阅）：只更新窗口引用
+          return;
+      }
+      g_original_window_delegate = current;
+      g_event_window = w;
+      w.delegate = g_window_close_delegate;
+    });
+}
+
+// 还原原 delegate（幂等）；只在当前挂的仍是我们的代理时回写，避免覆盖
+// 期间被其它代码替换的委托。
+void removeCloseInterception() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (g_event_window != nil &&
+          g_event_window.delegate == (id)g_window_close_delegate) {
+          g_event_window.delegate = g_original_window_delegate;
+      }
+      g_event_window = nil;
+      g_original_window_delegate = nil;
+      g_window_close_delegate = nil;
+    });
+}
+
+// swizzle -[NSApplication terminate:]。保存原 IMP，stop/shutdown 时还原；
+// 重复订阅幂等。只改 NSApplication 的类方法实现（进程内单实例）。
+void installTerminateHook() {
+    if (g_original_terminate_imp != nullptr) return;
+    Method method =
+        class_getInstanceMethod([NSApplication class], @selector(terminate:));
+    if (method == nullptr) return;
+    g_original_terminate_imp = method_getImplementation(method);
+    method_setImplementation(method,
+                             reinterpret_cast<IMP>(&archoeraTerminateHook));
+}
+
+void removeTerminateHook() {
+    if (g_original_terminate_imp == nullptr) return;
+    Method method =
+        class_getInstanceMethod([NSApplication class], @selector(terminate:));
+    if (method != nullptr) {
+        method_setImplementation(method, g_original_terminate_imp);
+    }
+    g_original_terminate_imp = nullptr;
 }
 
 // ── 媒体会话 ──────────────────────────────────────────────────────
@@ -387,7 +581,8 @@ uint32_t caps() {
     return CAP_POWER_INHIBIT | CAP_POWER_SCREEN_STATE | CAP_WINDOW_STATE |
            CAP_MEDIA_SESSION | CAP_APP_INSTANCE | CAP_SYSTEM_ACCENT |
            CAP_SYSTEM_THEME | CAP_DEEP_LINK | CAP_REVEAL_PATH | CAP_TRAY |
-           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END;
+           CAP_SECURE_FILE | CAP_ELEVATION | CAP_SESSION_END |
+           CAP_WINDOW_CONTROL;
 }
 
 
@@ -430,6 +625,13 @@ int32_t shutdown() {
         [[NSProcessInfo processInfo] endActivity:g_activity];
         g_activity = nil;
     }
+    // 已在退出流程：若仍有 terminate: 进入（session-end 收尾），回到原 IMP，
+    // 不再上报关闭请求。
+    g_terminating.store(true, std::memory_order_release);
+    // 退出前显式摘掉自己注册的窗口观察者 / delegate 代理 / terminate 钩子
+    //（进程退出期 AppKit 仍会投递 resignKey / order-off 通知；观察者必须活着
+    // 且有效，或已注销）。
+    windowSetEvents(0);
     g_screen_events.store(false, std::memory_order_release);
     g_window_events.store(false, std::memory_order_release);
     trayDestroy();
@@ -468,18 +670,46 @@ int32_t powerSetScreenEvents(int32_t on) {
 }
 
 int32_t windowSetEvents(int32_t on) {
+    NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
     if (on != 0) {
-        NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
         observe(nc, NSWindowDidMiniaturizeNotification,
                 @selector(onMiniaturize:));
         observe(nc, NSWindowDidDeminiaturizeNotification,
                 @selector(onDeminiaturize:));
         observe(nc, NSWindowDidBecomeKeyNotification, @selector(onBecomeKey:));
         observe(nc, NSWindowDidResignKeyNotification, @selector(onResignKey:));
+        // 最大化 / 全屏 / 显示隐藏全部由 AppKit 通知驱动（不轮询）：
+        // resize 覆盖 zoom 与全屏的几何变化，order on/off 覆盖托盘隐藏。
+        observe(nc, NSWindowDidResizeNotification,
+                @selector(onWindowStateChanged:));
+        observe(nc, NSWindowDidEnterFullScreenNotification,
+                @selector(onWindowStateChanged:));
+        observe(nc, NSWindowDidExitFullScreenNotification,
+                @selector(onWindowStateChanged:));
+        // 隐藏 / 显示：AppKit 的 order on/off 没有公开通知名，用遮挡状态
+        // 变化（isVisible 在回调里读取）覆盖托盘隐藏 / 还原。
+        observe(nc, NSWindowDidChangeOcclusionStateNotification,
+                @selector(onWindowStateChanged:));
+        // 关闭请求：delegate 代理（windowShouldClose:）+ ⌘Q/terminate: 钩子。
+        installCloseInterception();
+        installTerminateHook();
         g_window_events.store(true, std::memory_order_release);
-        emitWindow();  // 初值
+        emitWindow();  // 初值（原子快照；AppKit 属性只在通知回调里读）
     } else {
         g_window_events.store(false, std::memory_order_release);
+        // 先撤关闭拦截（delegate 代理 + terminate 钩子）与缩放监视器，再摘通知观察者：
+        // 观察者指向已释放对象正是第三方插件退出崩溃的根因。
+        stopResizeMonitor();
+        removeCloseInterception();
+        removeTerminateHook();
+        unobserve(nc, NSWindowDidMiniaturizeNotification);
+        unobserve(nc, NSWindowDidDeminiaturizeNotification);
+        unobserve(nc, NSWindowDidBecomeKeyNotification);
+        unobserve(nc, NSWindowDidResignKeyNotification);
+        unobserve(nc, NSWindowDidResizeNotification);
+        unobserve(nc, NSWindowDidEnterFullScreenNotification);
+        unobserve(nc, NSWindowDidExitFullScreenNotification);
+        unobserve(nc, NSWindowDidChangeOcclusionStateNotification);
     }
     return OK;
 }
@@ -614,6 +844,393 @@ int32_t windowActivate() {
     });
     return OK;
 }
+
+// ── 窗口控制（ABI v10）────────────────────────────────────────────
+// 写操作全部 dispatch_async 到主线程（AppKit 非线程安全）；get_position 是
+// 只读快路径（Dart 随时查询），直接读 frame。坐标单位 = 逻辑点（DIP）。
+int32_t windowSetSize(int32_t w, int32_t h) {
+    if (w <= 0 || h <= 0) return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) [win setContentSize:NSMakeSize(w, h)];
+    });
+    return OK;
+}
+
+int32_t windowSetMinSize(int32_t w, int32_t h) {
+    if (w < 0 || h < 0) return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) [win setContentMinSize:NSMakeSize(w, h)];
+    });
+    return OK;
+}
+
+int32_t windowCenter() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) [win center];
+    });
+    return OK;
+}
+
+int32_t windowShow() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSApp unhide:nil];
+      [NSApp activateIgnoringOtherApps:YES];
+      NSWindow* win = mainWindow();
+      if (win != nil) [win makeKeyAndOrderFront:nil];
+    });
+    return OK;
+}
+
+int32_t windowHide() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) [win orderOut:nil];
+    });
+    return OK;
+}
+
+int32_t windowMinimize() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) [win miniaturize:nil];
+    });
+    return OK;
+}
+
+int32_t windowRestore() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) {
+          [win deminiaturize:nil];
+          [win makeKeyAndOrderFront:nil];
+      }
+    });
+    return OK;
+}
+
+int32_t windowSetMaximized(int32_t on) {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const bool want = on != 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      // zoom: 按当前状态决定是否切换，避免重复调用来回翻转。
+      if (win.isZoomed != want) [win zoom:nil];
+    });
+    return OK;
+}
+
+int32_t windowSetFullscreen(int32_t on) {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const bool want = on != 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      const bool now = (win.styleMask & NSWindowStyleMaskFullScreen) != 0;
+      if (now != want) [win toggleFullScreen:nil];
+    });
+    return OK;
+}
+
+int32_t windowSetAlwaysOnTop(int32_t on) {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const bool want = on != 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win != nil) {
+          win.level = want ? NSFloatingWindowLevel : NSNormalWindowLevel;
+      }
+    });
+    return OK;
+}
+
+int32_t windowSetResizable(int32_t on) {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const bool want = on != 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      if ((win.styleMask & NSWindowStyleMaskFullScreen) != 0) return;
+      NSWindowStyleMask mask = win.styleMask;
+      if (want) {
+          mask |= NSWindowStyleMaskResizable;
+      } else {
+          mask &= ~NSWindowStyleMaskResizable;
+      }
+      [win setStyleMask:mask];
+    });
+    return OK;
+}
+
+int32_t windowSetDecor(int32_t mode) {
+    if (mode < APL_WINDOW_DECOR_SYSTEM || mode > APL_WINDOW_DECOR_BORDERLESS) {
+        return ERR_STATE;
+    }
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const int32_t m = mode;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      if ((win.styleMask & NSWindowStyleMaskFullScreen) != 0) return;
+
+      NSWindowStyleMask mask = win.styleMask;
+      mask &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView |
+                NSWindowStyleMaskResizable | NSWindowStyleMaskClosable |
+                NSWindowStyleMaskMiniaturizable);
+      switch (m) {
+          case APL_WINDOW_DECOR_SYSTEM:
+              // 系统标题栏 + 边框 + 三个窗口按钮，标题可见。
+              mask |= NSWindowStyleMaskTitled | NSWindowStyleMaskResizable |
+                      NSWindowStyleMaskClosable |
+                      NSWindowStyleMaskMiniaturizable;
+              [win setStyleMask:mask];
+              win.titlebarAppearsTransparent = NO;
+              win.titleVisibility = NSWindowTitleVisible;
+              break;
+          case APL_WINDOW_DECOR_CAPTION:
+              // 保留系统按钮/边框，但标题栏透明且内容铺到顶部（无标题文字）。
+              mask |= NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView |
+                      NSWindowStyleMaskResizable |
+                      NSWindowStyleMaskClosable |
+                      NSWindowStyleMaskMiniaturizable;
+              [win setStyleMask:mask];
+              win.titlebarAppearsTransparent = YES;
+              win.titleVisibility = NSWindowTitleHidden;
+              break;
+          case APL_WINDOW_DECOR_BORDERLESS:
+          default:
+              // 无标题栏/边框；movable 允许系统拖拽，边缘缩放仍走原生。
+              mask |= NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable;
+              [win setStyleMask:mask];
+              win.movable = YES;
+              break;
+      }
+    });
+    return OK;
+}
+
+int32_t windowGetPosition(int32_t* x, int32_t* y) {
+    if (x == nullptr || y == nullptr) return ERR_STATE;
+    NSWindow* win = mainWindow();
+    if (win == nil) return ERR_BACKEND;
+    const NSRect frame = win.frame;  // 屏幕坐标，左下角原点
+    const CGFloat screen_h = primaryScreenHeight();
+    *x = static_cast<int32_t>(std::lround(frame.origin.x));
+    *y = static_cast<int32_t>(
+        std::lround(screen_h - frame.origin.y - frame.size.height));
+    return OK;
+}
+
+int32_t windowSetPosition(int32_t x, int32_t y) {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    const int32_t px = x;
+    const int32_t py = y;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      const NSRect frame = win.frame;
+      const CGFloat screen_h = primaryScreenHeight();
+      // Dart 用「主屏左上角」为原点；AppKit 是左下角 → 换算 origin.y。
+      const CGFloat origin_y =
+          screen_h - static_cast<CGFloat>(py) - frame.size.height;
+      NSRect target = NSMakeRect(static_cast<CGFloat>(px), origin_y,
+                                 frame.size.width, frame.size.height);
+      // 越界矫正：与任一屏的 visibleFrame 相交就原样应用（多屏 / 负坐标布局
+      // 不受影响）；只有完全越界（拔屏 / 分辨率变小 / 旧偏好来自另一套布局）
+      // 才把窗口拉回「中心最近」的那块屏。
+      BOOL visible = NO;
+      for (NSScreen* s in [NSScreen screens]) {
+        if (NSIntersectsRect(target, s.visibleFrame)) {
+          visible = YES;
+          break;
+        }
+      }
+      if (!visible) {
+        NSScreen* best = [NSScreen mainScreen];
+        CGFloat best_d = -1;
+        for (NSScreen* s in [NSScreen screens]) {
+          const NSRect vf = s.visibleFrame;
+          const CGFloat dx = NSMidX(target) - NSMidX(vf);
+          const CGFloat dy = NSMidY(target) - NSMidY(vf);
+          const CGFloat d = dx * dx + dy * dy;
+          if (best_d < 0 || d < best_d) {
+            best_d = d;
+            best = s;
+          }
+        }
+        if (best != nil) {
+          const NSRect vf = best.visibleFrame;
+          CGFloat ox = target.origin.x;
+          CGFloat oy = target.origin.y;
+          if (ox + target.size.width > NSMaxX(vf)) {
+            ox = NSMaxX(vf) - target.size.width;
+          }
+          if (ox < NSMinX(vf)) ox = NSMinX(vf);
+          if (oy + target.size.height > NSMaxY(vf)) {
+            oy = NSMaxY(vf) - target.size.height;
+          }
+          if (oy < NSMinY(vf)) oy = NSMinY(vf);
+          target.origin = NSMakePoint(ox, oy);
+        }
+      }
+      [win setFrameOrigin:target.origin];
+    });
+    return OK;
+}
+
+// ABI v11：内容区尺寸（与 windowSetSize 的 setContentSize 口径一致）。
+// AppKit 视图属性只能在主线程读 → 非主线程走 dispatch_sync，避免帧读取竞态。
+int32_t windowGetSize(int32_t* w, int32_t* h) {
+    if (w == nullptr || h == nullptr) return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    __block int32_t ww = 0;
+    __block int32_t hh = 0;
+    __block bool ok = false;
+    void (^read)(void) = ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      NSView* content = win.contentView;
+      if (content == nil) return;
+      const NSRect frame = content.frame;
+      ww = static_cast<int32_t>(std::lround(frame.size.width));
+      hh = static_cast<int32_t>(std::lround(frame.size.height));
+      ok = ww > 0 && hh > 0;
+    };
+    if ([NSThread isMainThread]) {
+        read();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), read);
+    }
+    if (!ok) return ERR_BACKEND;
+    *w = ww;
+    *h = hh;
+    return OK;
+}
+
+// 系统标题栏拖拽：把当前鼠标事件交给窗口（AppKit 自己处理跨屏/吸附）。
+// 自绘标题栏在 mouseDown 时调用；无当前事件时静默忽略。
+int32_t windowStartDrag() {
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      NSEvent* event = [NSApp currentEvent];
+      if (event != nil) [win performWindowDragWithEvent:event];
+    });
+    return OK;
+}
+
+// 自绘缩放热区（ABI v10 补齐）：AppKit 没有「开始边缘缩放」的公开 API，
+// 这里用本地事件监视器跟踪左键拖动，按起始 frame + 鼠标位移直接 setFrame。
+// 与 Windows（WM_NCLBUTTONDOWN）/ Linux（gtk_window_begin_resize_drag）语义对齐：
+// edge 顺序同 APL_WINDOW_EDGE_*，坐标均为屏幕逻辑点（左下角原点）。
+// 监视器只在拖动期间存在；mouseUp / stop_events / shutdown 都会摘除。
+void stopResizeMonitor() {
+    // NSEvent 监视器的增删都必须在主线程；Dart FFI 可能在任意线程调用
+    // set_events(0) / shutdown()，这里统一编组回主循环。
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ stopResizeMonitor(); });
+        return;
+    }
+    if (g_resize_monitor == nil) return;
+    [NSEvent removeMonitor:g_resize_monitor];
+    g_resize_monitor = nil;
+}
+
+int32_t windowStartResize(int32_t edge) {
+    if (edge < APL_WINDOW_EDGE_TOP_LEFT || edge > APL_WINDOW_EDGE_BOTTOM_RIGHT)
+        return ERR_STATE;
+    if (mainWindow() == nil) return ERR_BACKEND;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* win = mainWindow();
+      if (win == nil) return;
+      // 全屏 / 原生全屏过渡期间不接管几何（退出全屏后系统自行恢复）。
+      if ((win.styleMask & NSWindowStyleMaskFullScreen) != 0) return;
+
+      stopResizeMonitor();
+      const NSPoint startMouse = [NSEvent mouseLocation];
+      const NSRect startFrame = win.frame;
+      const NSSize minContent = win.contentMinSize;
+      const NSSize minFrame =
+          [win frameRectForContentRect:NSMakeRect(0, 0, minContent.width, minContent.height)].size;
+      const bool hasMin = minContent.width > 0 || minContent.height > 0;
+      const bool left = edge == APL_WINDOW_EDGE_TOP_LEFT ||
+                        edge == APL_WINDOW_EDGE_LEFT ||
+                        edge == APL_WINDOW_EDGE_BOTTOM_LEFT;
+      const bool right = edge == APL_WINDOW_EDGE_TOP_RIGHT ||
+                         edge == APL_WINDOW_EDGE_RIGHT ||
+                         edge == APL_WINDOW_EDGE_BOTTOM_RIGHT;
+      const bool top = edge == APL_WINDOW_EDGE_TOP_LEFT ||
+                       edge == APL_WINDOW_EDGE_TOP ||
+                       edge == APL_WINDOW_EDGE_TOP_RIGHT;
+      const bool bottom = edge == APL_WINDOW_EDGE_BOTTOM_LEFT ||
+                          edge == APL_WINDOW_EDGE_BOTTOM ||
+                          edge == APL_WINDOW_EDGE_BOTTOM_RIGHT;
+
+      g_resize_monitor = [NSEvent
+          addLocalMonitorForEventsMatchingMask:(NSEventMaskLeftMouseDragged |
+                                                 NSEventMaskLeftMouseUp)
+                                       handler:^NSEvent*(NSEvent* event) {
+            if (event.type == NSEventTypeLeftMouseUp) {
+                // 不能在本 handler 内 removeMonitor 自身：交给下一轮主循环。
+                dispatch_async(dispatch_get_main_queue(), ^{ stopResizeMonitor(); });
+                return event;
+            }
+
+            const NSPoint p = [NSEvent mouseLocation];
+            const CGFloat dx = p.x - startMouse.x;
+            const CGFloat dy = p.y - startMouse.y;
+            NSRect frame = startFrame;
+            if (left) {
+                frame.origin.x += dx;
+                frame.size.width -= dx;
+            } else if (right) {
+                frame.size.width += dx;
+            }
+            if (top) {
+                // AppKit 原点在左下：上边缘移动只改高度，底边固定。
+                frame.size.height += dy;
+            } else if (bottom) {
+                frame.origin.y += dy;
+                frame.size.height -= dy;
+            }
+
+            if (hasMin && frame.size.width < minFrame.width) {
+                if (left)
+                    frame.origin.x = startFrame.origin.x + startFrame.size.width - minFrame.width;
+                frame.size.width = minFrame.width;
+            }
+            if (hasMin && frame.size.height < minFrame.height) {
+                if (bottom)
+                    frame.origin.y =
+                        startFrame.origin.y + startFrame.size.height - minFrame.height;
+                frame.size.height = minFrame.height;
+            }
+
+            [win setFrame:frame display:YES];
+            return event;
+        }];
+    });
+    return OK;
+}
+
+int32_t windowRequestClose() {
+    // 只投递事件，绝不自动关窗/退出；Dart 决策后走 hide 或 exit(0)。
+    dispatch(makeWindowCloseRequest(WINDOW_CLOSE));
+    return OK;
+}
+
+int32_t windowStopEvents() { return windowSetEvents(0); }
 
 bool systemAccent(int32_t* r, int32_t* g, int32_t* b) {
     NSColor* color = [NSColor controlAccentColor];

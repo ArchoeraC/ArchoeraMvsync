@@ -456,6 +456,74 @@ jobs:
           }
           Write-Warning "所有源均失败，交由 vcpkg 直连重试"
 
+      # 为什么需要这步：vcpkg 的 ffmpeg 端口自 9.0.x 起新增 host 工具依赖
+      # ffmpeg-bin2c（portfile 用 vcpkg_from_github 拉整个 FFmpeg 源码 tarball 编
+      # bin2c.exe）。runner 镜像里的 C:\vcpkg 端口树随镜像每周更新，一旦带上该依赖，
+      # runner 的 downloads 缓存里没有这份 distfile，而 GitHub codeload 在 runner 上
+      # 会中途断流（curl 56 / 504），vcpkg 判为「非瞬时错误」直接不重试 →
+      # BUILD_FAILED（本仓库代码没有任何问题；2026-11-27 的 CI 失败即此）。
+      # 这里按**镜像自带 portfile** 的 REPO / REF / SHA512 预取同一份 distfile
+      # （文件名规则同 vcpkg_from_github：<org>-<repo>-<ref>.tar.gz，ref 里的 "/" → "_-"），
+      # 用 vcpkg 自己的 SHA512 校验后落到 downloads —— ffmpeg 与 ffmpeg-bin2c 两个
+      # 端口引用的是同一个 n<ver> 归档，取一份即可。失败不致命，vcpkg 仍按原逻辑直连。
+      - name: Prefetch ffmpeg source distfile (GitHub 504 / curl 56 fallback)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ok = $true
+          foreach ($port in @('ffmpeg-bin2c', 'ffmpeg')) {
+            $portFile = "C:\vcpkg\ports\$port\portfile.cmake"
+            $portJson = "C:\vcpkg\ports\$port\vcpkg.json"
+            if (-not (Test-Path $portFile) -or -not (Test-Path $portJson)) {
+              Write-Host "镜像端口树无 $port（旧基线），跳过"; continue
+            }
+            $ver  = (Get-Content $portJson -Raw | ConvertFrom-Json).version
+            $c    = Get-Content $portFile -Raw
+            $repo = [regex]::Match($c, 'vcpkg_from_github\([\s\S]{0,200}?REPO\s+([^\s\)]+)').Groups[1].Value
+            $sha  = [regex]::Match($c, 'vcpkg_from_github\([\s\S]{0,400}?SHA512\s+([0-9a-fA-F]{128})').Groups[1].Value
+            if (-not $repo -or -not $sha -or -not $ver) {
+              Write-Warning "无法解析 $port 的 REPO / SHA512 / version，跳过"; continue
+            }
+            # portfile 的 REF 是 "n${VERSION}"
+            $ref = "n$ver".Replace("/", "_-")
+            $fn  = "$($repo.ToLower().Replace('/', '-'))-$ref.tar.gz"
+            $dst = Join-Path "C:\vcpkg\downloads" $fn
+            if ((Test-Path $dst) -and
+                ((Get-FileHash $dst -Algorithm SHA512).Hash.ToLower() -eq $sha.ToLower())) {
+              Write-Host "[$port] ffmpeg $ref 源码已在 vcpkg 缓存中 ($fn)"; continue
+            }
+            New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+            $url  = "https://github.com/$repo/archive/$ref.tar.gz"
+            $done = $false
+            foreach ($u in @(
+                $url,
+                "https://ghproxy.net/$url",
+                "https://gh-proxy.com/$url",
+                "https://ghfast.top/$url",
+                "https://gh.moeyy.xyz/$url",
+                "https://ghproxy.cc/$url",
+                "https://gh.llkk.cc/$url")) {
+              # --retry-all-errors：curl 56（接收中断）默认不重试，必须显式打开
+              try {
+                curl.exe -fL --retry 3 --retry-delay 5 --retry-all-errors `
+                  --connect-timeout 20 -o "$dst.part" $u
+                if ((Get-FileHash "$dst.part" -Algorithm SHA512).Hash.ToLower() -eq $sha.ToLower()) {
+                  Move-Item "$dst.part" $dst -Force
+                  Write-Host "[$port] 已获取 ffmpeg $ref 源码：$u"; $done = $true; break
+                }
+                Write-Warning "[$port] SHA512 不匹配: $u"
+              } catch {
+                Write-Warning "[$port] 下载失败: $u"
+              }
+              Remove-Item "$dst.part" -ErrorAction SilentlyContinue
+            }
+            if (-not $done) { $ok = $false; Write-Warning "[$port] 所有源均失败，交由 vcpkg 直连" }
+          }
+          # 顺便把镜像基线打出来：以后端口树漂移一眼可见
+          git -C C:\vcpkg rev-parse --short HEAD 2>$null | ForEach-Object { Write-Host "vcpkg scripts HEAD: $_" }
+          if (-not $ok) { exit 1 }
+
       - name: Install vcpkg deps (manifest 模式，依赖清单见 app/vcpkg.json)
         if: matrix.os == 'windows'
         shell: bash
@@ -469,10 +537,25 @@ jobs:
         # 输出重定向到文件、只回显尾部：vcpkg 编译 ffmpeg 会打印海量 `\r` 进度行，
         # 直接进 Actions 日志会让网页日志查看器卡死（表现为「步骤点不开」）。
         run: |
-          vcpkg install --triplet x64-windows-release > vcpkg-install.log 2>&1 || {
-            echo "::error::vcpkg install 失败，尾部日志："; tail -200 vcpkg-install.log; exit 1;
-          }
-          echo "vcpkg install 完成"; tail -20 vcpkg-install.log
+          # 下载类失败（GitHub 504 / 限流）是瞬时的：重试一次，仍失败才判死。
+          for attempt in 1 2; do
+            if vcpkg install --triplet x64-windows-release > vcpkg-install.log 2>&1; then
+              echo "vcpkg install 完成"; tail -20 vcpkg-install.log
+              # 三端 FFmpeg 统一目标 9.0.2（Linux/macOS 由 build-ffmpeg-minimal.sh 钉定）；
+              # Windows 跟随 runner 镜像端口树，漂移在这里显式告警（不致命）。
+              expected="9.0.2"
+              line="$(vcpkg list ffmpeg 2>/dev/null | grep -m1 '^ffmpeg:' || true)"
+              echo "vcpkg ffmpeg: ${line:-<未解析到>}"
+              ver="$(printf '%s' "$line" | awk '{print $2}' | cut -d'#' -f1)"
+              if [ -n "$ver" ] && [ "$ver" != "$expected" ]; then
+                echo "::warning::FFmpeg 解析为 $ver，与三端统一目标 $expected 不一致（runner 镜像端口树漂移）；确认行为差异后同步 build-ffmpeg-minimal.sh 与文档，或给 Windows 钉端口版本。"
+              fi
+              exit 0
+            fi
+            echo "::warning::vcpkg install 第 $attempt 次失败，尾部日志："; tail -60 vcpkg-install.log
+            if [ "$attempt" = "1" ]; then sleep 20; fi
+          done
+          echo "::error::vcpkg install 失败（已重试 2 次），尾部日志："; tail -200 vcpkg-install.log; exit 1
         env:
           VCPKG_ROOT: C:\vcpkg
 
@@ -521,9 +604,10 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           # 固定 Flutter 版本（与本地开发/`pubspec.lock` 对齐），不要用 channel: stable：
-          # 依赖链（window_manager 0.7 → nativeapi 0.6）要求 Dart ^3.14 / Flutter ≥3.50；
-          # 不要改回 channel: stable（会随上游漂移，2026-11-12 曾因此全平台失败）。
-          # 升级前请同时确认 nativeapi / cnativeapi / window_manager 三者的 SDK 约束。
+          # 项目按该版本校准 `dart analyze` / `flutter test` / 三端构建；channel 会随上游漂移，
+          # 2026-11-12 曾因此全平台失败。升级前先在本机跑通 analyze + test 再改这里。
+          # 注：第三方窗口插件（window_manager / nativeapi / cnativeapi）已于 2026-11-26
+          # ABI v10 整体移除，窗口状态与控制都走 app/native/platform 桥接。
           flutter-version: '3.50.1'
           cache: true
 
@@ -570,7 +654,7 @@ jobs:
         with:
           path: ~/.local/ffmpeg-minimal
           # tls 段：自包含 mbedTLS 引入后旧缓存（无 .mbedtls-tls 标记）必须失效重建。
-          key: ffmpeg-minimal-9.0.1-tls-${{ runner.os }}-${{ matrix.arch }}
+          key: ffmpeg-minimal-9.0.2-tls-${{ runner.os }}-${{ matrix.arch }}
 
       - name: Build minimal FFmpeg (macOS, LGPL)
         if: matrix.os == 'macos' && steps.ffmpeg-cache-macos.outputs.cache-hit != 'true'
@@ -631,7 +715,7 @@ jobs:
       - name: Flutter pub get
         working-directory: app
         # --enforce-lockfile：lockfile 与解析结果不一致时立即失败（否则 pub 会
-        # 静默重新解析，把 nativeapi 升到需要更新 Dart 的 0.5.10，见 build-release.sh）。
+        # 静默重新解析传递依赖，让三端构建与本地锁文件漂移）。
         run: flutter pub get --enforce-lockfile
 
       - name: Analyze

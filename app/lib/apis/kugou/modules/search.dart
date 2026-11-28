@@ -78,8 +78,13 @@ Map<String, dynamic> _normalizeFromMobile(Map<String, dynamic> raw) {
   };
 }
 
-Future<Map<String, dynamic>> _searchSongsMobile(String keywords, int page, int limit) async {
-  final url = '$kgMobilecdnUrl?keyword=${Uri.encodeComponent(keywords)}'
+Future<Map<String, dynamic>> _searchSongsMobile(
+  String keywords,
+  int page,
+  int limit,
+) async {
+  final url =
+      '$kgMobilecdnUrl?keyword=${Uri.encodeComponent(keywords)}'
       '&page=$page&pagesize=$limit&format=json&showtype=1';
   final body = await kgRequest(url);
   final data = body['data'];
@@ -156,8 +161,13 @@ Map<String, dynamic> _normalizeFromLegacy(Map<String, dynamic> raw) {
   };
 }
 
-Future<Map<String, dynamic>> _searchSongsLegacy(String keywords, int page, int limit) async {
-  final url = '$kgSearchUrl?keyword=${Uri.encodeComponent(keywords)}'
+Future<Map<String, dynamic>> _searchSongsLegacy(
+  String keywords,
+  int page,
+  int limit,
+) async {
+  final url =
+      '$kgSearchUrl?keyword=${Uri.encodeComponent(keywords)}'
       '&page=$page&pagesize=$limit'
       '&userid=0&clientver=&platform=WebFilter&filter=2&iscorrection=1&privilege_filter=0&area_code=1';
   final body = await kgRequest(url);
@@ -194,7 +204,12 @@ KgModule kgSearch = (params) async {
   final limit = (params['limit'] as num?)?.toInt() ?? 30;
 
   if (keywords == null || keywords.isEmpty) {
-    return {'code': 400, 'total': 0, 'songs': <Map<String, dynamic>>[], 'message': 'keywords required'};
+    return {
+      'code': 400,
+      'total': 0,
+      'songs': <Map<String, dynamic>>[],
+      'message': 'keywords required',
+    };
   }
 
   // mobilecdn 抛错或空结果都兜底到 songsearch

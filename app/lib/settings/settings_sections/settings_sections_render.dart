@@ -6,9 +6,14 @@ part of '../settings_sections.dart';
 
 // ── 性能 / 渲染 ───────────────────────────────────────────────────────
 
-/// 性能 / 渲染分类：水纹渲染器 / 动态层半分辨率 / 损伤区裁剪 / 歌词边缘渐隐。
+/// 性能 / 渲染分类：水纹渲染器 / 动态层半分辨率 / 损伤区裁剪 / 歌词边缘渐隐 /
+/// macOS 独立显卡加速。
 class RenderSection extends ConsumerWidget {
-  const RenderSection({super.key});
+  RenderSection({super.key, bool? showMacOSGPU})
+    : showMacOSGPU = showMacOSGPU ?? Platform.isMacOS;
+
+  /// 是否展示「独立显卡加速」（macOS 专属；测试可注入，避免依赖宿主平台）。
+  final bool showMacOSGPU;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,6 +106,50 @@ class RenderSection extends ConsumerWidget {
                 ],
               ),
             ),
+            // 双显卡 Intel Mac 上引擎默认「优先集显」（flutter#164569），
+            // 由 Runner 的 GPUSelection.m 在启动时按本偏好改写。三档而不是
+            // 开关：独显的 Metal 能力可能低于集显（如集显 Metal 3 / 独显
+            // Metal 2），需要「自动」这一档避免降级。
+            // gen-settings-index: skip（仅 macOS 显示，其它平台不参与搜索索引）
+            if (showMacOSGPU)
+              SettingTile(
+                icon: EtaIcons.chipOutline,
+                title: l10n.settingsMacOSGPU,
+                subtitle: l10n.settingsMacOSGPUDesc,
+                trailing: DropdownButton<String>(
+                  value: prefs.macosGPU,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  borderRadius: BorderRadius.circular(10),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                  icon: Icon(
+                    EtaIcons.downSmall,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    ref.read(appPrefsProvider.notifier).setMacosGPU(v);
+                  },
+                  items: [
+                    DropdownMenuItem(
+                      value: 'auto',
+                      child: Text(l10n.settingsMacOSGPUAuto),
+                    ),
+                    DropdownMenuItem(
+                      value: 'discrete',
+                      child: Text(l10n.settingsMacOSGPUDiscrete),
+                    ),
+                    DropdownMenuItem(
+                      value: 'integrated',
+                      child: Text(l10n.settingsMacOSGPUIntegrated),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 20),

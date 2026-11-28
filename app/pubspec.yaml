@@ -23,11 +23,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.7+1
 
 environment:
-  # 桌面平台能力经自研桥接（apl_*）；Flutter 3.47+ 为依赖链下限。
-  # 本地/CI 固定 Flutter 3.50.1（Dart 3.14.0）；Nix 源构建仍用 nixpkgs 的
-  # Flutter 3.47（Dart 3.13），所以下限保持 3.47、由 pubspec.lock 各自解析。
-  sdk: ^3.13.0
-  flutter: ">=3.47.0"
+  # 桌面平台能力经自研桥接（apl_*）。
+  # 全平台统一 Flutter 3.50.1 / Dart 3.14.0（本地与 CI 固定该版本；Nix 源构建用
+  # nixpkgs 的 `flutter`，其 stable 已到 3.50.1）。**3.47（Dart 3.13）兼容已删除**，
+  # 不再向下兼容——降版本需同时改这里、CI 的 flutter-version 与 flake.lock。
+  sdk: ^3.14.0
+  flutter: ">=3.50.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -57,10 +58,6 @@ dependencies:
   qr: ^4.0.0
   sqlite3: ^3.5.1
   file_selector: ^1.1.0
-  # 0.7.x 要求 Dart ^3.14（Flutter ≥3.50）；Nix 源构建用的 nixpkgs Flutter 仍是
-  # 3.47（Dart 3.13），此时 pub 会解析到 0.6.x。两者 API 在本项目用到的部分一致，
-  # 故用区间约束让两套工具链各自解析（等 nixpkgs 跟进 Flutter 3.50 后可收紧）。
-  window_manager: '>=0.6.0 <0.8.0'
   geolocator: ^14.0.3
 dev_dependencies:
   flutter_test:

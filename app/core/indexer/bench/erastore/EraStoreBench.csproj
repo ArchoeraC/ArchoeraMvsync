@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>EraStoreBench</AssemblyName>
+    <RootNamespace>Archoera.Indexer.Bench</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 构建期以内存为先：索引器是后台批处理任务，峰值 RSS 比几毫秒 CPU 更敏感。
+         与 12 字段族 + V2 派生层免位置一起，把 30k 最坏情况从 187 MB 压到 ~115 MB。
+         NativeAOT 产物是否同样生效需在 S3 用真实产物复核。 -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    <RuntimeHostConfigurationOption Include="System.GC.Gen0Size" Value="2000000" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 只测 EraStore / 查询层：链接索引器源码（不含 CLI 的 Program.cs 与 tests/），
+         与索引器共用同一份实现，避免基准与生产分叉。 -->
+    <Compile Include="../../EraStore/**/*.cs" Link="EraStore/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../../*.cs" Exclude="../../Program.cs" Link="%(Filename)%(Extension)" />
+    <!-- 共享源码（与 indexer.csproj 保持同源）。 -->
+    <Compile Include="../../../shared/lyrics/LrcReader.cs" Link="shared/lyrics/LrcReader.cs" />
+    <Compile Include="../../../shared/text/ScriptRanges.cs" Link="shared/text/ScriptRanges.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <PackageReference Include="ToolGood.Words" Version="3.1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/kana_romaji.tsv" Link="data/kana_romaji.tsv">
+      <LogicalName>Archoera.Indexer.data.kana_romaji.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/ja_readings.tsv" Link="data/ja_readings.tsv">
+      <LogicalName>Archoera.Indexer.data.ja_readings.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/nfkc.tsv">
+      <LogicalName>Archoera.Indexer.data.nfkc.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/accent_fold.tsv">
+      <LogicalName>Archoera.Indexer.data.accent_fold.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/variant_fold.tsv">
+      <LogicalName>Archoera.Indexer.data.variant_fold.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/def_en2hanzi.tsv">
+      <LogicalName>Archoera.Indexer.data.def_en2hanzi.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/lexicon_cross.tsv">
+      <LogicalName>Archoera.Indexer.data.lexicon_cross.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/def_hanzi2en.tsv">
+      <LogicalName>Archoera.Indexer.data.def_hanzi2en.tsv</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/manifest.json">
+      <LogicalName>Archoera.Indexer.data.manifest.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

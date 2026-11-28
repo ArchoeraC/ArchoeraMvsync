@@ -26,6 +26,26 @@ int32_t powerSetScreenEvents(int32_t) { return ERR_UNSUPPORTED; }
 
 int32_t windowSetEvents(int32_t) { return ERR_UNSUPPORTED; }
 
+int32_t windowSetSize(int32_t, int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowSetMinSize(int32_t, int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowCenter() { return ERR_UNSUPPORTED; }
+int32_t windowShow() { return ERR_UNSUPPORTED; }
+int32_t windowHide() { return ERR_UNSUPPORTED; }
+int32_t windowMinimize() { return ERR_UNSUPPORTED; }
+int32_t windowRestore() { return ERR_UNSUPPORTED; }
+int32_t windowSetMaximized(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowSetFullscreen(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowSetAlwaysOnTop(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowSetResizable(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowSetDecor(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowGetPosition(int32_t*, int32_t*) { return ERR_UNSUPPORTED; }
+int32_t windowSetPosition(int32_t, int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowGetSize(int32_t*, int32_t*) { return ERR_UNSUPPORTED; }
+int32_t windowStartDrag() { return ERR_UNSUPPORTED; }
+int32_t windowStartResize(int32_t) { return ERR_UNSUPPORTED; }
+int32_t windowRequestClose() { return ERR_UNSUPPORTED; }
+int32_t windowStopEvents() { return ERR_UNSUPPORTED; }
+
 int32_t mediaSetTrack(const AplTrackMeta*) { return ERR_UNSUPPORTED; }
 int32_t mediaSetPlayback(int32_t, int64_t, double, double, int32_t, int32_t) {
     return ERR_UNSUPPORTED;

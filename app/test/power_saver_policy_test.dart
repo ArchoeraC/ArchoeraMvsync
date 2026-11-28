@@ -56,6 +56,35 @@ void main() {
       expect(next.minimized, isTrue);
     });
 
+    test('桥接 hidden=true 与托盘显式隐藏同档（后台停帧）', () {
+      final next = mergeBridgeWindowState(
+        const SystemWindowState(
+          minimized: false,
+          focused: false,
+          hidden: true,
+        ),
+        minimized: false,
+        focused: true,
+        screenOff: false,
+        hidden: false,
+      );
+      expect(next.minimized, isTrue);
+      expect(next.focused, isFalse);
+      expect(next.screenOff, isFalse);
+    });
+
+    test('桥接 hidden=false 不把已显示的窗口继续当成隐藏', () {
+      final next = mergeBridgeWindowState(
+        const SystemWindowState(minimized: false, focused: true),
+        minimized: true,
+        focused: false,
+        screenOff: true,
+        hidden: false,
+      );
+      expect(next.minimized, isFalse);
+      expect(next.screenOff, isFalse);
+    });
+
     test('minimized=true 置位；失焦保留熄屏状态', () {
       final next = mergeBridgeWindowState(
         const SystemWindowState(minimized: true, focused: false),

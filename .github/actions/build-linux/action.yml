@@ -38,10 +38,11 @@ runs:
 
     - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
       with:
-        # 固定 Flutter 版本（与本地开发/`pubspec.lock` 对齐），不要用 channel: stable：
-        # 依赖链（window_manager 0.7 → nativeapi 0.6）要求 Dart ^3.14 / Flutter ≥3.50；
-        # 不要改回 channel: stable（会随上游漂移，2026-11-12 曾因此全平台失败）。
-        # 升级前请同时确认 nativeapi / cnativeapi / window_manager 三者的 SDK 约束。
+        # 固定 Flutter 版本（与 app/pubspec.yaml 的 `^3.14.0` / `>=3.50.0` 下限、
+        # `pubspec.lock` 以及 Nix 源构建用的 nixpkgs `flutter` 对齐）。第三方窗口插件
+        # （window_manager / nativeapi / cnativeapi）已于 2026-11-26 整体移除。
+        # 不要改回 channel: stable（会随上游漂移，2026-11-12 曾因此全平台失败）；
+        # 升级时四处一起动：本行、pubspec.yaml 下限、build-all.yml 的 macOS 步骤、flake.lock。
         flutter-version: '3.50.1'
         cache: true
 
@@ -73,7 +74,7 @@ runs:
         path: ~/.local/ffmpeg-minimal
         # tls 段：自包含 mbedTLS 引入后旧缓存（无 .mbedtls-tls 标记）必须失效重建，
         # 否则命中旧前缀会导致每次运行都原地重编 FFmpeg。
-        key: ffmpeg-minimal-9.0.1-tls-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache_key_suffix }}
+        key: ffmpeg-minimal-9.0.2-tls-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache_key_suffix }}
 
     - name: Build minimal FFmpeg
       if: steps.ffmpeg-cache.outputs.cache-hit != 'true'

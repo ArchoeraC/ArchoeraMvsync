@@ -39,7 +39,7 @@
 - **[KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（MIT）** —— KG 平台接口与设备字段约定参考
 - **[NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)（MIT）** —— NT 平台接口流程参考
 - **[ncm-api-rs](https://github.com/SPlayer-Dev/ncm-api-rs)（WTFPL）** —— Rust 化签名实现方案参考
-- **[AMLL（Apple Music-like Lyrics）](https://github.com/amll-dev/applemusic-like-lyrics)（AGPL-3.0-only）** —— Apple Music 风格动态歌词引擎参考（歌词墙整墙滚动、逐字扫光、行级弹簧等观感的原创来源；本项目以 Dart 重实现，与本项目同为 AGPLv3 系，保留上游版权声明与修改说明）
+- **[AMLL（Apple Music-like Lyrics）](https://github.com/amll-dev/applemusic-like-lyrics)（所参考的旧版为 MIT；上游现行版本为 AGPL-3.0-only）** —— Apple Music 风格动态歌词引擎参考（歌词墙整墙滚动、逐字扫光、行级弹簧等观感的原创来源；本项目参考其旧版 MIT 实现并以 Dart 重实现，旧版 MIT 允许再许可，成果随本项目以 AGPL-3.0-or-later 分发，保留上游版权声明与修改说明）
 - **[FFmpeg](https://ffmpeg.org)（Linux/macOS LGPL-3.0+、Windows LGPL-2.1+）** —— 主解码 / 重采样引擎，多格式移植的参考源
 - **[Opus / libopus](https://opus-codec.org)（BSD-3-Clause，IETF RFC 6716）** —— SILK/CELT 移植与静态模式表参考
 - **[miniaudio](https://github.com/mackron/miniaudio)（MIT-0 / Public Domain）** —— 通用跨平台音频输出（David Reid）
@@ -56,6 +56,7 @@
 **本地曲库搜索索引（indexer）依赖与设计参考**（许可逐项见 `app/core/indexer/THIRD-PARTY-LICENSES.md`）：
 
 - **[ToolGood.Words](https://github.com/toolgood/ToolGood.Words)（Apache-2.0）** —— 汉字转拼音（含**词级多音字消歧**）、繁简互换、全角半角互换；索引器**直接依赖**
+- **策展跨语言专名词表 `app/core/indexer/data/lexicon_cross.tsv`（Archoera 自建，CC0-1.0）** —— 公开艺人 / 乐队名称的事实性对照（seed，待人工复核）
 - **Unicode [Unihan](https://www.unicode.org/reports/tr38/) 数据库 `kDefinition` / `kJapanese` / `kSimplifiedVariant` + `kJapaneseOldVariant`（Unicode License）** —— 跨语言检索「汉字 ↔ 英文释义」查询扩展、日文音训读、异体字折叠的数据来源
 - **Unicode NFD 规范分解（Unicode License）** —— 拉丁去音符号折叠表 `data/accent_fold.tsv`
 - **[SQLite FTS5](https://www.sqlite.org/fts5.html)（公有领域）** —— 全文索引 / `bm25()` 排序的存储引擎

@@ -18,7 +18,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:archoera_mvsync/l10n/generated/app_localizations.dart';
 import 'package:archoera_mvsync/services/netease/track.dart';
-import 'package:archoera_mvsync/services/search/search_highlight.dart';
+import 'package:archoera_mvsync/services/search/search_models.dart';
 import 'package:archoera_mvsync/stores/app_prefs.dart';
 import 'package:archoera_mvsync/widgets/list/song_list.dart';
 
@@ -37,24 +37,32 @@ const Track _track = Track(
   localPath: '/tmp/does-not-exist.mp3',
 );
 
-Widget _wrap({List<MatchRange> Function(String)? highlightOf}) => ProviderScope(
-  overrides: [appPrefsProvider.overrideWith(_FakeAppPrefsNotifier.new)],
-  child: MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(
-      body: SizedBox(
-        width: 900,
-        height: 400,
-        child: SongList(
-          items: const [_track],
-          onPlay: (_) {},
-          highlightOf: highlightOf,
+/// 标题命中 "Love"（`[0,4)`）。
+const LocalTrackHighlight _titleHighlight = LocalTrackHighlight(
+  ranges: [
+    LocalHighlightRange(field: 'title', start: 0, end: 4),
+  ],
+);
+
+Widget _wrap({LocalTrackHighlight? Function(Track track)? highlightOf}) =>
+    ProviderScope(
+      overrides: [appPrefsProvider.overrideWith(_FakeAppPrefsNotifier.new)],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            height: 400,
+            child: SongList(
+              items: const [_track],
+              onPlay: (_) {},
+              highlightOf: highlightOf,
+            ),
+          ),
         ),
       ),
-    ),
-  ),
-);
+    );
 
 /// 找到纯文本化后等于 [plain] 的 [Text] 组件。
 Finder _textWithPlain(String plain) => find.byWidgetPredicate(
@@ -81,7 +89,7 @@ void main() {
   });
 
   testWidgets('有高亮入参 + 命中：标题为 Text.rich，命中段叠加背景', (tester) async {
-    await tester.pumpWidget(_wrap(highlightOf: SearchHighlighter('love').call));
+    await tester.pumpWidget(_wrap(highlightOf: (_) => _titleHighlight));
     await tester.pumpAndSettle();
 
     final richTitle = tester.widget<Text>(_textWithPlain('Love Story'));
@@ -89,15 +97,13 @@ void main() {
     expect(richTitle.textSpan!.toPlainText(), 'Love Story');
 
     final leaves = _leaves(richTitle.textSpan!);
-    final highlighted = leaves.where(
-      (s) => s.style?.backgroundColor != null,
-    );
+    final highlighted = leaves.where((s) => s.style?.backgroundColor != null);
     expect(highlighted.map((s) => s.text), contains('Love'));
   });
 
   testWidgets('有高亮入参但无命中：回退普通 Text，不报错', (tester) async {
     await tester.pumpWidget(
-      _wrap(highlightOf: (text) => highlightRanges(text, 'zzzz')),
+      _wrap(highlightOf: (_) => const LocalTrackHighlight()),
     );
     await tester.pumpAndSettle();
 

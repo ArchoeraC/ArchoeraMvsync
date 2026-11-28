@@ -660,7 +660,7 @@ API + AOT，Impeller 直连 KMS，无二次合成 pass；名称与出处见
   桥接仍按官方工具链原生编译（不引入 Zig 承载）。
 
 **验收（架构向）**：`dart analyze lib` 0 issue；**本方案新增代码**不引入 MethodChannel /
-`Process.run`（既有 `window_manager` 等按桥接迁移路线另行收敛）；新增效果逻辑可单测
+`Process.run`（第三方窗口/托盘插件已按桥接迁移路线收敛）；新增效果逻辑可单测
 （纯 Dart 脏区/预算/档位算法）；单文件职责清晰、可独立测试与回退。
 
 ### 4.1 GPU 主线 — 背景（最高优先）

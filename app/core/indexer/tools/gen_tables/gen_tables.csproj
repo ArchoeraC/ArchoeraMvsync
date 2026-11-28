@@ -12,6 +12,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 与索引器共用同一份 manifest 规范化 / id 计算实现（T4.3 §5.5.1：
+         生成器与运行时必须逐字节一致，禁止两份实现）。 -->
+    <Compile Include="../../DataPack.cs" Link="DataPack.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 仅用于「异体字补齐」过滤：判断 ToolGood 繁简词库是否已覆盖该字符 -->
     <PackageReference Include="ToolGood.Words" Version="3.1.0.3" />
   </ItemGroup>

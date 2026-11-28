@@ -38,40 +38,62 @@ namespace Archoera.Indexer;
 /// </summary>
 internal static class HanziData
 {
-    private const string CompatibilityResource = "Archoera.Indexer.data.nfkc.tsv";
-    private const string AccentResource = "Archoera.Indexer.data.accent_fold.tsv";
-    private const string VariantResource = "Archoera.Indexer.data.variant_fold.tsv";
-    private const string GlossEnToHanziResource = "Archoera.Indexer.data.def_en2hanzi.tsv";
-    private const string GlossHanziToEnResource = "Archoera.Indexer.data.def_hanzi2en.tsv";
+    private const string CompatibilityFile = DataPack.NfkcFile;
+    private const string AccentFile = DataPack.AccentFile;
+    private const string VariantFile = DataPack.VariantFile;
+    private const string GlossEnToHanziFile = DataPack.GlossEnToHanziFile;
+    private const string GlossHanziToEnFile = DataPack.GlossHanziToEnFile;
 
     /// <summary>
     /// 逐字符 NFKC 兼容折叠表（全范围，含非 BMP）：码点 → 已解码的折叠结果字符串。
     /// 由 <c>tools/gen_tables</c> 以 .NET <c>string.Normalize(FormKC)</c> 离线生成（逐字符）。
     /// </summary>
-    private static readonly Lazy<Dictionary<int, string>> CompatibilityTable =
-        new(static () => LoadCodePoints(CompatibilityResource));
+    private static Lazy<Dictionary<int, string>> CompatibilityTable =
+        new(static () => RequestAfterLoad(LoadCodePoints(CompatibilityFile)));
 
     /// <summary>
     /// 拉丁去音符号折叠表（码点 → ASCII 基字母），由 <c>tools/gen_tables</c> 以 Unicode
     /// 规范分解（NFD）离线生成。索引 / 查询两侧同表，保证 <c>Beyoncé</c> 与 <c>Beyonce</c> 同形。
     /// </summary>
-    private static readonly Lazy<Dictionary<int, string>> AccentTable =
-        new(static () => LoadCodePoints(AccentResource));
+    private static Lazy<Dictionary<int, string>> AccentTable =
+        new(static () => RequestAfterLoad(LoadCodePoints(AccentFile)));
 
     /// <summary>
     /// 异体字 → 简体补齐表（Unihan <c>kSimplifiedVariant</c>，日文新字体经旧字体串联），
     /// 只收录 ToolGood.Words 繁简词库未覆盖的字符（主要是鉄 / 絵 / 円 / 広 / 変 / 楽 / 駅）。
     /// </summary>
-    private static readonly Lazy<Dictionary<int, string>> VariantTable =
-        new(static () => LoadCodePoints(VariantResource));
+    private static Lazy<Dictionary<int, string>> VariantTable =
+        new(static () => RequestAfterLoad(LoadCodePoints(VariantFile)));
 
     /// <summary>英文词 → 候选汉字**码点**列表（Unihan kDefinition，T1 查询侧）。</summary>
-    private static readonly Lazy<Dictionary<string, IReadOnlyList<int>>> GlossEnToHanziTable =
-        new(static () => LoadGlossCodes(GlossEnToHanziResource));
+    private static Lazy<Dictionary<string, IReadOnlyList<int>>> GlossEnToHanziTable =
+        new(static () => RequestAfterLoad(LoadGlossCodes(GlossEnToHanziFile)));
 
     /// <summary>汉字**码点** → 英文词列表（Unihan kDefinition，T1 查询侧）。</summary>
-    private static readonly Lazy<Dictionary<int, IReadOnlyList<string>>> GlossHanziToEnTable =
-        new(static () => LoadGlossWords(GlossHanziToEnResource));
+    private static Lazy<Dictionary<int, IReadOnlyList<string>>> GlossHanziToEnTable =
+        new(static () => RequestAfterLoad(LoadGlossWords(GlossHanziToEnFile)));
+
+    /// <summary>
+    /// 测试接缝：丢弃已加载的表，让下一次访问按当前 <see cref="DataPack.Current"/>
+    /// 重新加载（T4.3 用假数据包验证「缺表 → 能力降级且不崩溃」）。生产代码不得调用。
+    /// </summary>
+    internal static void ResetTablesForTests()
+    {
+        CompatibilityTable = new(static () => RequestAfterLoad(LoadCodePoints(CompatibilityFile)));
+        AccentTable = new(static () => RequestAfterLoad(LoadCodePoints(AccentFile)));
+        VariantTable = new(static () => RequestAfterLoad(LoadCodePoints(VariantFile)));
+        GlossEnToHanziTable = new(static () => RequestAfterLoad(LoadGlossCodes(GlossEnToHanziFile)));
+        GlossHanziToEnTable = new(static () => RequestAfterLoad(LoadGlossWords(GlossHanziToEnFile)));
+    }
+
+    /// <summary>
+    /// 惰性表加载后置位「查询结束回收一次」：词库是一次性大分配，普通 GC 不归还堆段。
+    /// </summary>
+    private static T RequestAfterLoad<T>(T table)
+    {
+        MemoryTrim.Request();
+        return table;
+    }
 
     /// <summary>
     /// 逐字符 NFKC 兼容折叠查表：命中时经 <paramref name="folded"/> 回传折叠结果
@@ -154,7 +176,7 @@ internal static class HanziData
                 if (int.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var cp))
                     codes.Add(cp);
             }
-            if (codes.Count > 0) map[key] = codes;
+            if (codes.Count > 0) map[key] = codes.ToArray();
         }
         return map;
     }
@@ -163,10 +185,25 @@ internal static class HanziData
     private static Dictionary<int, IReadOnlyList<string>> LoadGlossWords(string resource)
     {
         var map = new Dictionary<int, IReadOnlyList<string>>();
+        // 英文释义词高度重复（8.3 万引用 / 1.1 万唯一词）；内部化后共享同一 string
+        // 实例，常驻内存约降 2–3 MB（T3.14 rss_query）。
+        var intern = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (key, value) in ReadRows(resource))
         {
-            var words = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length > 0) map[key] = words;
+            var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) continue;
+            var words = new string[parts.Length];
+            for (var i = 0; i < parts.Length; i++)
+            {
+                var w = parts[i];
+                if (!intern.TryGetValue(w, out var shared))
+                {
+                    shared = w;
+                    intern[w] = shared;
+                }
+                words[i] = shared;
+            }
+            map[key] = words;
         }
         return map;
     }
@@ -199,10 +236,12 @@ internal static class HanziData
         return builder.ToString();
     }
 
-    /// <summary>逐行解析 <c>HEXCODE&lt;TAB&gt;VALUE</c>；跳过注释/空行/畸形行。</summary>
-    private static IEnumerable<(int Key, string Value)> ReadRows(string resource)
+    /// <summary>逐行解析 <c>HEXCODE&lt;TAB&gt;VALUE</c>；跳过注释/空行/畸形行。
+    /// 数据包缺文件 / 损坏时返回空序列（由 <see cref="DataPack"/> 统一降级，不抛异常）。</summary>
+    private static IEnumerable<(int Key, string Value)> ReadRows(string file)
     {
-        using var stream = OpenResource(resource);
+        using var stream = OpenTable(file);
+        if (stream is null) yield break;
         using var reader = new StreamReader(stream, Encoding.UTF8);
         string? line;
         while ((line = reader.ReadLine()) is not null)
@@ -217,9 +256,10 @@ internal static class HanziData
     }
 
     /// <summary>逐行解析 <c>KEY&lt;TAB&gt;VALUE</c>（KEY 为**字符串**英文词）；跳过注释/空行/畸形行。</summary>
-    private static IEnumerable<(string Key, string Value)> ReadStringRows(string resource)
+    private static IEnumerable<(string Key, string Value)> ReadStringRows(string file)
     {
-        using var stream = OpenResource(resource);
+        using var stream = OpenTable(file);
+        if (stream is null) yield break;
         using var reader = new StreamReader(stream, Encoding.UTF8);
         string? line;
         while ((line = reader.ReadLine()) is not null)
@@ -231,9 +271,10 @@ internal static class HanziData
         }
     }
 
-    private static Stream OpenResource(string name)
-    {
-        var stream = typeof(HanziData).Assembly.GetManifestResourceStream(name);
-        return stream ?? throw new InvalidOperationException($"内嵌数据表缺失: {name}");
-    }
+    /// <summary>
+    /// 打开数据包表（<see cref="DataPack"/> 统一负责「内嵌 / 磁盘 / 缺失」）。
+    /// 缺失 / 损坏返回 null——调用方按空表处理，降级由数据包能力位表达。
+    /// </summary>
+    private static Stream? OpenTable(string file) =>
+        DataPack.Current.TryOpen(file, out var stream) ? stream : null;
 }

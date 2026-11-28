@@ -3,12 +3,80 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
 using Archoera.Text;
 
 namespace Archoera.Lyrics;
+
+/// <summary>
+/// 歌词层置信度（§5.6.2 阈值）：<c>≥5 高</c>、<c>3–4 中</c>、<c>≤2 低</c>；
+/// <see cref="None"/> 表示该层不存在（没有文本）。数值与 DocStore <c>layer_conf</c>
+/// 的 2 bit 编码一一对应（0..3），**不得重排**。
+/// </summary>
+public enum LyricConfidence : byte
+{
+    /// <summary>该层不存在（空文本）。</summary>
+    None = 0,
+
+    /// <summary>低置信：≤2 分；只在 <c>scope=lyrics</c> 参与检索。</summary>
+    Low = 1,
+
+    /// <summary>中置信：3–4 分；参与 all / lyrics，不参与跨语言。</summary>
+    Medium = 2,
+
+    /// <summary>高置信：≥5 分；参与全部检索路径。</summary>
+    High = 3,
+}
+
+/// <summary>
+/// 歌词层来源（用于 <c>explain.layer</c> 与 DocStore <c>flags</c> 的来源位）。
+///
+/// <para>数值按「可信度递增」排列，选层打平时取大者：用户编辑 &gt; 显式侧车 &gt; 内嵌。
+/// 注意：同一数值在不同层上的 wire 名不同（见 <see cref="LrcReader.LayerName"/>）——
+/// 译文层的 <see cref="ExplicitPair"/> 表示 <c>.trans.lrc</c>，原文层则不会出现该值。</para>
+/// </summary>
+public enum LyricSource : byte
+{
+    /// <summary>该层不存在。</summary>
+    None = 0,
+
+    /// <summary>内嵌 <c>tracks.lyrics</c>（或主 <c>.lrc</c> 文件内的同时间戳分组）。</summary>
+    Embedded = 1,
+
+    /// <summary><c>.lrc</c> 侧车原文；译文层表示「主 <c>.lrc</c> 同时间戳结构」。</summary>
+    Lrc = 2,
+
+    /// <summary>用户编辑；译文 / 音译层表示显式命名侧车（<c>.trans.lrc</c> / <c>.romaji.lrc</c>）。</summary>
+    ExplicitPair = 3,
+}
+
+/// <summary>单层打分结果（§5.6.2 的 0–8 分 + 阈值映射 + 来源）。</summary>
+public readonly record struct LrcLayerScore(
+    string Text,
+    LyricConfidence Confidence,
+    int Score,
+    LyricSource Source)
+{
+    /// <summary>空层。</summary>
+    public static readonly LrcLayerScore Empty = new("", LyricConfidence.None, 0, LyricSource.None);
+
+    /// <summary>该层是否有可索引文本。</summary>
+    public bool HasText => Text.Length > 0;
+}
+
+/// <summary>三层打分 / 选层结果（原文 / 译文 / 音译）。</summary>
+public readonly record struct LrcScoredLayers(
+    LrcLayerScore Original,
+    LrcLayerScore Translation,
+    LrcLayerScore Romaji)
+{
+    /// <summary>三空层。</summary>
+    public static readonly LrcScoredLayers Empty = new(
+        LrcLayerScore.Empty, LrcLayerScore.Empty, LrcLayerScore.Empty);
+}
 
 /// <summary>
 /// <c>.lrc</c> 侧车读取结果（分层：原文 / 译文 / 音译）。
@@ -95,6 +163,17 @@ public static class LrcReader
     /// <summary>解析后的单条 LRC 条目：时间戳标签原文（无时间轴时为 <c>null</c>）+ 文本。</summary>
     private readonly record struct LrcEntry(string? Timestamp, string Text);
 
+    /// <summary>分层后的一行：文本 + 所属时间戳（毫秒；无时间轴为 <c>null</c>）。</summary>
+    private readonly record struct LrcLine(string Text, long? Ms);
+
+    /// <summary>分层明细（保留每行的时间戳，供 §5.6.2 打分与 §5.6.5 对齐判定）。</summary>
+    private sealed class DetailedLayers
+    {
+        public List<LrcLine> Original { get; } = new();
+        public List<LrcLine> Translation { get; } = new();
+        public List<LrcLine> Romaji { get; } = new();
+    }
+
     /// <summary>文本拆分后的三层（空层为空串）。供内嵌歌词与 <c>.lrc</c> 共用同一启发式。</summary>
     public readonly record struct LrcLayers(string Original, string Translation, string Romaji)
     {
@@ -110,14 +189,277 @@ public static class LrcReader
     public static LrcLayers SplitText(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return LrcLayers.Empty;
-        var originals = new List<string>();
-        var trans = new List<string>();
-        var romaji = new List<string>();
-        SplitLayers(ExtractEntries(raw), originals, trans, romaji);
+        var layers = SplitDetailed(raw);
         return new LrcLayers(
-            string.Join('\n', originals),
-            string.Join('\n', trans),
-            string.Join('\n', romaji));
+            JoinTexts(layers.Original),
+            JoinTexts(layers.Translation),
+            JoinTexts(layers.Romaji));
+    }
+
+    /// <summary>
+    /// **按 §5.6.2 给单层打 0–8 分并映射置信度**（供单测 / 诊断直接调用）。
+    /// <paramref name="explicitSidecar"/> 表示该文本来自显式命名侧车（+1）；
+    /// 无时间轴的纯内嵌文本按 §5.6 打分口径得低置信。
+    /// </summary>
+    public static LrcLayerScore ScoreText(string? raw, bool explicitSidecar = false)
+        => ScoreLayer(SplitDetailed(raw).Original, explicitSidecar ? LyricSource.Lrc : LyricSource.Embedded);
+
+    /// <summary>
+    /// **三层打分 + 选层**（T4.2 / §5.6.1–§5.6.5）。
+    ///
+    /// <para>输入是四个**原始文本**（保时间轴）：内嵌 <c>tracks.lyrics</c>、主 <c>.lrc</c>、
+    /// 显式 <c>.trans.lrc</c>、显式 <c>.romaji.lrc</c>（后两者为 <c>null</c> 表示没有对应侧车）。
+    /// 每层只保留一份：内嵌与侧车原文同时存在时按置信度取高者，**不拼接**。</para>
+    ///
+    /// <para><b>译文 / 音译配对</b>（§5.6.5）：显式侧车与原文时间戳完全一致 → 高；只对齐
+    /// ≥80% → 中；时间戳双方都缺失但行数一致 → 中；时间戳存在但对不齐 → 低（仍写入索引，
+    /// 只从 <c>scope=all</c> 退出）。同一文件内**同时间戳多行**是解析器的结构配对
+    /// （§5.6.4），按对齐 100% 处理。</para>
+    /// </summary>
+    public static LrcScoredLayers ScoreLayers(
+        string? embeddedRaw, string? mainRaw, string? transRaw, string? romajiRaw)
+    {
+        var embedded = SplitDetailed(embeddedRaw);
+        var main = SplitDetailed(mainRaw);
+
+        // ---- 原文：内嵌 vs 主 .lrc，取置信度高者；打平取显式侧车（来源枚举更大者）----
+        var embeddedOriginal = ScoreLayer(embedded.Original, LyricSource.Embedded);
+        var mainOriginal = ScoreLayer(main.Original, LyricSource.Lrc);
+        var (original, originalLines) = Pick(embeddedOriginal, embedded.Original,
+            mainOriginal, main.Original);
+
+        // ---- 译文：内嵌结构 / 主 .lrc 结构 / 显式 .trans 侧车，取最高 ----
+        var translation = PickPair(
+            originalLines,
+            (embedded.Translation, LyricSource.Embedded, ExplicitFile: false),
+            (main.Translation, LyricSource.Lrc, ExplicitFile: false),
+            (transRaw is null ? null : SplitDetailed(transRaw).Original,
+                LyricSource.ExplicitPair, ExplicitFile: true));
+
+        // ---- 音译：只认显式文件或同一文件内的时间戳结构；不从拼音反推 ----
+        var romaji = PickPair(
+            originalLines,
+            (embedded.Romaji, LyricSource.Embedded, ExplicitFile: false),
+            (main.Romaji, LyricSource.Lrc, ExplicitFile: false),
+            (romajiRaw is null ? null : SplitDetailed(romajiRaw).Original,
+                LyricSource.ExplicitPair, ExplicitFile: true));
+
+        return new LrcScoredLayers(original, translation, romaji);
+    }
+
+    /// <summary><c>explain.layer</c> 的稳定 wire 名（源码内唯一映射，勿在别处重写）。</summary>
+    public static string LayerName(int layer, LyricSource source) => layer switch
+    {
+        LayerOriginal => source switch
+        {
+            LyricSource.Embedded => "embedded",
+            LyricSource.Lrc => "lrc",
+            LyricSource.ExplicitPair => "user",
+            _ => "embedded",
+        },
+        LayerTranslation => source switch
+        {
+            LyricSource.Embedded => "embedded",
+            LyricSource.Lrc => "lrc",
+            LyricSource.ExplicitPair => "lrc_trans",
+            _ => "embedded",
+        },
+        LayerRomaji => source == LyricSource.None || source == LyricSource.Embedded
+            ? "embedded"
+            : "lrc_romaji",
+        _ => "embedded",
+    };
+
+    /// <summary><c>explain.confidence</c> 的稳定 wire 名。</summary>
+    public static string ConfidenceName(LyricConfidence confidence) => confidence switch
+    {
+        LyricConfidence.High => "high",
+        LyricConfidence.Medium => "medium",
+        LyricConfidence.Low => "low",
+        _ => "none",
+    };
+
+    /// <summary>层下标：原文 0 / 译文 1 / 音译 2（DocStore <c>layer_conf</c> 的 2 bit 分组）。</summary>
+    public const int LayerOriginal = 0;
+
+    /// <inheritdoc cref="LayerOriginal"/>
+    public const int LayerTranslation = 1;
+
+    /// <inheritdoc cref="LayerOriginal"/>
+    public const int LayerRomaji = 2;
+
+    /* ------------------------------------------------------------------ */
+    /* 打分（§5.6.2）                                                       */
+    /* ------------------------------------------------------------------ */
+
+    /// <summary>0–8 分 → 置信度阈值（≥5 高 / 3–4 中 / ≤2 低）。</summary>
+    private static LyricConfidence ConfidenceOf(int score) => score switch
+    {
+        >= 5 => LyricConfidence.High,
+        >= 3 => LyricConfidence.Medium,
+        _ => LyricConfidence.Low,
+    };
+
+    /// <summary>
+    /// 单层 0–8 分（§5.6.2）：
+    /// <list type="bullet">
+    ///   <item>≥80% 行有合法时间戳 +2；50–80% +1；</item>
+    ///   <item>时间戳严格递增（≥2 个）+1；重复 / 乱序占比 ≥20% −1；</item>
+    ///   <item>≥5 行 +1；显式侧车 +1；</item>
+    ///   <item>U+FFFD &gt;1% −2 并**直接降为低置信**（§5.6.4）；</item>
+    ///   <item>单行 &gt;500 字符 −1。</item>
+    /// </list>
+    /// 译文 / 音译的对齐信号（+2）在 <see cref="PickPair"/> 里追加。
+    /// </summary>
+    private static LrcLayerScore ScoreLayer(List<LrcLine> lines, LyricSource source)
+    {
+        if (lines.Count == 0)
+            return LrcLayerScore.Empty;
+
+        var text = JoinTexts(lines);
+        var timed = 0;
+        var strictIncreasing = true;
+        var previous = long.MinValue;
+        var duplicates = 0;
+        var seen = new HashSet<long>();
+        var outOfOrder = 0;
+        var overlong = false;
+        foreach (var line in lines)
+        {
+            if (line.Text.Length > 500) overlong = true;
+            if (line.Ms is not { } ms)
+            {
+                strictIncreasing = false;
+                continue;
+            }
+            if (timed > 0 && ms <= previous) strictIncreasing = false;
+            if (timed > 0 && ms < previous) outOfOrder++;
+            if (!seen.Add(ms)) duplicates++;
+            previous = ms;
+            timed++;
+        }
+
+        var score = 0;
+        // 内嵌原文是**用户自带的唯一主来源**（tags 里的纯文本歌词，通常无时间轴）。
+        // §5.6.2 的原始信号表只奖励“有时间轴 / 显式侧车”，若不给基线，绝大多数
+        // 无 .lrc 的曲库会整库判为低置信、被排除出 scope=all——这违背 §5.6.3
+        // “低置信只用于可疑层”的目标。故给内嵌原文 +3 基线（中置信）；U+FFFD 等
+        // 强负信号仍会把它们压回低置信。
+        if (source == LyricSource.Embedded) score += 3;
+        if (timed > 0)
+        {
+            var ratio = (double)timed / lines.Count;
+            if (ratio >= 0.8) score += 2;
+            else if (ratio >= 0.5) score += 1;
+        }
+        if (strictIncreasing && timed >= 2) score += 1;
+        if (lines.Count >= 5) score += 1;
+        if (source is LyricSource.Lrc or LyricSource.ExplicitPair) score += 1;
+        if (overlong) score -= 1;
+        if (timed > 0 && (double)(duplicates + outOfOrder) / timed >= 0.2) score -= 1;
+
+        // §5.6.4：替换字符 >1% 直接降为低置信（不是可被其它信号抵消的扣分）。
+        var replaced = 0;
+        foreach (var ch in text)
+            if (ch == '\uFFFD') replaced++;
+        var corrupt = text.Length > 0 && (double)replaced / text.Length > 0.01;
+        if (corrupt) score -= 2;
+        if (score < 0) score = 0;
+        if (score > 8) score = 8;
+        var confidence = corrupt ? LyricConfidence.Low : ConfidenceOf(score);
+        return new LrcLayerScore(text, confidence, score, source);
+    }
+
+    /// <summary>
+    /// 译文 / 音译的配对规则（§5.6.5）。返回选中的层（空文本返回空层）。
+    ///
+    /// <para>对齐信号 +2（≥80%）；「对齐」= 本层时间戳在原文时间戳集合里的占比。
+    /// 双方都无时间轴时按行数判定：一致 → 中置信；否则低。</para>
+    /// </summary>
+    private static LrcLayerScore PickPair(
+        List<LrcLine> originalLines,
+        params (List<LrcLine>? Lines, LyricSource Source, bool ExplicitFile)[] candidates)
+    {
+        var best = LrcLayerScore.Empty;
+        foreach (var (lines, source, explicitFile) in candidates)
+        {
+            if (lines is null || lines.Count == 0) continue;
+            var score = ScoreLayer(lines, explicitFile ? LyricSource.ExplicitPair : source);
+            var alignment = AlignmentPercent(lines, originalLines);
+            if (alignment is >= 80) score = score with { Score = Math.Min(8, score.Score + 2) };
+
+            // §5.6.5 配对结论覆盖 0–8 分的阈值：
+            //   · 双方无时间轴 + 行数一致 → 中；
+            //   · 有时间戳但对齐 <80%（含完全错位）→ 低；
+            //   · 对齐 ≥80% → 保留 0–8 分结论。
+            var originalTimed = originalLines.Exists(line => line.Ms is not null);
+            var selfTimed = lines.Exists(line => line.Ms is not null);
+            LyricConfidence confidence;
+            if (!selfTimed && !originalTimed)
+            {
+                confidence = lines.Count == originalLines.Count
+                    ? LyricConfidence.Medium
+                    : LyricConfidence.Low;
+                if (confidence == LyricConfidence.Medium && score.Confidence < LyricConfidence.Medium)
+                    score = score with { Score = Math.Max(score.Score, 3) };
+            }
+            else if (alignment is null or < 80)
+            {
+                confidence = LyricConfidence.Low;
+            }
+            else
+            {
+                confidence = score.Confidence;
+            }
+
+            var candidate = score with { Confidence = confidence };
+            // 打平取来源可信度更高者（显式侧车 > 主 .lrc > 内嵌）。
+            if (candidate.Score > best.Score
+                || (candidate.Score == best.Score && candidate.Source > best.Source))
+            {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>本层时间戳落在原文时间戳集合里的占比（0–100）；任一方无时间轴返回 <c>null</c>。</summary>
+    private static int? AlignmentPercent(List<LrcLine> layer, List<LrcLine> original)
+    {
+        var originalStamps = new HashSet<long>();
+        foreach (var line in original)
+            if (line.Ms is { } ms) originalStamps.Add(ms);
+        if (originalStamps.Count == 0) return null;
+
+        var timed = 0;
+        var matched = 0;
+        foreach (var line in layer)
+        {
+            if (line.Ms is not { } ms) continue;
+            timed++;
+            if (originalStamps.Contains(ms)) matched++;
+        }
+        return timed == 0 ? null : (int)(100.0 * matched / timed);
+    }
+
+    /// <summary>选原文层：分数高者胜；打平取来源可信度更高者。</summary>
+    private static (LrcLayerScore Score, List<LrcLine> Lines) Pick(
+        LrcLayerScore a, List<LrcLine> aLines, LrcLayerScore b, List<LrcLine> bLines)
+    {
+        if (b.Score > a.Score || (b.Score == a.Score && b.Source > a.Source)) return (b, bLines);
+        return (a, aLines);
+    }
+
+    private static string JoinTexts(List<LrcLine> lines)
+    {
+        if (lines.Count == 0) return "";
+        var builder = new StringBuilder();
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (i > 0) builder.Append('\n');
+            builder.Append(lines[i].Text);
+        }
+        return builder.ToString();
     }
 
     /// <summary>
@@ -384,23 +726,27 @@ public static class LrcReader
     }
 
     /// <summary>
-    /// 顺序条目 → 三层：**相同时间戳的连续行**归为同一条目多层；无时间戳行各自为原文。
-    /// 原文只取每组第 1 行（不回退）。
+    /// 顺序条目 → 三层明细：**相同时间戳的连续行**归为同一条目多层；无时间戳行各自为原文。
+    /// 原文只取每组第 1 行（不回退）。每行保留所属时间戳（毫秒）供置信度打分。
     /// </summary>
-    private static void SplitLayers(
-        List<LrcEntry> entries, List<string> originals, List<string> trans, List<string> romaji)
+    private static DetailedLayers SplitDetailed(string? raw)
     {
+        var layers = new DetailedLayers();
+        if (string.IsNullOrEmpty(raw)) return layers;
+
+        var entries = ExtractEntries(raw);
         var i = 0;
         while (i < entries.Count)
         {
             var entry = entries[i];
             if (entry.Timestamp is null)
             {
-                originals.Add(entry.Text);
+                layers.Original.Add(new LrcLine(entry.Text, null));
                 i++;
                 continue;
             }
 
+            var ms = ParseTimestampMs(entry.Timestamp);
             var group = new List<string> { entry.Text };
             var j = i;
             while (j + 1 < entries.Count && entries[j + 1].Timestamp == entry.Timestamp)
@@ -408,40 +754,117 @@ public static class LrcReader
                 j++;
                 group.Add(entries[j].Text);
             }
-            ClassifyGroup(group, originals, trans, romaji);
+            ClassifyGroup(group, ms, layers.Original, layers.Translation, layers.Romaji);
             i = j + 1;
         }
+        return layers;
     }
 
     /// <summary>
-    /// 单条时间戳分组 → 层：第 1 行原文；后两行按位置 第 2 行译文 / 第 3 行音译。
-    /// 修正：若第 2 行为纯拉丁且第 3 行非拉丁，则二者对调（纯拉丁更可能是音译）。
-    /// 组内仅 1 行时按纯拉丁否判为音译 / 译文。
+    /// 单条时间戳分组 → 层：含假名 / 谚文的行优先当原文（日文 / 韩文歌），
+    /// 其余行按位置 第 1 行译文 / 第 2 行音译；若第 1 行纯拉丁且第 2 行非拉丁
+    /// 则二者对调（纯拉丁更可能是音译）。组内仅 1 行时按纯拉丁否判为音译 / 译文。
+    ///
+    /// <para>原文不再固定取第 1 行：部分下载站 / 流媒体把中文译文排在原文前面，
+    /// 旧规则会把译文当主歌词（播放页与检索同受影响）。中文歌 + 英文译文没有
+    /// 假名 / 谚文对照，仍按位置保留中文原文。</para>
     /// </summary>
     private static void ClassifyGroup(
-        List<string> group, List<string> originals, List<string> trans, List<string> romaji)
+        List<string> group, long? ms,
+        List<LrcLine> originals, List<LrcLine> trans, List<LrcLine> romaji)
     {
-        originals.Add(group[0]);
+        var originalIndex = 0;
+        for (var i = 0; i < group.Count; i++)
+        {
+            if (!ScriptRanges.HasKanaOrHangul(group[i])) continue;
+            originalIndex = i;
+            break;
+        }
+
+        originals.Add(new LrcLine(group[originalIndex], ms));
         if (group.Count < 2) return;
 
-        var rest = group.GetRange(1, group.Count - 1);
+        var rest = new List<string>(group.Count - 1);
+        for (var i = 0; i < group.Count; i++)
+        {
+            if (i != originalIndex) rest.Add(group[i]);
+        }
+        var originalIsCjk = ScriptRanges.HasKanaOrHangul(group[originalIndex]);
         if (rest.Count == 1)
         {
-            if (IsLatinLine(rest[0])) romaji.Add(rest[0]);
-            else trans.Add(rest[0]);
+            // 原文是日韩文时纯拉丁行按罗马音；中文原文 + 英文译文时英文是译文。
+            if (originalIsCjk && IsLatinLine(rest[0])) romaji.Add(new LrcLine(rest[0], ms));
+            else trans.Add(new LrcLine(rest[0], ms));
+            return;
+        }
+
+        if (originalIsCjk)
+        {
+            if (rest.Exists(IsLatinLine) && !rest.TrueForAll(IsLatinLine))
+            {
+                foreach (var line in rest)
+                {
+                    if (IsLatinLine(line)) romaji.Add(new LrcLine(line, ms));
+                    else trans.Add(new LrcLine(line, ms));
+                }
+                return;
+            }
+            // 全部是拉丁行：只有一行按罗马音（日文歌单行拉丁多为音译）；
+            // 多行时按位置 第 1 行译文、其后音译（原文 / 译文 / 罗马音结构）。
+            for (var i = 0; i < rest.Count; i++)
+            {
+                if (i == 0 && rest.Count > 1) trans.Add(new LrcLine(rest[i], ms));
+                else romaji.Add(new LrcLine(rest[i], ms));
+            }
             return;
         }
 
         if (IsLatinLine(rest[0]) && !IsLatinLine(rest[1]))
         {
-            romaji.Add(rest[0]);
-            trans.Add(rest[1]);
+            romaji.Add(new LrcLine(rest[0], ms));
+            trans.Add(new LrcLine(rest[1], ms));
         }
         else
         {
-            trans.Add(rest[0]);
-            romaji.Add(rest[1]);
+            trans.Add(new LrcLine(rest[0], ms));
+            romaji.Add(new LrcLine(rest[1], ms));
         }
+    }
+
+    /// <summary>
+    /// 时间标签 → 毫秒。<see cref="TimeRegex"/> 保证形态为 <c>[mm:ss]</c> /
+    /// <c>[mm:ss.xx]</c> / <c>[mm:ss:xx]</c>，这里只做定点拆分（失败按 0 兜底）。
+    /// </summary>
+    private static long ParseTimestampMs(string tag)
+    {
+        if (tag.Length < 5) return 0;
+        var inner = tag.AsSpan(1, tag.Length - 2);
+        var colon = inner.IndexOf(':');
+        if (colon <= 0) return 0;
+        if (!long.TryParse(inner[..colon], NumberStyles.None, CultureInfo.InvariantCulture, out var minutes))
+            return 0;
+
+        var tail = inner[(colon + 1)..];
+        var separator = tail.IndexOfAny('.', ':');
+        var secondsText = separator < 0 ? tail : tail[..separator];
+        if (!long.TryParse(secondsText, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
+            return 0;
+
+        long fraction = 0;
+        if (separator >= 0)
+        {
+            var digits = tail[(separator + 1)..];
+            if (long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+            {
+                fraction = digits.Length switch
+                {
+                    1 => value * 100,
+                    2 => value * 10,
+                    _ => value,
+                };
+            }
+        }
+        return (minutes * 60 + seconds) * 1000 + fraction;
     }
 
     /// <summary>

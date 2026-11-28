@@ -93,6 +93,7 @@ internal static class PinyinSegmenter
                 if (syllable.Length > maxLength) maxLength = syllable.Length;
             }
         }
+        MemoryTrim.Request();
         return new SyllableTable { Items = items, MaxLength = maxLength };
     });
 

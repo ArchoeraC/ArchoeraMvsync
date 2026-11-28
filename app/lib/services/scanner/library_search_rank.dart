@@ -9,7 +9,7 @@
 /// 2. 命中列表 → 有序 `trackId` 列表（[resolveRankedSearch]）。
 ///
 /// 真正的索引查询由调用方经 `SearchService` 注入，确保**总开关关闭时完全
-/// 不构造 SearchService / 不触碰 search.db**（设计文档 §2.4）。
+/// 不构造 SearchService / 不触碰本地索引**（设计文档 §2.4）。
 library;
 
 import '../search/search_models.dart';
@@ -18,11 +18,10 @@ import '../search/search_models.dart';
 ///
 /// 超出部分截断——大库极端宽泛查询（命中上万）下排行可能不全，属已知取舍。
 ///
-/// **不要再靠调小该值来降延迟**（2026-11-12 量化）：降 limit 对排序**精度无损**
-/// （`ORDER BY score LIMIT N` 是全排序前缀，top-N 逐条一致），但只省 20–30%——
-/// pooled P50/P95 从 35.9/74.3ms（10000）到 28.9/58.4（900）、26.3/56.3（300），
-/// 甚至 limit=50 的地板仍有 25.1/52.1ms。成本在「FTS5 给全部命中打分」，不在
-/// 「取多少条」；而 `totalCount` = 命中 id 数，调小会让宽查询凭空少掉结果。
+/// **不要再靠调小该值来降延迟**（2026-11-12 量化，v7 时代）：降 limit 对排序
+/// **精度无损**（top-N 是全排序前缀），但只省 20–30%；成本在「给全部命中打分」，
+/// 不在「取多少条」；而 `totalCount` = 命中 id 数，调小会让宽查询凭空少掉结果。
+/// S3 起 top-k 已下沉到 EraStore（T3.14），该上限仍是「排行一次性取够」的约定。
 const int kSearchIndexRankLimit = 10000;
 
 /// 索引查询函数签名（`SearchService.search` 的窄化子类型，便于注入替身）。

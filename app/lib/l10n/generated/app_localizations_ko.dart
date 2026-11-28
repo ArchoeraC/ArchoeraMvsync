@@ -46,6 +46,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsRippleDamageClipDesc => '활성 물결 띠만 다시 그리기; CPU 대체 경로 전용';
 
   @override
+  String get settingsMacOSGPU => '개별 GPU 가속';
+
+  @override
+  String get settingsMacOSGPUDesc =>
+      '자동: 개별 GPU의 Metal 기능이 통합 GPU 이상일 때만 사용합니다. 개별 GPU 우선은 강제합니다(Metal 2로 낮아질 수 있고 AMD에서는 커버 색상/유체 배경이 대체 경로로 동작). 적용하려면 앱을 다시 시작하세요';
+
+  @override
+  String get settingsMacOSGPUAuto => '자동(권장)';
+
+  @override
+  String get settingsMacOSGPUDiscrete => '개별 GPU 우선';
+
+  @override
+  String get settingsMacOSGPUIntegrated => '통합 GPU';
+
+  @override
   String get settingsLyricsEdgeFade => '가사 가장자리 페이드';
 
   @override
@@ -3337,14 +3353,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsDecline1Body =>
-      '이 소프트웨어는 서드파티 클라이언트로, 각 음악 플랫폼 및 공식 클라이언트와 어떠한 관련, 협력 또는 권한 관계가 없습니다. 이 프로젝트 자체는 영리 목적이 없으며 상업적 제휴, 광고, 후원 콘텐츠 삽입을 받지 않습니다. 추가 라이선스 권리를 부여하지 않는 자발적 기부만 받습니다(기부는 AGPL-3.0 조건이나 기능에 영향을 주지 않습니다). 더 나은 기능이 필요하면 공식 클라이언트를 사용하세요.\n\n';
+      '이 소프트웨어는 서드파티 클라이언트로, 각 음악 플랫폼 및 공식 클라이언트와 어떠한 관련, 협력 또는 권한 관계가 없습니다. 이 프로젝트 자체는 영리 목적이 없으며 상업적 제휴, 광고, 후원 콘텐츠 삽입을 받지 않습니다. 추가 라이선스 권리를 부여하지 않는 자발적 기부만 받습니다(기부는 AGPL-3.0-or-later 조건이나 기능에 영향을 주지 않습니다). 더 나은 기능이 필요하면 공식 클라이언트를 사용하세요.\n\n';
 
   @override
   String get settingsDeclineLicenseTitle => '2. 오픈 소스 라이선스 및 소스 코드\n';
 
   @override
   String get settingsDeclineLicenseBody =>
-      '이 소프트웨어는 GNU Affero 일반 공중 사용 허가서 제3판(AGPL-3.0)에 따라 배포됩니다. 해당 라이선스의 범위 내에서 이 소프트웨어를 자유롭게 실행, 연구, 수정 및 재배포할 수 있으나 다음 사항을 함께 준수해야 합니다: 저작권 및 라이선스 고지를 유지할 것; 파생 저작물을 동일한 라이선스로 배포할 것; 이 소프트웨어(수정본 포함)의 기능을 네트워크를 통해 사용자에게 제공하는 경우 해당 사용자에게 대응하는 전체 소스 코드를 제공할 것. 이 프로젝트는 AGPL 의무를 벗어난 클로즈드 소스 상업 라이선스를 제공하지 않습니다. 전체 조항은 동봉된 LICENSE 파일 및 https://www.gnu.org/licenses/agpl-3.0.html 을 기준으로 합니다.\n\n';
+      '이 소프트웨어는 GNU Affero 일반 공중 사용 허가서 제3판(AGPL-3.0-or-later)에 따라 배포됩니다. 해당 라이선스의 범위 내에서 이 소프트웨어를 자유롭게 실행, 연구, 수정 및 재배포할 수 있으나 다음 사항을 함께 준수해야 합니다: 저작권 및 라이선스 고지를 유지할 것; 파생 저작물을 동일한 라이선스로 배포할 것; 이 소프트웨어(수정본 포함)의 기능을 네트워크를 통해 사용자에게 제공하는 경우 해당 사용자에게 대응하는 전체 소스 코드를 제공할 것. 이 프로젝트는 AGPL 의무를 벗어난 클로즈드 소스 상업 라이선스를 제공하지 않습니다. 전체 조항은 동봉된 LICENSE 파일 및 https://www.gnu.org/licenses/agpl-3.0.html 을 기준으로 합니다.\n\n';
 
   @override
   String get settingsDecline2Title => '2. 콘텐츠 출처 및 저작권\n';
@@ -3365,7 +3381,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsDecline4Body =>
-      '상업적 활동, 대량 스크래핑, 크롤링, 재판매에 사용하지 마십시오; 법률 또는 이용약관을 위반하는 방법으로 사용하지 마십시오.\n\n';
+      '본 소프트웨어를 저작권 또는 기타 정당한 권리를 침해하는 목적(대량 스크래핑, 크롤링, 콘텐츠 재판매 등)으로 사용하지 마십시오. 현지 법률이나 이용약관을 위반하여 사용하지 마십시오. 온라인 플랫폼의 기술적 보호 조치, 접근 통제 또는 이용약관을 우회하지 마십시오. 이 항목은 사용 안내이며 AGPL-3.0-or-later 이외의 추가 라이선스 제한을 부과하지 않습니다. 상업적 사용은 LICENSE를 따릅니다.\n\n';
 
   @override
   String get settingsDeclineLoginTitle => '5. 로그인 및 계정\n';
@@ -4510,6 +4526,27 @@ class AppLocalizationsKo extends AppLocalizations {
       '음역이 없는 일본어 가사에 로마자를 자동 생성해 로마자로 검색할 수 있습니다(색인 크기 약 2배)';
 
   @override
+  String get settingsSearchIndexInitials => '가사 머리글자 색인';
+
+  @override
+  String get settingsSearchIndexInitialsDesc =>
+      '가사를 병음 머리글자(예: wanzg)로도 검색합니다. 끄면 색인이 작아집니다(변경 시 재구축 필요)';
+
+  @override
+  String get settingsSearchIndexPinyin => '메타데이터 병음 색인';
+
+  @override
+  String get settingsSearchIndexPinyinDesc =>
+      '제목 / 아티스트 / 앨범을 병음이나 머리글자로 검색합니다. 기본 꺼짐(색인 재구성 후 적용)';
+
+  @override
+  String get settingsSearchIndexLyricsPinyin => '가사 병음 색인';
+
+  @override
+  String get settingsSearchIndexLyricsPinyinDesc =>
+      '가사를 병음 음절로 검색합니다. 가장 큰 파생 열이라 기본 꺼짐(색인 재구성 후 적용)';
+
+  @override
   String get settingsSearchIndexNote =>
       '인덱스는 파생 데이터입니다: 기본값은 꺼짐이며 비용이 없습니다. 켜면 최초 구축에 시간과 디스크(1만 곡 기준 수백 MB)를 사용하며, 실패하면 자동으로 기본 검색으로 폴백합니다.';
 
@@ -4574,6 +4611,68 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsSearchIndexRebuildStarted => '인덱스 재구축을 시작했습니다';
+
+  @override
+  String get settingsSearchIndexDiagVersions => '인덱스 세대 및 버전';
+
+  @override
+  String settingsSearchIndexDiagGen({required int gen}) {
+    return '세대 $gen';
+  }
+
+  @override
+  String settingsSearchIndexDiagSchema({required int version}) {
+    return '스키마 $version';
+  }
+
+  @override
+  String settingsSearchIndexDiagAnalyzer({required int version}) {
+    return '분석기 $version';
+  }
+
+  @override
+  String get settingsSearchIndexDiagDataPack => '검색 데이터 팩';
+
+  @override
+  String settingsSearchIndexDiagPackId({required String id}) {
+    return '팩 $id';
+  }
+
+  @override
+  String get settingsSearchIndexDiagPackMatch => '인덱스와 일치';
+
+  @override
+  String get settingsSearchIndexDiagPackMismatch => '다른 팩으로 생성됨';
+
+  @override
+  String get settingsSearchIndexDiagPackPresent => '존재';
+
+  @override
+  String get settingsSearchIndexDiagPackMissing => '없음';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundation => '기반 테이블 정상';
+
+  @override
+  String get settingsSearchIndexDiagPackFoundationBad => '기반 테이블 누락';
+
+  @override
+  String settingsSearchIndexDiagDegraded({required int count}) {
+    return '저하된 기능 $count개';
+  }
+
+  @override
+  String get settingsSearchIndexDiagLyrics => '가사 신뢰도';
+
+  @override
+  String settingsSearchIndexDiagConfidence({
+    required int high,
+    required int medium,
+    required int low,
+    required int none,
+  }) {
+    return '높음 $high · 보통 $medium · 낮음 $low · 없음 $none';
+  }
 
   @override
   String get libraryFullScan => '전체 스캔';
@@ -5232,6 +5331,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsEqReset => 'Reset equalizer';
+
+  @override
+  String get equalizerQuickDesc =>
+      '플레이어에서 빠르게 조정: 프리셋, 프리앰프, 10밴드. 변경 사항은 즉시 적용됩니다.';
 
   @override
   String get settingsEqPresetFlat => 'Flat';

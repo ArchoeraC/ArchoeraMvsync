@@ -14,10 +14,21 @@
 #include <cstring>
 
 namespace {
+// v11：新增 apl_window_get_size（窗口逻辑尺寸读取，与 set_size 同口径）；
+// 纯加法，事件 / 能力位 / 既有符号不变。
+// v10：新增窗口控制 API（apl_window_set_size / set_min_size / center / show /
+// hide / minimize / restore / set_maximized / set_fullscreen / set_always_on_top /
+// set_resizable / set_decor / get_position / set_position / start_drag /
+// start_resize / request_close / stop_events）与能力位 APL_CAP_WINDOW_CONTROL；
+// 新增 APL_EVENT_WINDOW_CLOSE_REQUEST（u.window_close.reason：0=关闭 1=退出）。
+// 关闭请求改由桥接上报、Dart 决策（含 macOS ⌘Q / terminate: 钩子）。
+// v9：APL_EVENT_WINDOW_STATE 增加 flags（最小化/前台/最大化/全屏/隐藏），
+// `u.window` 由 8 字节扩到 12 字节（仍在 16 字节 union 内，AplEvent 布局不变）；
+// 窗口状态改为三端原生事件驱动，Dart 不再用 window_manager 监听。
 // v8：新增 APL_EVENT_SESSION_END / APL_CAP_SESSION_END（系统关机/注销事件；
 // 向后兼容的加法，但事件常量与能力位属于同一契约，版本号同步抬升）。
 // v7：移除 apl_open_url / APL_CAP_OPEN_URL（破坏性 ABI 变更，2026-11-09）。
-constexpr int32_t kAbiVersion = 8;
+constexpr int32_t kAbiVersion = 11;
 
 // SEC-31：reveal 路径输入契约——仅接受应用内已解析的**绝对本地路径**。
 // 拒绝空串、URI（`scheme://`，含 `file://`/`http://`）与相对路径；C 串天然在 NUL 截断。
@@ -105,6 +116,113 @@ int32_t apl_power_set_screen_events(int32_t on) {
 int32_t apl_window_set_events(int32_t on) {
     if (!archoera::isInitialized()) return archoera::ERR_STATE;
     return archoera::windowSetEvents(on);
+}
+
+// 窗口控制（ABI v10）。参数校验留在出口（尺寸/边缘/装饰模式越界即拒绝），
+// 具体平台换算由 backend_* 负责；request_close 只投递事件，绝不自行关窗。
+int32_t apl_window_set_size(int32_t w, int32_t h) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (w <= 0 || h <= 0) return archoera::ERR_STATE;
+    return archoera::windowSetSize(w, h);
+}
+
+int32_t apl_window_set_min_size(int32_t w, int32_t h) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (w < 0 || h < 0) return archoera::ERR_STATE;
+    return archoera::windowSetMinSize(w, h);
+}
+
+int32_t apl_window_center(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowCenter();
+}
+
+int32_t apl_window_show(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowShow();
+}
+
+int32_t apl_window_hide(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowHide();
+}
+
+int32_t apl_window_minimize(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowMinimize();
+}
+
+int32_t apl_window_restore(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowRestore();
+}
+
+int32_t apl_window_set_maximized(int32_t on) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowSetMaximized(on);
+}
+
+int32_t apl_window_set_fullscreen(int32_t on) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowSetFullscreen(on);
+}
+
+int32_t apl_window_set_always_on_top(int32_t on) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowSetAlwaysOnTop(on);
+}
+
+int32_t apl_window_set_resizable(int32_t on) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowSetResizable(on);
+}
+
+int32_t apl_window_set_decor(int32_t mode) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (mode < APL_WINDOW_DECOR_SYSTEM || mode > APL_WINDOW_DECOR_BORDERLESS) {
+        return archoera::ERR_STATE;
+    }
+    return archoera::windowSetDecor(mode);
+}
+
+int32_t apl_window_get_position(int32_t* x, int32_t* y) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (x == nullptr || y == nullptr) return archoera::ERR_STATE;
+    return archoera::windowGetPosition(x, y);
+}
+
+int32_t apl_window_get_size(int32_t* w, int32_t* h) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (w == nullptr || h == nullptr) return archoera::ERR_STATE;
+    return archoera::windowGetSize(w, h);
+}
+
+int32_t apl_window_set_position(int32_t x, int32_t y) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowSetPosition(x, y);
+}
+
+int32_t apl_window_start_drag(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowStartDrag();
+}
+
+int32_t apl_window_start_resize(int32_t edge) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    if (edge < APL_WINDOW_EDGE_TOP_LEFT || edge > APL_WINDOW_EDGE_BOTTOM_RIGHT) {
+        return archoera::ERR_STATE;
+    }
+    return archoera::windowStartResize(edge);
+}
+
+int32_t apl_window_request_close(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowRequestClose();
+}
+
+int32_t apl_window_stop_events(void) {
+    if (!archoera::isInitialized()) return archoera::ERR_STATE;
+    return archoera::windowStopEvents();
 }
 
 int32_t apl_media_set_track(const AplTrackMeta* track) {

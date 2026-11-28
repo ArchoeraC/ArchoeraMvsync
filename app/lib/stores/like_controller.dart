@@ -230,12 +230,13 @@ class LikeController extends ChangeNotifier {
   /// QM 走 [QqLikedStore]、其余平台不做本地增量（与既有行为一致）。
   void _applyStoreDelta(Track track, bool target) {
     // 仅维护共享「我喜欢」列表增量的平台（NT / KG；QM 走本机库）。
-    if (!collectionPlatform(track.source).likedLocalDelta) return;
+    final adapter = collectionPlatform(track.source);
+    if (!adapter.likedLocalDelta) return;
     final store = _ref.read(likedStoreProvider);
     if (target) {
       store.addTrack(track.source, track);
     } else {
-      store.removeTrack(track.source, track.source, track.id);
+      store.removeTrack(track.source, track.source, adapter.likeKey(track));
     }
   }
 
